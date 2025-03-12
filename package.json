@@ -9,12 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "^14.0.0",
+    "next": "14.0.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^4.11.0",
-    "clsx": "^2.0.0",
-    "tailwind-merge": "^1.14.0"
+    "framer-motion": "^10.16.4",
+    "zustand": "^4.4.6"
   },
   "devDependencies": {
     "@types/node": "^20.8.0",
