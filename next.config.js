@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   images: {
-    domains: ["placehold.co"], // Add TikTok's image domains when needed
+    domains: ["placehold.co", "i.imgur.com"],
   },
 };
 
