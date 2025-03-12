@@ -1,3 +1,5 @@
+"use client";
+
 import FeedList from "@/components/feed/FeedList";
 
 export default function Home() {
