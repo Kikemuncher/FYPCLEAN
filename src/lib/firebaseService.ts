@@ -13,7 +13,8 @@ import {
   increment,
   startAfter,
   Timestamp,
-  QueryDocumentSnapshot
+  QueryDocumentSnapshot,
+  Firestore
 } from 'firebase/firestore';
 import { VideoData } from '@/types/video';
 
@@ -37,7 +38,7 @@ export const getFYPVideos = async (count = 10): Promise<VideoData[]> => {
       // If we're fetching more videos and have a reference to the last document,
       // start after that document for pagination
       videosQuery = query(
-        collection(db, 'videos'),
+        collection(db as Firestore, 'videos'),
         orderBy('createdAt', 'desc'),
         startAfter(lastVideoDoc),
         limit(10)
@@ -45,8 +46,8 @@ export const getFYPVideos = async (count = 10): Promise<VideoData[]> => {
     } else {
       // For first fetch or explicit refresh
       videosQuery = query(
-        collection(db, 'videos'),
-        orderBy('createdAt', 'desc'),
+        collection(db as Firestore, 'videos'),
+        orderBy('likes', 'desc'),
         limit(Math.min(count, 20)) // Safety limit
       );
     }
@@ -110,7 +111,7 @@ export const increaseViewCount = async (videoId: string) => {
       return;
     }
     
-    const videoRef = doc(db, 'videos', videoId);
+    const videoRef = doc(db as Firestore, 'videos', videoId);
     
     // Check if the document exists first
     const docSnap = await getDoc(videoRef);
