@@ -37,7 +37,8 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
   // Control play state based on inView and isActive
   useEffect(() => {
     if (isActive && inView) {
-      // Give a short delay to ensure video is loaded before playing
+      // Give a longer delay to ensure video is loaded before playing
+      // This helps prevent immediate error states on first load
       const timer = setTimeout(() => {
         setPlaying(true);
         // Track view in Firebase
@@ -46,7 +47,7 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
         } catch (error) {
           console.error("Error tracking view:", error);
         }
-      }, 100);
+      }, 1000); // Increased delay for better loading
       
       return () => clearTimeout(timer);
     } else {
@@ -54,12 +55,25 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
     }
   }, [isActive, inView, video.id]);
 
-  // Reset error state when active video changes
+  // Initialize with loading state and manage error state
   useEffect(() => {
     if (isActive) {
-      setError(false);
+      // Start with loading state, don't immediately clear error
+      setVideoReady(false);
+      
+      // Check if the video URL is valid and from Firebase
+      if (video.videoUrl && (video.videoUrl.includes('firebasestorage.googleapis.com') || video.videoUrl.includes('assets.mixkit.co'))) {
+        // Give time for the component to initialize before clearing error
+        const timer = setTimeout(() => {
+          setError(false);
+        }, 500);
+        return () => clearTimeout(timer);
+      } else {
+        console.error("Invalid video URL or not from Firebase:", video.videoUrl);
+        setError(true);
+      }
     }
-  }, [isActive]);
+  }, [isActive, video.videoUrl]);
 
   const handleVideoClick = () => {
     setPlaying(!playing);
@@ -93,8 +107,8 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
       transition={{ duration: 0.3 }}
     >
       <div className="relative w-full h-full bg-black" onClick={handleVideoClick}>
-        {/* Show loading state until video is ready */}
-        {isActive && !videoReady && !error && (
+        {/* Show loading state until video is ready - kept longer as default loading animation */}
+        {isActive && (!videoReady || !playing) && (
           <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
           </div>
@@ -158,12 +172,17 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
               <p className="mb-2">Unable to play video. Please try again later.</p>
               <button 
                 className="bg-tiktok-pink text-white px-4 py-2 rounded-full text-sm font-semibold"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent click from triggering parent handlers
                   setError(false);
+                  setVideoReady(false); // Show loading again
                   if (playerRef.current) {
                     playerRef.current.seekTo(0);
                   }
-                  setTimeout(() => setPlaying(true), 500);
+                  // Give more time for video to load
+                  setTimeout(() => {
+                    setPlaying(true);
+                  }, 1500);
                 }}
               >
                 Retry
@@ -248,8 +267,8 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           </div>
         )}
 
-        {/* Navigation buttons */}
-        <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex flex-col space-y-4">
+        {/* Navigation buttons - moved to left side */}
+        <div className="absolute left-4 top-1/2 transform -translate-y-1/2 flex flex-col space-y-4 z-30">
           <button 
             onClick={(e) => {
               e.stopPropagation();
