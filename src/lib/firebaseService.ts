@@ -1,14 +1,22 @@
 // src/lib/firebaseService.ts
-import { app } from './firebase';
+import { firebaseApp, db } from './firebase';
+import { 
+  collection, 
+  doc, 
+  getDocs, 
+  getDoc, 
+  updateDoc, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  increment 
+} from 'firebase/firestore';
 import { VideoData } from '@/types/video';
 
 // Get videos for FYP feed
 export const getFYPVideos = async (count = 10): Promise<VideoData[]> => {
   try {
-    const { collection, getDocs, query, orderBy, limit } = await import('firebase/firestore');
-    const { getFirestore } = await import('./firebase');
-    const db = await getFirestore();
-    
     const videosQuery = query(
       collection(db, 'videos'),
       orderBy('likes', 'desc'),
@@ -26,10 +34,6 @@ export const getFYPVideos = async (count = 10): Promise<VideoData[]> => {
 // Increase view count for a video
 export const increaseViewCount = async (videoId: string) => {
   try {
-    const { doc, updateDoc, increment } = await import('firebase/firestore');
-    const { getFirestore } = await import('./firebase');
-    const db = await getFirestore();
-    
     const videoRef = doc(db, 'videos', videoId);
     await updateDoc(videoRef, {
       views: increment(1)
