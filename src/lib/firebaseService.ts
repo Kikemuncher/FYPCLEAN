@@ -1,6 +1,10 @@
-// src/lib/firebaseService.ts
-import { firebaseApp, db } from './firebase';
+// src/lib/alternateFirebaseService.ts
 import { 
+  initializeApp, 
+  getApps 
+} from 'firebase/app';
+import { 
+  getFirestore, 
   collection, 
   getDocs, 
   doc,
@@ -8,39 +12,64 @@ import {
   increment,
   query, 
   orderBy, 
-  limit, 
-  Firestore
+  limit
 } from 'firebase/firestore';
 import { VideoData } from '@/types/video';
 
-// Gets videos exactly like your working project
+// Directly initialize Firebase instead of using imported variables
+// This eliminates any potential cross-project issues
+const getDirectFirestore = () => {
+  try {
+    // Use exact config from your working project
+    const firebaseConfig = {
+      apiKey: "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
+      authDomain: "tiktok-a7af5.firebaseapp.com",
+      projectId: "tiktok-a7af5",
+      storageBucket: "tiktok-a7af5.appspot.com",
+      messagingSenderId: "609721475346",
+      appId: "1:609721475346:web:c80084600ed104b6b153cb",
+      measurementId: "G-3Z96CKXW1W"
+    };
+    
+    // Initialize the app directly
+    let app;
+    if (!getApps().length) {
+      app = initializeApp(firebaseConfig);
+    } else {
+      app = getApps()[0];
+    }
+    
+    // Return the Firestore instance
+    return getFirestore(app);
+  } catch (error) {
+    console.error('Error initializing direct Firestore:', error);
+    return null;
+  }
+};
+
+// Get videos using direct Firestore instance
 export const getFYPVideos = async (count = 10): Promise<VideoData[]> => {
   try {
-    console.log('Fetching videos exactly like working project');
+    console.log('Getting videos using direct Firestore instance');
+    
+    // Get a direct Firestore instance
+    const db = getDirectFirestore();
     
     if (!db) {
-      console.error("Firestore not initialized");
+      console.error("Direct Firestore initialization failed");
       return [];
     }
     
-    // Use the exact same query as your working project
-    const videosRef = collection(db as Firestore, 'videos');
+    // Execute the query exactly like in working project
+    const videosRef = collection(db, 'videos');
     const q = query(videosRef, orderBy('timestamp', 'desc'), limit(count));
     
     const querySnapshot = await getDocs(q);
     console.log(`Retrieved ${querySnapshot.docs.length} videos`);
     
-    if (querySnapshot.empty) {
-      console.error("No videos found in collection");
-      return [];
-    }
-    
-    // Map documents to VideoData objects exactly as in working project
+    // Map to VideoData objects
     return querySnapshot.docs.map(doc => {
       const data = doc.data();
-      
-      console.log(`Processing video ${doc.id}`);
-      console.log('Video URL:', data.url);
       
       return {
         id: doc.id,
@@ -52,7 +81,7 @@ export const getFYPVideos = async (count = 10): Promise<VideoData[]> => {
         saves: data.saves || 0,
         shares: data.shares || 0,
         views: data.views || 0,
-        videoUrl: data.url || '', // In your working project, it's 'url' not 'videoUrl'
+        videoUrl: data.url || '', // Use url field as in working project
         userAvatar: data.profilePic || 'https://randomuser.me/api/portraits/lego/1.jpg',
       };
     });
@@ -62,22 +91,21 @@ export const getFYPVideos = async (count = 10): Promise<VideoData[]> => {
   }
 };
 
-// Increase view count
-export const increaseViewCount = async (videoId: string) => {
+// Increase view count with direct Firestore
+export const directIncreaseViewCount = async (videoId: string) => {
   try {
-    if (!db || !videoId) return;
+    if (!videoId) return;
     
-    const videoRef = doc(db as Firestore, 'videos', videoId);
+    // Get direct Firestore
+    const db = getDirectFirestore();
+    if (!db) return;
+    
+    const videoRef = doc(db, 'videos', videoId);
     await updateDoc(videoRef, {
       views: increment(1)
     });
-    console.log(`Increased view count for video ${videoId}`);
+    console.log(`Increased view count for ${videoId}`);
   } catch (error) {
     console.error('Error tracking view:', error);
   }
-};
-
-// Reset pagination (kept for compatibility)
-export const resetVideoFeed = () => {
-  // Not needed
 };
