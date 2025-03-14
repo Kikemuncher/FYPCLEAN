@@ -7,68 +7,41 @@ import {
   getDoc, 
   updateDoc, 
   query, 
-  where, 
   orderBy, 
   limit, 
   increment,
-  startAfter,
   Timestamp,
-  QueryDocumentSnapshot,
   Firestore
 } from 'firebase/firestore';
 import { VideoData } from '@/types/video';
 
-// Cache for pagination
-let lastVideoDoc: QueryDocumentSnapshot | null = null;
-
-// Get videos for FYP feed - clean implementation
+// Get videos from Firebase - matches structure from your working project
 export const getFYPVideos = async (count = 10): Promise<VideoData[]> => {
   try {
-    console.log(`Fetching up to ${count} videos from Firebase`);
+    console.log('Fetching videos from Firebase collection');
     
-    // Handle case when Firestore isn't initialized
     if (!db) {
       console.error("Firestore not initialized");
       return [];
     }
     
-    let videosQuery;
+    // Match the query structure from your working project
+    const videosQuery = query(
+      collection(db as Firestore, 'videos'),
+      orderBy('timestamp', 'desc'), // Using timestamp instead of createdAt
+      limit(count)
+    );
     
-    if (lastVideoDoc && count > 10) {
-      // Pagination query (when fetching more)
-      videosQuery = query(
-        collection(db as Firestore, 'videos'),
-        orderBy('createdAt', 'desc'),
-        startAfter(lastVideoDoc),
-        limit(10)
-      );
-    } else {
-      // Initial query
-      videosQuery = query(
-        collection(db as Firestore, 'videos'),
-        orderBy('createdAt', 'desc'),
-        limit(Math.min(count, 15))
-      );
-    }
-    
-    console.log("Executing Firebase query");
     const snapshot = await getDocs(videosQuery);
+    console.log(`Retrieved ${snapshot.docs.length} videos`);
     
-    // Update pagination reference
-    if (!snapshot.empty) {
-      lastVideoDoc = snapshot.docs[snapshot.docs.length - 1];
-    }
-    
-    console.log(`Retrieved ${snapshot.docs.length} videos from Firebase`);
-    
-    // Convert to VideoData objects
-    const videos = snapshot.docs.map(doc => {
+    return snapshot.docs.map(doc => {
       const data = doc.data();
       
-      // Convert to VideoData with defaults for missing fields
+      // Map the data structure to match your VideoData type
       const video: VideoData = {
         id: doc.id,
-        username: data.username || 'firebase_user',
+        username: data.username || 'user',
         caption: data.caption || '',
         song: data.song || 'Original Sound',
         likes: data.likes || 0,
@@ -76,52 +49,37 @@ export const getFYPVideos = async (count = 10): Promise<VideoData[]> => {
         saves: data.saves || 0,
         shares: data.shares || 0,
         views: data.views || 0,
-        videoUrl: data.videoUrl || '',
-        userAvatar: data.userAvatar || 'https://randomuser.me/api/portraits/lego/1.jpg',
-        hashtags: data.hashtags || [],
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : Date.now()
+        videoUrl: data.url || '', // Note: using 'url' field, not 'videoUrl'
+        userAvatar: data.profilePic || 'https://randomuser.me/api/portraits/lego/1.jpg',
       };
+      
+      // Debug log to check what we're getting
+      console.log(`Video ${doc.id} URL: ${video.videoUrl}`);
       
       return video;
     });
-    
-    return videos;
   } catch (error) {
-    console.error('Error fetching videos from Firebase:', error);
+    console.error('Error fetching videos:', error);
     return [];
   }
 };
 
-// Reset pagination
-export const resetVideoFeed = () => {
-  lastVideoDoc = null;
-};
-
-// Track video view
+// Increase view count
 export const increaseViewCount = async (videoId: string) => {
   try {
-    if (!db || !videoId) {
-      console.warn('Cannot track view: Invalid database or video ID');
-      return;
-    }
+    if (!db || !videoId) return;
     
     const videoRef = doc(db as Firestore, 'videos', videoId);
-    
-    // Verify document exists
-    const docSnap = await getDoc(videoRef);
-    if (!docSnap.exists()) {
-      console.warn(`Video document ${videoId} not found`);
-      return;
-    }
-    
-    // Update view count
     await updateDoc(videoRef, {
       views: increment(1),
       lastViewed: Timestamp.now()
     });
-    
-    console.log(`View tracked for video ${videoId}`);
   } catch (error) {
     console.error('Error tracking view:', error);
   }
+};
+
+// Reset pagination (not used anymore but kept for API compatibility)
+export const resetVideoFeed = () => {
+  // Nothing needed here
 };
