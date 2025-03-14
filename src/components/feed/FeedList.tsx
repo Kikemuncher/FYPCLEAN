@@ -21,6 +21,12 @@ export default function FeedList() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
+  // Debug logs
+  useEffect(() => {
+    console.log('Current videos:', videos);
+    console.log('Current video index:', currentVideoIndex);
+  }, [videos, currentVideoIndex]);
+
   // Ref for load more trigger
   const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
     threshold: 0.1,
@@ -28,12 +34,14 @@ export default function FeedList() {
 
   // Load initial videos
   useEffect(() => {
+    console.log("Fetching initial videos");
     fetchVideos();
   }, [fetchVideos]);
 
   // Load more videos when approaching end
   useEffect(() => {
     if (loadMoreInView && videos.length > 0 && hasMore && !loading) {
+      console.log("Fetching more videos");
       fetchMoreVideos();
     }
   }, [loadMoreInView, fetchMoreVideos, videos.length, hasMore, loading]);
@@ -99,14 +107,20 @@ export default function FeedList() {
       onTouchEnd={handleTouchEnd}
       onWheel={handleWheel}
     >
-      {videos.map((video, index) => (
-        <VideoCard 
-          key={video.id} 
-          video={video} 
-          isActive={index === currentVideoIndex}
-          index={index}
-        />
-      ))}
+      {videos.length === 0 && !loading ? (
+        <div className="flex h-full w-full items-center justify-center text-white">
+          <p>No videos available.</p>
+        </div>
+      ) : (
+        videos.map((video, index) => (
+          <VideoCard 
+            key={video.id} 
+            video={video} 
+            isActive={index === currentVideoIndex}
+            index={index}
+          />
+        ))
+      )}
       
       {/* Load more trigger - this is placed at the end of the current videos */}
       {hasMore && (
