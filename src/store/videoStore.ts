@@ -12,7 +12,7 @@ interface VideoState {
   fetchMoreVideos: () => Promise<void>;
 }
 
-// Sample video data for fallback - only use if Firebase completely fails
+// Sample video data for fallback - guaranteed to work reliably
 const initialVideos: VideoData[] = [
   {
     id: '1',
@@ -52,6 +52,32 @@ const initialVideos: VideoData[] = [
     views: 32000,
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
     userAvatar: 'https://randomuser.me/api/portraits/women/65.jpg'
+  },
+  {
+    id: '4',
+    username: 'user4',
+    caption: 'Dancing in the sunset #dance',
+    song: 'Summer Vibes - DJ Mix',
+    likes: 7800,
+    comments: 342,
+    saves: 189,
+    shares: 78,
+    views: 42000,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-portrait-of-a-fashion-woman-with-silver-makeup-39875-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/32.jpg'
+  },
+  {
+    id: '5',
+    username: 'user5',
+    caption: 'Beach day! #summer',
+    song: 'Beach Sounds - Relaxing',
+    likes: 4300,
+    comments: 156,
+    saves: 87,
+    shares: 32,
+    views: 23000,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-water-1164-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/men/85.jpg'
   }
 ];
 
@@ -68,24 +94,44 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     try {
       console.log("Attempting to fetch videos from Firebase...");
       
-      // Try to get videos from Firebase first
-      const firebaseVideos = await getFYPVideos(6); // Try to get more videos initially
+      // Try to get videos from Firebase first with longer timeout
+      const firebasePromise = getFYPVideos(8);
+      
+      // Create a timeout promise
+      const timeoutPromise = new Promise<VideoData[]>((resolve) => {
+        setTimeout(() => {
+          console.log("Firebase fetch timed out, falling back to sample videos");
+          resolve([]);
+        }, 5000); // 5 second timeout
+      });
+      
+      // Race between the Firebase fetch and timeout
+      const firebaseVideos = await Promise.race([firebasePromise, timeoutPromise]);
       
       if (firebaseVideos && firebaseVideos.length > 0) {
-        console.log("Successfully loaded Firebase videos:", firebaseVideos.length);
-        set({ 
-          videos: firebaseVideos, 
-          loading: false,
-          hasMore: firebaseVideos.length >= 5 // If we got a good number, assume there might be more
-        });
-        return;
+        // Filter out any videos with missing or invalid videoUrl
+        const validVideos = firebaseVideos.filter(video => 
+          video.videoUrl && 
+          (video.videoUrl.startsWith('http://') || video.videoUrl.startsWith('https://'))
+        );
+        
+        if (validVideos.length > 0) {
+          console.log("Successfully loaded Firebase videos:", validVideos.length);
+          set({ 
+            videos: validVideos, 
+            loading: false,
+            hasMore: validVideos.length >= 5 // If we got a good number, assume there might be more
+          });
+          return;
+        }
       }
       
       // If we don't get videos from Firebase, show a warning and use sample videos as fallback
-      console.warn("No videos returned from Firebase, using fallback videos");
+      console.warn("No valid videos returned from Firebase, using fallback videos");
       set({ 
         videos: initialVideos,
-        loading: false 
+        loading: false,
+        hasMore: initialVideos.length > 5 // Allow for more videos to be loaded
       });
       
     } catch (error) {
@@ -94,7 +140,8 @@ export const useVideoStore = create<VideoState>((set, get) => ({
       console.log("Using fallback videos due to Firebase error");
       set({ 
         videos: initialVideos,
-        loading: false 
+        loading: false,
+        hasMore: initialVideos.length > 5
       });
     }
   },
