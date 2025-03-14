@@ -1,5 +1,8 @@
 // src/lib/firebase.ts
-import { getApps, initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
+// Import only what you need
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -11,22 +14,8 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+const firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
 
-export { app };
-
-// Export these as functions to use dynamic imports
-export async function getFirebaseAuth() {
-  const { getAuth } = await import('firebase/auth');
-  return getAuth(app);
-}
-
-export async function getFirestore() {
-  const { getFirestore } = await import('firebase/firestore');
-  return getFirestore(app);
-}
-
-export async function getStorage() {
-  const { getStorage } = await import('firebase/storage');
-  return getStorage(app);
-}
+export { firebaseApp, auth, db };
