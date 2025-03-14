@@ -18,18 +18,29 @@ export default function VideoCard({ video, isActive, index }: VideoCardProps) {
   const [playing, setPlaying] = useState(false);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(false);
   const playerRef = useRef<ReactPlayer>(null);
   
   const { ref, inView } = useInView({
     threshold: 0.7,
   });
 
+  // Debug video info
+  useEffect(() => {
+    console.log(`Video ${index} source:`, video.videoUrl);
+    console.log(`Video ${index} active:`, isActive);
+  }, [video, isActive, index]);
+
   // Control play state based on inView and isActive
   useEffect(() => {
     if (isActive && inView) {
       setPlaying(true);
       // Track view in Firebase
-      increaseViewCount(video.id);
+      try {
+        increaseViewCount(video.id);
+      } catch (error) {
+        console.error("Error tracking view:", error);
+      }
     } else {
       setPlaying(false);
     }
@@ -77,19 +88,45 @@ export default function VideoCard({ video, isActive, index }: VideoCardProps) {
           height="100%"
           playsinline
           controls={false}
-          style={{ objectFit: "cover", position: "absolute", top: 0, left: 0 }}
           config={{
             file: {
+              forceVideo: true,
               attributes: {
                 style: {
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
                 },
+                playsInline: true,
               },
             },
           }}
+          style={{ 
+            position: "absolute", 
+            top: 0, 
+            left: 0, 
+            objectFit: "cover",
+            width: "100%",
+            height: "100%"
+          }}
+          onError={(e) => {
+            console.error("Video playback error:", e, video.videoUrl);
+            setError(true);
+          }}
+          onReady={() => {
+            console.log(`Video ${index} ready to play`);
+            setError(false);
+          }}
         />
+
+        {/* Error message */}
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+            <p className="text-white text-center p-4">
+              Unable to play video. Please try again later.
+            </p>
+          </div>
+        )}
 
         {/* Video info overlay */}
         <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/70 to-transparent">
@@ -157,7 +194,7 @@ export default function VideoCard({ video, isActive, index }: VideoCardProps) {
         </div>
 
         {/* Play/Pause indicator */}
-        {!playing && (
+        {!playing && !error && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
             <div className="rounded-full bg-black/50 p-4">
               <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
