@@ -160,11 +160,11 @@ export default function FeedList() {
         />
       )}
       
-      {/* Loading indicator - centered */}
+      {/* Loading indicator - centered with consistent size */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white">
-            {/* Using same spinner as video cards for consistency */}
+          <div className="h-16 w-16 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div>
           </div>
         </div>
       )}
