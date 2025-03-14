@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import VideoCard from "./VideoCard";
 import { useVideoStore } from "@/store/videoStore";
 import { useInView } from "react-intersection-observer";
 import { CircularProgress } from "@mui/material";
+import VideoCard from "./VideoCard";
 
 export default function FeedList() {
   const { 
@@ -32,7 +32,7 @@ export default function FeedList() {
     threshold: 0.1,
   });
 
-  // Load initial videos
+  // Load initial videos when component mounts
   useEffect(() => {
     console.log("Fetching initial videos");
     fetchVideos();
@@ -98,6 +98,19 @@ export default function FeedList() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentVideoIndex, videos.length, setCurrentVideoIndex]);
 
+  // Navigation handlers
+  const handleNavigateNext = () => {
+    if (currentVideoIndex < videos.length - 1) {
+      setCurrentVideoIndex(currentVideoIndex + 1);
+    }
+  };
+
+  const handleNavigatePrev = () => {
+    if (currentVideoIndex > 0) {
+      setCurrentVideoIndex(currentVideoIndex - 1);
+    }
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -118,11 +131,13 @@ export default function FeedList() {
             video={video} 
             isActive={index === currentVideoIndex}
             index={index}
+            onNavigateNext={handleNavigateNext}
+            onNavigatePrev={handleNavigatePrev}
           />
         ))
       )}
       
-      {/* Load more trigger - this is placed at the end of the current videos */}
+      {/* Load more trigger - placed at the end of the current videos */}
       {hasMore && (
         <div 
           ref={loadMoreRef} 
@@ -131,10 +146,10 @@ export default function FeedList() {
         />
       )}
       
-      {/* Loading indicator */}
+      {/* Loading indicator - centered */}
       {loading && (
-        <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2">
-          <CircularProgress size={24} sx={{ color: 'white' }} />
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
+          <CircularProgress size={40} sx={{ color: 'white' }} />
         </div>
       )}
     </div>
