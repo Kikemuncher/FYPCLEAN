@@ -3,12 +3,40 @@
 import { useEffect, useRef, useState } from "react";
 import VideoCard from "./VideoCard";
 import { useVideoStore } from "@/store/videoStore";
+import { useInView } from "react-intersection-observer";
+import { CircularProgress } from "@mui/material";
 
 export default function FeedList() {
-  const { videos, currentVideoIndex, setCurrentVideoIndex } = useVideoStore();
+  const { 
+    videos, 
+    currentVideoIndex, 
+    setCurrentVideoIndex, 
+    fetchVideos,
+    fetchMoreVideos,
+    loading,
+    hasMore 
+  } = useVideoStore();
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  // Ref for load more trigger
+  const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
+    threshold: 0.1,
+  });
+
+  // Load initial videos
+  useEffect(() => {
+    fetchVideos();
+  }, [fetchVideos]);
+
+  // Load more videos when approaching end
+  useEffect(() => {
+    if (loadMoreInView && videos.length > 0 && hasMore && !loading) {
+      fetchMoreVideos();
+    }
+  }, [loadMoreInView, fetchMoreVideos, videos.length, hasMore, loading]);
 
   // Threshold for swipe detection (in pixels)
   const minSwipeDistance = 50;
@@ -79,6 +107,22 @@ export default function FeedList() {
           index={index}
         />
       ))}
+      
+      {/* Load more trigger - this is placed at the end of the current videos */}
+      {hasMore && (
+        <div 
+          ref={loadMoreRef} 
+          className="absolute opacity-0 pointer-events-none"
+          style={{ bottom: 20 }}
+        />
+      )}
+      
+      {/* Loading indicator */}
+      {loading && (
+        <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2">
+          <CircularProgress size={24} sx={{ color: 'white' }} />
+        </div>
+      )}
     </div>
   );
 }
