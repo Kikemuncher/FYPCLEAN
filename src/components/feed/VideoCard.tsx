@@ -55,18 +55,18 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
     }
   }, [isActive, inView, video.id]);
 
-  // Initialize with loading state but don't immediately show error
+  // Initialize with loading state and hide errors initially
   useEffect(() => {
     if (isActive) {
-      // Start with loading state
+      console.log(`Attempting to load video at index ${index}`);
+      
+      // Reset states on becoming active
       setVideoReady(false);
       
-      // Assume video is valid initially - don't show error on first load
+      // Always hide error initially to avoid showing it too early
       setError(false);
-      
-      console.log(`Trying to load video: ${video.videoUrl}`);
     }
-  }, [isActive, video.videoUrl]);
+  }, [isActive, index]);
 
   const handleVideoClick = () => {
     setPlaying(!playing);
@@ -100,10 +100,12 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
       transition={{ duration: 0.3 }}
     >
       <div className="relative w-full h-full bg-black" onClick={handleVideoClick}>
-        {/* Show loading state until video is ready - but not when paused */}
+        {/* Show loading state until video is ready - with consistent size */}
         {isActive && !videoReady && (
           <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+            <div className="h-12 w-12 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+            </div>
           </div>
         )}
 
@@ -140,8 +142,13 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           }}
           onError={(e) => {
             console.error("Video playback error:", e, video.videoUrl);
-            setError(true);
-            setVideoReady(false);
+            // Only show error if we've attempted to play and still failed
+            // This gives time for video to load first
+            setTimeout(() => {
+              if (isActive && !videoReady) {
+                setError(true);
+              }
+            }, 2000);
           }}
           onReady={() => {
             console.log(`Video ${index} ready to play`);
@@ -150,7 +157,8 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           }}
           onBuffer={() => {
             console.log(`Video ${index} buffering`);
-            setVideoReady(false);
+            // Don't set videoReady to false during buffering
+            // This prevents flickering of the loading indicator
           }}
           onBufferEnd={() => {
             console.log(`Video ${index} buffer ended`);
@@ -249,11 +257,11 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           </div>
         </div>
 
-        {/* Play/Pause indicator - translucent circular button */}
+        {/* Play/Pause indicator - smaller translucent circular button */}
         {!playing && videoReady && isActive && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
-            <div className="rounded-full bg-black/40 p-5 backdrop-blur-sm border border-white/20">
-              <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <div className="rounded-full bg-black/40 p-4 backdrop-blur-sm border border-white/20">
+              <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             </div>
