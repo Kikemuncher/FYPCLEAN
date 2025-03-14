@@ -22,6 +22,7 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const playerRef = useRef<ReactPlayer>(null);
   
   const { ref, inView } = useInView({
@@ -34,52 +35,80 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
     console.log(`Video ${index} active:`, isActive);
   }, [video, isActive, index]);
 
-  // Control play state based on inView and isActive
+  // Auto-play without errors on first load
   useEffect(() => {
     if (isActive && inView) {
-      // Give a longer delay to ensure video is loaded before playing
-      // This helps prevent immediate error states on first load
-      const timer = setTimeout(() => {
+      // Ensure we always start with clean states
+      if (initialLoad) {
+        console.log(`Initial load for video ${index}, auto-playing`);
+        
+        // Force auto-play and hide error
+        setError(false);
         setPlaying(true);
-        // Track view in Firebase
-        try {
-          increaseViewCount(video.id);
-        } catch (error) {
-          console.error("Error tracking view:", error);
-        }
-      }, 1000); // Increased delay for better loading
-      
-      return () => clearTimeout(timer);
+        
+        // Mark initial load complete
+        setInitialLoad(false);
+      } else {
+        // Normal activation
+        const timer = setTimeout(() => {
+          setPlaying(true);
+          // Track view in Firebase
+          try {
+            increaseViewCount(video.id);
+          } catch (error) {
+            console.error("Error tracking view:", error);
+          }
+        }, 300);
+        
+        return () => clearTimeout(timer);
+      }
     } else {
       setPlaying(false);
     }
-  }, [isActive, inView, video.id]);
+  }, [isActive, inView, video.id, initialLoad, index]);
 
-  // Initialize with loading state and hide errors initially
-  useEffect(() => {
-    if (isActive) {
-      console.log(`Attempting to load video at index ${index}`);
-      
-      // Reset states on becoming active
-      setVideoReady(false);
-      
-      // Always hide error initially to avoid showing it too early
-      setError(false);
-    }
-  }, [isActive, index]);
-
+  // Handle video click to toggle play/pause
   const handleVideoClick = () => {
-    setPlaying(!playing);
+    if (error) {
+      // If in error state, try to recover
+      handleRetry();
+    } else {
+      // Otherwise toggle playing state
+      setPlaying(!playing);
+    }
+  };
+
+  // Handle retry button click
+  const handleRetry = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    
+    console.log(`Retrying video ${index}`);
+    setError(false);
+    setVideoReady(false);
+    
+    // Reset player if possible
+    if (playerRef.current) {
+      try {
+        playerRef.current.seekTo(0);
+      } catch (err) {
+        console.error("Error seeking video:", err);
+      }
+    }
+    
+    // Give time for video to reload, then play
+    setTimeout(() => {
+      setPlaying(true);
+    }, 800);
   };
 
   const handleLike = () => {
     setLiked(!liked);
-    // Update likes in Firebase
   };
 
   const handleSave = () => {
     setSaved(!saved);
-    // Update saves in Firebase
   };
 
   const formatNumber = (num: number) => {
@@ -100,8 +129,8 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
       transition={{ duration: 0.3 }}
     >
       <div className="relative w-full h-full bg-black" onClick={handleVideoClick}>
-        {/* Show loading state until video is ready - with consistent size */}
-        {isActive && !videoReady && (
+        {/* Single loading indicator - only shown during initial loading, not when paused */}
+        {isActive && !videoReady && !error && (
           <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
             <div className="h-12 w-12 flex items-center justify-center">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
@@ -142,23 +171,32 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           }}
           onError={(e) => {
             console.error("Video playback error:", e, video.videoUrl);
+            
             // Only show error if we've attempted to play and still failed
-            // This gives time for video to load first
-            setTimeout(() => {
-              if (isActive && !videoReady) {
-                setError(true);
-              }
-            }, 2000);
+            if (isActive) {
+              setError(true);
+              setVideoReady(false);
+              console.log(`Error state set for video ${index}`);
+            }
           }}
           onReady={() => {
             console.log(`Video ${index} ready to play`);
             setError(false);
             setVideoReady(true);
+            
+            // Auto-play when ready if this is the active video
+            if (isActive && inView) {
+              setPlaying(true);
+            }
+          }}
+          onStart={() => {
+            console.log(`Video ${index} started playing`);
+            setError(false);
+            setVideoReady(true);
           }}
           onBuffer={() => {
             console.log(`Video ${index} buffering`);
-            // Don't set videoReady to false during buffering
-            // This prevents flickering of the loading indicator
+            // Don't change videoReady state during buffering to prevent flicker
           }}
           onBufferEnd={() => {
             console.log(`Video ${index} buffer ended`);
@@ -170,21 +208,10 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
         {error && isActive && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
             <div className="text-white text-center p-4 bg-black/80 rounded-lg">
-              <p className="mb-2">Unable to play video. Please try again later.</p>
+              <p className="mb-2">Unable to play video. Please try again.</p>
               <button 
                 className="bg-tiktok-pink text-white px-4 py-2 rounded-full text-sm font-semibold"
-                onClick={(e) => {
-                  e.stopPropagation(); // Prevent click from triggering parent handlers
-                  setError(false);
-                  setVideoReady(false); // Show loading again
-                  if (playerRef.current) {
-                    playerRef.current.seekTo(0);
-                  }
-                  // Give more time for video to load
-                  setTimeout(() => {
-                    setPlaying(true);
-                  }, 1500);
-                }}
+                onClick={handleRetry}
               >
                 Retry
               </button>
@@ -257,18 +284,18 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           </div>
         </div>
 
-        {/* Play/Pause indicator - smaller translucent circular button */}
-        {!playing && videoReady && isActive && (
+        {/* Play/Pause indicator - smaller circular button (reduced by 3% more) */}
+        {!playing && videoReady && isActive && !error && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
-            <div className="rounded-full bg-black/40 p-4 backdrop-blur-sm border border-white/20">
-              <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <div className="rounded-full bg-black/40 p-3.5 backdrop-blur-sm border border-white/20">
+              <svg className="w-9 h-9 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             </div>
           </div>
         )}
 
-        {/* Navigation buttons - moved to left side */}
+        {/* Navigation buttons - on left side */}
         <div className="absolute left-4 top-1/2 transform -translate-y-1/2 flex flex-col space-y-4 z-30">
           <button 
             onClick={(e) => {
