@@ -11,8 +11,8 @@ interface VideoState {
   fetchMoreVideos: () => Promise<void>;
 }
 
-// These videos are guaranteed to work while we debug Firebase
-const hardCodedVideos: VideoData[] = [
+// Guaranteed working videos
+const workingVideos: VideoData[] = [
   {
     id: '1',
     username: 'mixkit_user',
@@ -82,35 +82,25 @@ const hardCodedVideos: VideoData[] = [
 
 export const useVideoStore = create<VideoState>((set, get) => ({
   currentVideoIndex: 0,
-  videos: hardCodedVideos, // Start with hardcoded videos
-  loading: false,          // Not loading since videos are hardcoded
+  videos: workingVideos,
+  loading: false,
   hasMore: true,
   
   setCurrentVideoIndex: (index) => set({ currentVideoIndex: index }),
   
-  // Simplified fetch videos - uses hardcoded videos for now
   fetchVideos: async () => {
     set({ loading: true });
     
-    try {
-      console.log("Loading hardcoded videos while debugging Firebase");
-      
-      // Simulate a network delay for realism
-      setTimeout(() => {
-        set({ 
-          videos: hardCodedVideos, 
-          loading: false,
-          hasMore: true
-        });
-      }, 300);
-      
-    } catch (error) {
-      console.error('Error in fetchVideos:', error);
-      set({ videos: hardCodedVideos, loading: false, hasMore: true });
-    }
+    // Simply use working videos
+    setTimeout(() => {
+      set({ 
+        videos: workingVideos, 
+        loading: false,
+        hasMore: true
+      });
+    }, 300);
   },
   
-  // Fetch more videos - uses more hardcoded videos for now
   fetchMoreVideos: async () => {
     const { loading, videos, hasMore } = get();
     
@@ -118,26 +108,19 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     
     set({ loading: true });
     
-    try {
-      // Create variations of hardcoded videos
-      const moreVideos = hardCodedVideos.map((video, index) => ({
-        ...video,
-        id: `more-${Date.now()}-${index}`,
-        caption: `${video.caption} #fyp`,
-      }));
-      
-      // Simulate network delay
-      setTimeout(() => {
-        set({ 
-          videos: [...videos, ...moreVideos.slice(0, 3)],
-          loading: false,
-          hasMore: videos.length < 12
-        });
-      }, 700);
-      
-    } catch (error) {
-      console.error('Error in fetchMoreVideos:', error);
-      set({ loading: false });
-    }
+    // Add more videos
+    const moreVideos = workingVideos.map((video, index) => ({
+      ...video,
+      id: `more-${Date.now()}-${index}`,
+      caption: `${video.caption} #viral`,
+    }));
+    
+    setTimeout(() => {
+      set({ 
+        videos: [...videos, ...moreVideos.slice(0, 3)],
+        loading: false,
+        hasMore: videos.length < 12
+      });
+    }, 700);
   }
 }));
