@@ -1,6 +1,18 @@
-// src/store/videoStore.ts
-// Update the initialVideos array with these reliable sample videos
+import { create } from 'zustand';
+import { VideoData } from '@/types/video';
+import { getFYPVideos } from '@/lib/firebaseService';
 
+interface VideoState {
+  currentVideoIndex: number;
+  videos: VideoData[];
+  loading: boolean;
+  hasMore: boolean;
+  setCurrentVideoIndex: (index: number) => void;
+  fetchVideos: () => Promise<void>;
+  fetchMoreVideos: () => Promise<void>;
+}
+
+// Sample video data for initial load with reliable video sources
 const initialVideos: VideoData[] = [
   {
     id: '1',
@@ -68,3 +80,75 @@ const initialVideos: VideoData[] = [
     userAvatar: 'https://randomuser.me/api/portraits/women/33.jpg'
   }
 ];
+
+export const useVideoStore = create<VideoState>((set, get) => ({
+  currentVideoIndex: 0,
+  videos: initialVideos,
+  loading: false,
+  hasMore: true,
+  
+  setCurrentVideoIndex: (index) => set({ currentVideoIndex: index }),
+  
+  fetchVideos: async () => {
+    set({ loading: true });
+    try {
+      console.log("Attempting to fetch videos from Firebase...");
+      // Try Firebase first but handle gracefully if it fails
+      try {
+        const videos = await getFYPVideos();
+        if (videos && videos.length > 0) {
+          console.log("Got videos from Firebase:", videos.length);
+          set({ videos, loading: false });
+          return;
+        }
+      } catch (error) {
+        console.error("Firebase fetch failed, using sample videos:", error);
+      }
+      
+      // If Firebase fails or returns no videos, use sample videos
+      console.log("Using sample videos instead");
+      set({ loading: false }); // Keep initialVideos
+      
+    } catch (error) {
+      console.error('Failed to fetch videos:', error);
+      set({ loading: false });
+    }
+  },
+  
+  fetchMoreVideos: async () => {
+    const { loading, videos, hasMore } = get();
+    
+    if (loading || !hasMore) return;
+    
+    set({ loading: true });
+    try {
+      // For simplicity, we'll just add more sample videos
+      // In a real app, you'd fetch from Firebase with pagination
+      
+      // Create new sample videos based on the existing ones but with different IDs
+      const moreVideos = initialVideos.map((video, index) => ({
+        ...video,
+        id: `more-${index + 1}`,
+        username: `${video.username}_more`,
+        caption: `${video.caption} #more`,
+      }));
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      if (videos.length < 10) {
+        // Only add more if we don't have too many already
+        set({ 
+          videos: [...videos, ...moreVideos.slice(0, 2)], 
+          loading: false,
+          hasMore: videos.length < 8 // Stop after a reasonable amount
+        });
+      } else {
+        set({ hasMore: false, loading: false });
+      }
+    } catch (error) {
+      console.error('Failed to fetch more videos:', error);
+      set({ loading: false });
+    }
+  }
+}));
