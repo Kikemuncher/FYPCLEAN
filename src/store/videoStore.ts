@@ -1,18 +1,6 @@
-import { create } from 'zustand';
-import { VideoData } from '@/types/video';
-import { getFYPVideos } from '@/lib/firebaseService';
+// src/store/videoStore.ts
+// Update the initialVideos array with these reliable sample videos
 
-interface VideoState {
-  currentVideoIndex: number;
-  videos: VideoData[];
-  loading: boolean;
-  hasMore: boolean;
-  setCurrentVideoIndex: (index: number) => void;
-  fetchVideos: () => Promise<void>;
-  fetchMoreVideos: () => Promise<void>;
-}
-
-// Sample video data for initial load
 const initialVideos: VideoData[] = [
   {
     id: '1',
@@ -23,9 +11,9 @@ const initialVideos: VideoData[] = [
     comments: 56,
     saves: 20,
     shares: 30,
-    videoUrl: 'https://i.imgur.com/fz7AGxc.mp4',
-    userAvatar: 'https://placehold.co/100x100',
-    views: 5600
+    views: 5600,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-mother-with-her-little-daughter-decorating-a-christmas-tree-39745-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/81.jpg'
   },
   {
     id: '2',
@@ -36,9 +24,9 @@ const initialVideos: VideoData[] = [
     comments: 120,
     saves: 85,
     shares: 45,
-    videoUrl: 'https://i.imgur.com/FTBZJPJ.mp4',
-    userAvatar: 'https://placehold.co/100x100',
-    views: 12000
+    views: 12000,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-mother-with-her-little-daughter-eating-a-marshmallow-in-nature-39764-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/men/32.jpg'
   },
   {
     id: '3',
@@ -49,22 +37,22 @@ const initialVideos: VideoData[] = [
     comments: 230,
     saves: 140,
     shares: 90,
-    videoUrl: 'https://i.imgur.com/Dhbly0P.mp4',
-    userAvatar: 'https://placehold.co/100x100',
-    views: 32000
+    views: 32000,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/65.jpg'
   },
   {
     id: '4',
     username: 'user4',
-    caption: "Can't believe this happened! #funny",
+    caption: "Cannot believe this happened! #funny",
     song: 'Funny Audio - Creator',
     likes: 8900,
     comments: 310,
     saves: 200,
     shares: 150,
-    videoUrl: 'https://i.imgur.com/GWQZUFh.mp4',
-    userAvatar: 'https://placehold.co/100x100',
-    views: 48000
+    views: 48000,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-taking-photos-from-different-angles-of-a-model-34421-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/men/44.jpg'
   },
   {
     id: '5',
@@ -75,62 +63,8 @@ const initialVideos: VideoData[] = [
     comments: 450,
     saves: 350,
     shares: 280,
-    videoUrl: 'https://i.imgur.com/sFPVL8W.mp4',
-    userAvatar: 'https://placehold.co/100x100',
-    views: 92000
-  },
-];
-
-export const useVideoStore = create<VideoState>((set, get) => ({
-  currentVideoIndex: 0,
-  videos: initialVideos,
-  loading: false,
-  hasMore: true,
-  
-  setCurrentVideoIndex: (index) => set({ currentVideoIndex: index }),
-  
-  fetchVideos: async () => {
-    set({ loading: true });
-    try {
-      const videos = await getFYPVideos();
-      if (videos.length > 0) {
-        set({ videos, loading: false });
-      } else {
-        // If no videos from Firebase, use initial sample videos
-        set({ loading: false });
-      }
-    } catch (error) {
-      console.error('Failed to fetch videos:', error);
-      set({ loading: false });
-    }
-  },
-  
-  fetchMoreVideos: async () => {
-    const { loading, videos, hasMore } = get();
-    
-    if (loading || !hasMore) return;
-    
-    set({ loading: true });
-    try {
-      const moreVideos = await getFYPVideos(5);
-      
-      if (moreVideos.length > 0) {
-        // Filter out duplicates
-        const newVideos = moreVideos.filter(
-          newVideo => !videos.some(video => video.id === newVideo.id)
-        );
-        
-        if (newVideos.length > 0) {
-          set({ videos: [...videos, ...newVideos], loading: false });
-        } else {
-          set({ hasMore: false, loading: false });
-        }
-      } else {
-        set({ hasMore: false, loading: false });
-      }
-    } catch (error) {
-      console.error('Failed to fetch more videos:', error);
-      set({ loading: false });
-    }
+    views: 92000,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-womans-feet-splashing-in-the-pool-1261-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/33.jpg'
   }
-}));
+];
