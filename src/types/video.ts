@@ -7,6 +7,19 @@ export interface VideoData {
   comments: number;
   saves: number;
   shares: number;
+  views: number;
   videoUrl: string;
   userAvatar: string;
+  hashtags?: string[];
+  createdAt?: number; // Timestamp
+}
+
+export interface Comment {
+  id: string;
+  userId: string;
+  username: string;
+  userAvatar: string;
+  comment: string;
+  createdAt: number;
+  likes: number;
 }
