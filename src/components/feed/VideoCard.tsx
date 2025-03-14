@@ -6,7 +6,6 @@ import ReactPlayer from "react-player/lazy";
 import { VideoData } from "@/types/video";
 import { FaHeart, FaComment, FaBookmark, FaShare, FaMusic, FaChevronUp, FaChevronDown } from "react-icons/fa";
 import { useInView } from "react-intersection-observer";
-import { increaseViewCount } from "@/lib/firebaseService";
 
 interface VideoCardProps {
   video: VideoData;
@@ -17,106 +16,52 @@ interface VideoCardProps {
 }
 
 export default function VideoCard({ video, isActive, index, onNavigatePrev, onNavigateNext }: VideoCardProps) {
+  // Simple state management
   const [playing, setPlaying] = useState(false);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState(false);
-  const [videoReady, setVideoReady] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
+  const [loading, setLoading] = useState(true);
+  
   const playerRef = useRef<ReactPlayer>(null);
   
   const { ref, inView } = useInView({
     threshold: 0.7,
   });
 
-  // Debug video info
-  useEffect(() => {
-    console.log(`Video ${index} source:`, video.videoUrl);
-    console.log(`Video ${index} active:`, isActive);
-  }, [video, isActive, index]);
-
-  // Auto-play without errors on first load
+  // Auto-play when active
   useEffect(() => {
     if (isActive && inView) {
-      // Ensure we always start with clean states
-      if (initialLoad) {
-        console.log(`Initial load for video ${index}, auto-playing`);
-        
-        // Force auto-play and hide error
-        setError(false);
+      // Add a slight delay before playing
+      const timer = setTimeout(() => {
         setPlaying(true);
-        
-        // Mark initial load complete
-        setInitialLoad(false);
-      } else {
-        // Normal activation
-        const timer = setTimeout(() => {
-          setPlaying(true);
-          // Track view in Firebase
-          try {
-            increaseViewCount(video.id);
-          } catch (error) {
-            console.error("Error tracking view:", error);
-          }
-        }, 300);
-        
-        return () => clearTimeout(timer);
-      }
+      }, 300);
+      
+      return () => clearTimeout(timer);
     } else {
       setPlaying(false);
     }
-  }, [isActive, inView, video.id, initialLoad, index]);
+  }, [isActive, inView]);
 
-  // Handle video click to toggle play/pause
+  // Handle video click
   const handleVideoClick = () => {
-    if (error) {
-      // If in error state, try to recover
-      handleRetry();
-    } else {
-      // Otherwise toggle playing state
-      setPlaying(!playing);
-    }
+    setPlaying(!playing);
   };
 
-  // Handle retry button click
-  const handleRetry = (e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation();
-    }
-    
-    console.log(`Retrying video ${index}`);
-    setError(false);
-    setVideoReady(false);
-    
-    // Reset player if possible
-    if (playerRef.current) {
-      try {
-        playerRef.current.seekTo(0);
-      } catch (err) {
-        console.error("Error seeking video:", err);
-      }
-    }
-    
-    // Give time for video to reload, then play
-    setTimeout(() => {
-      setPlaying(true);
-    }, 800);
-  };
-
-  const handleLike = () => {
+  // Like, save handlers
+  const handleLike = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setLiked(!liked);
   };
 
-  const handleSave = () => {
+  const handleSave = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setSaved(!saved);
   };
 
+  // Format numbers for display
   const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + "M";
-    } else if (num >= 1000) {
-      return (num / 1000).toFixed(1) + "K";
-    }
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+    if (num >= 1000) return (num / 1000).toFixed(1) + "K";
     return num.toString();
   };
 
@@ -129,24 +74,25 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
       transition={{ duration: 0.3 }}
     >
       <div className="relative w-full h-full bg-black" onClick={handleVideoClick}>
-        {/* Single loading indicator - only shown during initial loading, not when paused */}
-        {isActive && !videoReady && !error && (
+        {/* Loading spinner - only show when loading */}
+        {isActive && loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
-            <div className="h-12 w-12 flex items-center justify-center">
+            <div className="h-12 w-12">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
             </div>
           </div>
         )}
 
+        {/* Video Player */}
         <ReactPlayer
           ref={playerRef}
           url={video.videoUrl}
           playing={playing}
           loop
-          muted={false}
           width="100%"
           height="100%"
           playsinline
+          muted={false}
           controls={false}
           config={{
             file: {
@@ -169,55 +115,10 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
             width: "100%",
             height: "100%"
           }}
-          onError={(e) => {
-            console.error("Video playback error:", e, video.videoUrl);
-            
-            // Only show error if we've attempted to play and still failed
-            if (isActive) {
-              setError(true);
-              setVideoReady(false);
-              console.log(`Error state set for video ${index}`);
-            }
-          }}
-          onReady={() => {
-            console.log(`Video ${index} ready to play`);
-            setError(false);
-            setVideoReady(true);
-            
-            // Auto-play when ready if this is the active video
-            if (isActive && inView) {
-              setPlaying(true);
-            }
-          }}
-          onStart={() => {
-            console.log(`Video ${index} started playing`);
-            setError(false);
-            setVideoReady(true);
-          }}
-          onBuffer={() => {
-            console.log(`Video ${index} buffering`);
-            // Don't change videoReady state during buffering to prevent flicker
-          }}
-          onBufferEnd={() => {
-            console.log(`Video ${index} buffer ended`);
-            setVideoReady(true);
-          }}
+          onReady={() => setLoading(false)}
+          onBuffer={() => setLoading(true)}
+          onBufferEnd={() => setLoading(false)}
         />
-
-        {/* Error message - only show if there's an error and the video is active */}
-        {error && isActive && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
-            <div className="text-white text-center p-4 bg-black/80 rounded-lg">
-              <p className="mb-2">Unable to play video. Please try again.</p>
-              <button 
-                className="bg-tiktok-pink text-white px-4 py-2 rounded-full text-sm font-semibold"
-                onClick={handleRetry}
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Video info overlay */}
         <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/70 to-transparent">
@@ -236,10 +137,7 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           <div className="flex flex-col items-center">
             <button 
               className="rounded-full bg-transparent p-2"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleLike();
-              }}
+              onClick={handleLike}
             >
               <FaHeart className={`text-2xl ${liked ? 'text-red-500' : 'text-white'}`} />
             </button>
@@ -259,10 +157,7 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           <div className="flex flex-col items-center">
             <button 
               className="rounded-full bg-transparent p-2"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSave();
-              }}
+              onClick={handleSave}
             >
               <FaBookmark className={`text-2xl ${saved ? 'text-yellow-500' : 'text-white'}`} />
             </button>
@@ -284,18 +179,18 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           </div>
         </div>
 
-        {/* Play/Pause indicator - smaller circular button (reduced by 3% more) */}
-        {!playing && videoReady && isActive && !error && (
+        {/* Play/Pause indicator */}
+        {!playing && !loading && isActive && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
-            <div className="rounded-full bg-black/40 p-3.5 backdrop-blur-sm border border-white/20">
-              <svg className="w-9 h-9 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <div className="rounded-full bg-black/40 p-3 backdrop-blur-sm border border-white/20">
+              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             </div>
           </div>
         )}
 
-        {/* Navigation buttons - on left side */}
+        {/* Navigation buttons */}
         <div className="absolute left-4 top-1/2 transform -translate-y-1/2 flex flex-col space-y-4 z-30">
           <button 
             onClick={(e) => {
