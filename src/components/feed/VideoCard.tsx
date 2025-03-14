@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import ReactPlayer from "react-player/lazy";
 import { VideoData } from "@/types/video";
-import { FaHeart, FaComment, FaBookmark, FaShare, FaMusic } from "react-icons/fa";
+import { FaHeart, FaComment, FaBookmark, FaShare, FaMusic, FaChevronUp, FaChevronDown } from "react-icons/fa";
 import { useInView } from "react-intersection-observer";
 import { increaseViewCount } from "@/lib/firebaseService";
 
@@ -12,13 +12,16 @@ interface VideoCardProps {
   video: VideoData;
   isActive: boolean;
   index: number;
+  onNavigatePrev: () => void;
+  onNavigateNext: () => void;
 }
 
-export default function VideoCard({ video, isActive, index }: VideoCardProps) {
+export default function VideoCard({ video, isActive, index, onNavigatePrev, onNavigateNext }: VideoCardProps) {
   const [playing, setPlaying] = useState(false);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const playerRef = useRef<ReactPlayer>(null);
   
   const { ref, inView } = useInView({
@@ -34,17 +37,29 @@ export default function VideoCard({ video, isActive, index }: VideoCardProps) {
   // Control play state based on inView and isActive
   useEffect(() => {
     if (isActive && inView) {
-      setPlaying(true);
-      // Track view in Firebase
-      try {
-        increaseViewCount(video.id);
-      } catch (error) {
-        console.error("Error tracking view:", error);
-      }
+      // Give a short delay to ensure video is loaded before playing
+      const timer = setTimeout(() => {
+        setPlaying(true);
+        // Track view in Firebase
+        try {
+          increaseViewCount(video.id);
+        } catch (error) {
+          console.error("Error tracking view:", error);
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
     } else {
       setPlaying(false);
     }
   }, [isActive, inView, video.id]);
+
+  // Reset error state when active video changes
+  useEffect(() => {
+    if (isActive) {
+      setError(false);
+    }
+  }, [isActive]);
 
   const handleVideoClick = () => {
     setPlaying(!playing);
@@ -78,6 +93,13 @@ export default function VideoCard({ video, isActive, index }: VideoCardProps) {
       transition={{ duration: 0.3 }}
     >
       <div className="relative w-full h-full bg-black" onClick={handleVideoClick}>
+        {/* Show loading state until video is ready */}
+        {isActive && !videoReady && !error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+          </div>
+        )}
+
         <ReactPlayer
           ref={playerRef}
           url={video.videoUrl}
@@ -112,19 +134,41 @@ export default function VideoCard({ video, isActive, index }: VideoCardProps) {
           onError={(e) => {
             console.error("Video playback error:", e, video.videoUrl);
             setError(true);
+            setVideoReady(false);
           }}
           onReady={() => {
             console.log(`Video ${index} ready to play`);
             setError(false);
+            setVideoReady(true);
+          }}
+          onBuffer={() => {
+            console.log(`Video ${index} buffering`);
+            setVideoReady(false);
+          }}
+          onBufferEnd={() => {
+            console.log(`Video ${index} buffer ended`);
+            setVideoReady(true);
           }}
         />
 
-        {/* Error message */}
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-            <p className="text-white text-center p-4">
-              Unable to play video. Please try again later.
-            </p>
+        {/* Error message - only show if there's an error and the video is active */}
+        {error && isActive && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
+            <div className="text-white text-center p-4 bg-black/80 rounded-lg">
+              <p className="mb-2">Unable to play video. Please try again later.</p>
+              <button 
+                className="bg-tiktok-pink text-white px-4 py-2 rounded-full text-sm font-semibold"
+                onClick={() => {
+                  setError(false);
+                  if (playerRef.current) {
+                    playerRef.current.seekTo(0);
+                  }
+                  setTimeout(() => setPlaying(true), 500);
+                }}
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
 
@@ -193,9 +237,9 @@ export default function VideoCard({ video, isActive, index }: VideoCardProps) {
           </div>
         </div>
 
-        {/* Play/Pause indicator */}
-        {!playing && !error && (
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+        {/* Play/Pause indicator - only show when paused but video is ready */}
+        {!playing && !error && videoReady && isActive && (
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
             <div className="rounded-full bg-black/50 p-4">
               <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
@@ -203,6 +247,28 @@ export default function VideoCard({ video, isActive, index }: VideoCardProps) {
             </div>
           </div>
         )}
+
+        {/* Navigation buttons */}
+        <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex flex-col space-y-4">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigatePrev();
+            }}
+            className="bg-black/50 hover:bg-black/70 text-white rounded-full p-3"
+          >
+            <FaChevronUp className="text-xl" />
+          </button>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigateNext();
+            }}
+            className="bg-black/50 hover:bg-black/70 text-white rounded-full p-3"
+          >
+            <FaChevronDown className="text-xl" />
+          </button>
+        </div>
       </div>
     </motion.div>
   );
