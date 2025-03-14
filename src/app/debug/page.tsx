@@ -1,118 +1,143 @@
-// This file should be run directly in your app
-// Add this to a page temporarily to run direct debugging
+import { create } from 'zustand';
+import { VideoData } from '@/types/video';
 
-import { useState, useEffect } from 'react';
-import { 
-  initializeApp, 
-  getApps
-} from 'firebase/app';
-import { 
-  getFirestore, 
-  collection, 
-  getDocs, 
-  query, 
-  orderBy, 
-  limit,
-  collectionGroup
-} from 'firebase/firestore';
-
-export default function DebugFirebase() {
-  const [messages, setMessages] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Log a message and add it to state
-  const log = (message: string) => {
-    console.log(message);
-    setMessages(prev => [...prev, message]);
-  };
-
-  useEffect(() => {
-    const debugFirebase = async () => {
-      log("Starting Firebase debugging...");
-      
-      try {
-        // 1. Directly initialize Firebase
-        const firebaseConfig = {
-          apiKey: "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
-          authDomain: "tiktok-a7af5.firebaseapp.com",
-          projectId: "tiktok-a7af5",
-          storageBucket: "tiktok-a7af5.appspot.com",
-          messagingSenderId: "609721475346",
-          appId: "1:609721475346:web:c80084600ed104b6b153cb",
-          measurementId: "G-3Z96CKXW1W"
-        };
-        
-        log("Firebase config loaded");
-        
-        // 2. Initialize the Firebase app directly
-        let app;
-        if (!getApps().length) {
-          app = initializeApp(firebaseConfig);
-          log("Firebase app initialized");
-        } else {
-          app = getApps()[0];
-          log("Using existing Firebase app");
-        }
-        
-        // 3. Initialize Firestore directly
-        const db = getFirestore(app);
-        log("Firestore initialized");
-        
-        // 4. Try direct collection query
-        log("Attempting to query 'videos' collection...");
-        const videosRef = collection(db, 'videos');
-        const q1 = query(videosRef, orderBy('timestamp', 'desc'), limit(10));
-        
-        const snapshot1 = await getDocs(q1);
-        log(`Query returned ${snapshot1.docs.length} documents`);
-        
-        if (snapshot1.docs.length > 0) {
-          const firstDoc = snapshot1.docs[0].data();
-          log(`First document fields: ${Object.keys(firstDoc).join(', ')}`);
-          log(`Video URL: ${firstDoc.url || 'missing'}`);
-        } else {
-          log("No documents found in videos collection");
-          
-          // 5. Try a different query approach - collection group
-          log("Trying collectionGroup query...");
-          const q2 = query(collectionGroup(db, 'videos'), limit(10));
-          
-          const snapshot2 = await getDocs(q2);
-          log(`CollectionGroup query returned ${snapshot2.docs.length} documents`);
-          
-          if (snapshot2.docs.length > 0) {
-            const firstDoc = snapshot2.docs[0].data();
-            log(`First document fields: ${Object.keys(firstDoc).join(', ')}`);
-            log(`Document path: ${snapshot2.docs[0].ref.path}`);
-          } else {
-            log("No documents found in any videos collection");
-          }
-        }
-      } catch (error) {
-        log(`Error during debugging: ${error}`);
-      }
-      
-      setIsLoading(false);
-    };
-    
-    debugFirebase();
-  }, []);
-
-  return (
-    <div className="p-4">
-      <h1 className="text-xl font-bold mb-4">Firebase Debugging</h1>
-      
-      {isLoading ? (
-        <p>Loading...</p>
-      ) : (
-        <div className="bg-black text-white p-4 rounded">
-          <pre className="whitespace-pre-wrap">
-            {messages.map((msg, i) => (
-              <div key={i}>{msg}</div>
-            ))}
-          </pre>
-        </div>
-      )}
-    </div>
-  );
+interface VideoState {
+  currentVideoIndex: number;
+  videos: VideoData[];
+  loading: boolean;
+  hasMore: boolean;
+  setCurrentVideoIndex: (index: number) => void;
+  fetchVideos: () => Promise<void>;
+  fetchMoreVideos: () => Promise<void>;
 }
+
+// These videos are guaranteed to work while we debug Firebase
+const hardCodedVideos: VideoData[] = [
+  {
+    id: '1',
+    username: 'mixkit_user',
+    caption: 'Decorating the Christmas tree with my daughter #family',
+    song: 'Christmas Joy - Holiday Mix',
+    likes: 45689,
+    comments: 1234,
+    saves: 5678,
+    shares: 910,
+    views: 123456,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-mother-with-her-little-daughter-decorating-a-christmas-tree-39745-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/44.jpg'
+  },
+  {
+    id: '2',
+    username: 'nature_moments',
+    caption: 'Beautiful day in nature with marshmallows 🌿',
+    song: 'Nature Sounds - Relaxing Mix',
+    likes: 34567,
+    comments: 987,
+    saves: 6543,
+    shares: 210,
+    views: 87654,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-mother-with-her-little-daughter-eating-a-marshmallow-in-nature-39764-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/65.jpg'
+  },
+  {
+    id: '3',
+    username: 'neon_vibes',
+    caption: 'Neon aesthetic at night ✨ #neon',
+    song: 'Neon Dreams - Synthwave',
+    likes: 78901,
+    comments: 2345,
+    saves: 7890,
+    shares: 432,
+    views: 234567,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/22.jpg'
+  },
+  {
+    id: '4',
+    username: 'fashion_fotog',
+    caption: 'Behind the scenes at our photoshoot 📸 #fashion',
+    song: 'Camera Click - Studio Vibes',
+    likes: 23456,
+    comments: 876,
+    saves: 5432,
+    shares: 321,
+    views: 98765,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-taking-photos-from-different-angles-of-a-model-34421-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/men/32.jpg'
+  },
+  {
+    id: '5',
+    username: 'pool_days',
+    caption: 'Pool day vibes 💦 #summer',
+    song: 'Summer Splash - Pool Mix',
+    likes: 67890,
+    comments: 1543,
+    saves: 8765,
+    shares: 543,
+    views: 345678,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-womans-feet-splashing-in-the-pool-1261-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/29.jpg'
+  }
+];
+
+export const useVideoStore = create<VideoState>((set, get) => ({
+  currentVideoIndex: 0,
+  videos: hardCodedVideos, // Start with hardcoded videos
+  loading: false,          // Not loading since videos are hardcoded
+  hasMore: true,
+  
+  setCurrentVideoIndex: (index) => set({ currentVideoIndex: index }),
+  
+  // Simplified fetch videos - uses hardcoded videos for now
+  fetchVideos: async () => {
+    set({ loading: true });
+    
+    try {
+      console.log("Loading hardcoded videos while debugging Firebase");
+      
+      // Simulate a network delay for realism
+      setTimeout(() => {
+        set({ 
+          videos: hardCodedVideos, 
+          loading: false,
+          hasMore: true
+        });
+      }, 300);
+      
+    } catch (error) {
+      console.error('Error in fetchVideos:', error);
+      set({ videos: hardCodedVideos, loading: false, hasMore: true });
+    }
+  },
+  
+  // Fetch more videos - uses more hardcoded videos for now
+  fetchMoreVideos: async () => {
+    const { loading, videos, hasMore } = get();
+    
+    if (loading || !hasMore) return;
+    
+    set({ loading: true });
+    
+    try {
+      // Create variations of hardcoded videos
+      const moreVideos = hardCodedVideos.map((video, index) => ({
+        ...video,
+        id: `more-${Date.now()}-${index}`,
+        caption: `${video.caption} #fyp`,
+      }));
+      
+      // Simulate network delay
+      setTimeout(() => {
+        set({ 
+          videos: [...videos, ...moreVideos.slice(0, 3)],
+          loading: false,
+          hasMore: videos.length < 12
+        });
+      }, 700);
+      
+    } catch (error) {
+      console.error('Error in fetchMoreVideos:', error);
+      set({ loading: false });
+    }
+  }
+}));
