@@ -12,132 +12,49 @@ interface VideoState {
   fetchMoreVideos: () => Promise<void>;
 }
 
-// Fallback sample videos that are guaranteed to work
-const sampleVideos: VideoData[] = [
-  {
-    id: 'sample-1',
-    username: 'user1',
-    caption: 'Winter moments #christmas',
-    song: 'Winter Sounds',
-    likes: 3400,
-    comments: 120,
-    saves: 230,
-    shares: 45,
-    views: 12500,
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-mother-with-her-little-daughter-decorating-a-christmas-tree-39745-large.mp4',
-    userAvatar: 'https://randomuser.me/api/portraits/women/68.jpg'
-  },
-  {
-    id: 'sample-2',
-    username: 'user2',
-    caption: 'Nature vibes 🍭',
-    song: 'Nature Sounds',
-    likes: 5200,
-    comments: 230,
-    saves: 340,
-    shares: 120,
-    views: 18700,
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-mother-with-her-little-daughter-eating-a-marshmallow-in-nature-39764-large.mp4',
-    userAvatar: 'https://randomuser.me/api/portraits/women/45.jpg'
-  },
-  {
-    id: 'sample-3',
-    username: 'user3',
-    caption: 'Neon lights ✨ #neon',
-    song: 'Neon Dreams',
-    likes: 7800,
-    comments: 450,
-    saves: 560,
-    shares: 230,
-    views: 45600,
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
-    userAvatar: 'https://randomuser.me/api/portraits/women/32.jpg'
-  },
-  {
-    id: 'sample-4',
-    username: 'user4',
-    caption: 'Fashion shoot BTS 📸',
-    song: 'Fashion Week',
-    likes: 9200,
-    comments: 340,
-    saves: 450,
-    shares: 180,
-    views: 56000,
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-taking-photos-from-different-angles-of-a-model-34421-large.mp4',
-    userAvatar: 'https://randomuser.me/api/portraits/men/45.jpg'
-  },
-  {
-    id: 'sample-5',
-    username: 'user5',
-    caption: 'Summer splash 💦 #pool',
-    song: 'Pool Party',
-    likes: 6500,
-    comments: 320,
-    saves: 410,
-    shares: 150,
-    views: 34000,
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-womans-feet-splashing-in-the-pool-1261-large.mp4',
-    userAvatar: 'https://randomuser.me/api/portraits/women/24.jpg'
-  }
-];
-
 export const useVideoStore = create<VideoState>((set, get) => ({
   currentVideoIndex: 0,
-  videos: [],
-  loading: true,
+  videos: [], // Start with empty array
+  loading: true, // Start in loading state
   hasMore: true,
   
   setCurrentVideoIndex: (index) => set({ currentVideoIndex: index }),
   
+  // Only fetch from Firebase, exactly like working project
   fetchVideos: async () => {
     set({ loading: true });
     
     try {
-      console.log("Trying to fetch videos from Firebase first");
-      
-      // First try Firebase
+      console.log("Fetching videos from Firebase");
       const firebaseVideos = await getFYPVideos(10);
       
       if (firebaseVideos && firebaseVideos.length > 0) {
-        console.log(`Got ${firebaseVideos.length} videos from Firebase`);
+        console.log(`Successfully loaded ${firebaseVideos.length} videos from Firebase`);
         
-        // Check if the videos have valid URLs
-        const validVideos = firebaseVideos.filter(video => 
-          video.videoUrl && video.videoUrl.trim() !== ''
-        );
-        
-        if (validVideos.length > 0) {
-          console.log(`${validVideos.length} videos have valid URLs`);
-          set({ 
-            videos: validVideos, 
-            loading: false,
-            hasMore: true
-          });
-          return;
-        }
+        set({ 
+          videos: firebaseVideos, 
+          loading: false,
+          hasMore: firebaseVideos.length >= 5
+        });
+      } else {
+        console.warn("No videos returned from Firebase");
+        set({ 
+          videos: [], 
+          loading: false,
+          hasMore: false
+        });
       }
       
-      // If we get here, use sample videos as fallback
-      console.log("No valid videos from Firebase, using sample videos instead");
-      set({ 
-        videos: sampleVideos,
-        loading: false,
-        hasMore: true
-      });
-      
     } catch (error) {
-      console.error('Error fetching videos:', error);
-      
-      // Use sample videos as fallback
-      console.log("Error occurred, using sample videos");
+      console.error('Failed to fetch videos from Firebase:', error);
       set({ 
-        videos: sampleVideos,
         loading: false,
-        hasMore: true
+        hasMore: false
       });
     }
   },
   
+  // Get more videos only from Firebase
   fetchMoreVideos: async () => {
     const { loading, videos, hasMore } = get();
     
@@ -146,61 +63,30 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     set({ loading: true });
     
     try {
-      // If we're already using sample videos, just add more of them
-      if (videos[0] && videos[0].id.startsWith('sample-')) {
-        console.log("Adding more sample videos");
-        
-        const moreVideos = sampleVideos.map((video, index) => ({
-          ...video,
-          id: `more-sample-${Date.now()}-${index}`,
-          caption: `${video.caption} #more`,
-        }));
-        
-        setTimeout(() => {
-          set({ 
-            videos: [...videos, ...moreVideos.slice(0, 3)],
-            loading: false,
-            hasMore: videos.length < 15
-          });
-        }, 500);
-        
-        return;
-      }
-      
-      // Otherwise try to get more Firebase videos
       console.log("Fetching more Firebase videos");
-      const moreFirebaseVideos = await getFYPVideos(videos.length + 5);
+      const moreVideos = await getFYPVideos(videos.length + 5);
       
-      if (moreFirebaseVideos && moreFirebaseVideos.length > videos.length) {
-        const newVideos = moreFirebaseVideos.filter(
-          newVideo => !videos.some(existingVideo => existingVideo.id === newVideo.id)
-        );
+      if (moreVideos && moreVideos.length > videos.length) {
+        // Filter out videos we already have
+        const existingIds = new Set(videos.map(v => v.id));
+        const newVideos = moreVideos.filter(v => !existingIds.has(v.id));
         
         if (newVideos.length > 0) {
+          console.log(`Loaded ${newVideos.length} new videos from Firebase`);
           set({ 
-            videos: [...videos, ...newVideos],
+            videos: [...videos, ...newVideos], 
             loading: false,
-            hasMore: true
+            hasMore: newVideos.length >= 3
           });
           return;
         }
       }
       
-      // If we couldn't get more Firebase videos, use sample videos
-      const moreVideos = sampleVideos.map((video, index) => ({
-        ...video,
-        id: `more-sample-${Date.now()}-${index}`,
-        caption: `${video.caption} #more`,
-      }));
-      
-      set({ 
-        videos: [...videos, ...moreVideos.slice(0, 3)],
-        loading: false,
-        hasMore: videos.length < 15
-      });
+      console.log("No more unique videos available from Firebase");
+      set({ hasMore: false, loading: false });
       
     } catch (error) {
-      console.error('Error fetching more videos:', error);
+      console.error('Failed to fetch more videos:', error);
       set({ loading: false });
     }
   }
