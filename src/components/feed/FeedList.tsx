@@ -32,10 +32,24 @@ export default function FeedList() {
     threshold: 0.1,
   });
 
-  // Load initial videos when component mounts
+  // Load initial videos when component mounts - focus on Firebase videos
   useEffect(() => {
-    console.log("Fetching initial videos");
+    console.log("Fetching initial videos from Firebase");
+    // First try with Firebase videos
     fetchVideos();
+    
+    // If we have sample videos showing instead of Firebase videos,
+    // log this explicitly so we know what's happening
+    const checkForFirebaseVideos = setTimeout(() => {
+      if (videos.length > 0) {
+        const hasFirebaseVideo = videos.some(v => 
+          v.videoUrl && v.videoUrl.includes('firebasestorage.googleapis.com')
+        );
+        console.log("Are we using Firebase videos?", hasFirebaseVideo);
+      }
+    }, 3000);
+    
+    return () => clearTimeout(checkForFirebaseVideos);
   }, [fetchVideos]);
 
   // Load more videos when approaching end
@@ -149,7 +163,9 @@ export default function FeedList() {
       {/* Loading indicator - centered */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
-          <CircularProgress size={40} sx={{ color: 'white' }} />
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white">
+            {/* Using same spinner as video cards for consistency */}
+          </div>
         </div>
       )}
     </div>
