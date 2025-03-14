@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import ReactPlayer from "react-player/lazy";
 import { VideoData } from "@/types/video";
 import { FaHeart, FaComment, FaBookmark, FaShare, FaChevronUp, FaChevronDown } from "react-icons/fa";
@@ -48,32 +48,20 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
   return (
     <motion.div
       ref={ref}
-      className="absolute top-0 left-0 w-full h-full"
-      initial={{ y: index > 0 ? "100%" : 0 }}
-      animate={{ y: isActive ? 0 : index > 0 ? "100%" : "-100%" }}
-      transition={{ duration: 0.4, ease: "easeInOut" }}
+      className="absolute inset-0"
+      initial={{ y: "100%" }}
+      animate={{ y: isActive ? 0 : index < currentVideoIndex ? "-100%" : "100%" }}
+      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
     >
       <div className="relative w-full h-full bg-black" onClick={handleVideoClick}>
-        {/* Improved Loading spinner with fade transition */}
-        <AnimatePresence>
-          {isActive && loading && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="absolute inset-0 flex items-center justify-center bg-black z-10"
-            >
-              <div className="h-14 w-14 flex items-center justify-center">
-                <motion.div 
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                  className="rounded-full h-14 w-14 border-t-2 border-b-2 border-white"
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Loading spinner */}
+        {isActive && loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+            <div className="h-14 w-14 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-14 w-14 border-2 border-t-white border-b-transparent"></div>
+            </div>
+          </div>
+        )}
 
         {/* Video Player */}
         <ReactPlayer
@@ -120,11 +108,11 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           </div>
         </div>
 
-        {/* Side actions - all counts reset to 0 */}
-        <div className="absolute right-2 bottom-24 flex flex-col items-center space-y-6">
+        {/* Side actions - reduced spacing */}
+        <div className="absolute right-2 bottom-20 flex flex-col items-center space-y-4">
           <div className="flex flex-col items-center">
             <button 
-              className="rounded-full bg-transparent p-2"
+              className="rounded-full bg-transparent p-1.5"
               onClick={(e) => e.stopPropagation()}
             >
               <FaHeart className="text-2xl text-white" />
@@ -134,7 +122,7 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           
           <div className="flex flex-col items-center">
             <button 
-              className="rounded-full bg-transparent p-2"
+              className="rounded-full bg-transparent p-1.5"
               onClick={(e) => e.stopPropagation()}
             >
               <FaComment className="text-white text-2xl" />
@@ -144,7 +132,7 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           
           <div className="flex flex-col items-center">
             <button 
-              className="rounded-full bg-transparent p-2"
+              className="rounded-full bg-transparent p-1.5"
               onClick={(e) => e.stopPropagation()}
             >
               <FaBookmark className="text-2xl text-white" />
@@ -154,7 +142,7 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
           
           <div className="flex flex-col items-center">
             <button 
-              className="rounded-full bg-transparent p-2"
+              className="rounded-full bg-transparent p-1.5"
               onClick={(e) => e.stopPropagation()}
             >
               <FaShare className="text-white text-2xl" />
@@ -164,32 +152,24 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
         </div>
 
         {/* Play/Pause indicator */}
-        <AnimatePresence>
-          {!playing && !loading && isActive && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.2 }}
-              className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10"
-            >
-              <div className="rounded-full bg-black/40 p-3 backdrop-blur-sm border border-white/20">
-                <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {!playing && !loading && isActive && (
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
+            <div className="rounded-full bg-black/40 p-3 backdrop-blur-sm border border-white/20">
+              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </div>
+          </div>
+        )}
 
-        {/* Navigation buttons - positioned lower */}
-        <div className="absolute left-4 bottom-24 flex flex-col space-y-4 z-30">
+        {/* Navigation buttons - positioned to match right side icons */}
+        <div className="absolute left-2 bottom-20 flex flex-col space-y-4 z-30">
           <button 
             onClick={(e) => {
               e.stopPropagation();
               onNavigatePrev();
             }}
-            className="bg-black/50 hover:bg-black/70 text-white rounded-full p-3 transition-colors"
+            className="bg-black/50 hover:bg-black/70 text-white rounded-full p-2.5"
           >
             <FaChevronUp className="text-xl" />
           </button>
@@ -198,7 +178,7 @@ export default function VideoCard({ video, isActive, index, onNavigatePrev, onNa
               e.stopPropagation();
               onNavigateNext();
             }}
-            className="bg-black/50 hover:bg-black/70 text-white rounded-full p-3 transition-colors"
+            className="bg-black/50 hover:bg-black/70 text-white rounded-full p-2.5"
           >
             <FaChevronDown className="text-xl" />
           </button>
