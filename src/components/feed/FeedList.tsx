@@ -19,6 +19,7 @@ export default function FeedList() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [isScrolling, setIsScrolling] = useState(false);
 
   // Ref for load more trigger
   const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
@@ -40,6 +41,7 @@ export default function FeedList() {
   // Threshold for swipe detection (in pixels)
   const minSwipeDistance = 50;
 
+  // Improved swipe handling with debounce
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStart(e.targetTouches[0].clientY);
   };
@@ -49,16 +51,24 @@ export default function FeedList() {
   };
 
   const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
+    if (!touchStart || !touchEnd || isScrolling) return;
     
     const distance = touchStart - touchEnd;
     const isUpSwipe = distance > minSwipeDistance;
     const isDownSwipe = distance < -minSwipeDistance;
     
     if (isUpSwipe && currentVideoIndex < videos.length - 1) {
+      setIsScrolling(true);
       setCurrentVideoIndex(currentVideoIndex + 1);
+      
+      // Allow scrolling again after animation completes
+      setTimeout(() => setIsScrolling(false), 400);
     } else if (isDownSwipe && currentVideoIndex > 0) {
+      setIsScrolling(true);
       setCurrentVideoIndex(currentVideoIndex - 1);
+      
+      // Allow scrolling again after animation completes
+      setTimeout(() => setIsScrolling(false), 400);
     }
     
     // Reset values
@@ -66,26 +76,46 @@ export default function FeedList() {
     setTouchEnd(null);
   };
 
-  // Wheel event for desktop
+  // Improved wheel event for desktop with debounce
   const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    
+    if (isScrolling) return;
+    
     if (e.deltaY > 0 && currentVideoIndex < videos.length - 1) {
+      setIsScrolling(true);
       setCurrentVideoIndex(currentVideoIndex + 1);
+      
+      // Allow scrolling again after animation completes
+      setTimeout(() => setIsScrolling(false), 400);
     } else if (e.deltaY < 0 && currentVideoIndex > 0) {
+      setIsScrolling(true);
       setCurrentVideoIndex(currentVideoIndex - 1);
+      
+      // Allow scrolling again after animation completes
+      setTimeout(() => setIsScrolling(false), 400);
     }
   };
 
-  // Navigation handlers
+  // Consistent navigation behavior for buttons
   const handleNavigateNext = () => {
-    if (currentVideoIndex < videos.length - 1) {
-      setCurrentVideoIndex(currentVideoIndex + 1);
-    }
+    if (isScrolling || currentVideoIndex >= videos.length - 1) return;
+    
+    setIsScrolling(true);
+    setCurrentVideoIndex(currentVideoIndex + 1);
+    
+    // Allow scrolling again after animation completes
+    setTimeout(() => setIsScrolling(false), 400);
   };
 
   const handleNavigatePrev = () => {
-    if (currentVideoIndex > 0) {
-      setCurrentVideoIndex(currentVideoIndex - 1);
-    }
+    if (isScrolling || currentVideoIndex <= 0) return;
+    
+    setIsScrolling(true);
+    setCurrentVideoIndex(currentVideoIndex - 1);
+    
+    // Allow scrolling again after animation completes
+    setTimeout(() => setIsScrolling(false), 400);
   };
 
   return (
@@ -102,16 +132,19 @@ export default function FeedList() {
           <p>No videos available.</p>
         </div>
       ) : (
-        videos.map((video, index) => (
-          <VideoCard 
-            key={video.id} 
-            video={video} 
-            isActive={index === currentVideoIndex}
-            index={index}
-            onNavigateNext={handleNavigateNext}
-            onNavigatePrev={handleNavigatePrev}
-          />
-        ))
+        // Add gap between videos that connects them
+        <div className="relative w-full h-full">
+          {videos.map((video, index) => (
+            <VideoCard 
+              key={video.id} 
+              video={video} 
+              isActive={index === currentVideoIndex}
+              index={index}
+              onNavigateNext={handleNavigateNext}
+              onNavigatePrev={handleNavigatePrev}
+            />
+          ))}
+        </div>
       )}
       
       {/* Load more trigger */}
@@ -123,10 +156,12 @@ export default function FeedList() {
         />
       )}
       
-      {/* Loading indicator */}
+      {/* Improved loading indicator with animation */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+          <div className="h-16 w-16 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-2 border-t-white border-r-white border-b-transparent border-l-transparent"></div>
+          </div>
         </div>
       )}
     </div>
