@@ -56,7 +56,7 @@ const initialVideos: VideoData[] = [
   {
     id: '4',
     username: 'user4',
-    caption: 'Can't believe this happened! #funny',
+    caption: "Can't believe this happened! #funny",
     song: 'Funny Audio - Creator',
     likes: 8900,
     comments: 310,
