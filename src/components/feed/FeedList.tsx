@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import VideoCard from "./VideoCard";
 import { useVideoStore } from "@/store/videoStore";
 import { useInView } from "react-intersection-observer";
-import { CircularProgress } from "@mui/material";
-import VideoCard from "./VideoCard";
 
 export default function FeedList() {
   const { 
@@ -21,41 +20,19 @@ export default function FeedList() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
-  // Debug logs
-  useEffect(() => {
-    console.log('Current videos:', videos);
-    console.log('Current video index:', currentVideoIndex);
-  }, [videos, currentVideoIndex]);
-
   // Ref for load more trigger
   const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
     threshold: 0.1,
   });
 
-  // Load initial videos when component mounts - focus on Firebase videos
+  // Load initial videos
   useEffect(() => {
-    console.log("Fetching initial videos from Firebase");
-    // First try with Firebase videos
     fetchVideos();
-    
-    // If we have sample videos showing instead of Firebase videos,
-    // log this explicitly so we know what's happening
-    const checkForFirebaseVideos = setTimeout(() => {
-      if (videos.length > 0) {
-        const hasFirebaseVideo = videos.some(v => 
-          v.videoUrl && v.videoUrl.includes('firebasestorage.googleapis.com')
-        );
-        console.log("Are we using Firebase videos?", hasFirebaseVideo);
-      }
-    }, 3000);
-    
-    return () => clearTimeout(checkForFirebaseVideos);
   }, [fetchVideos]);
 
   // Load more videos when approaching end
   useEffect(() => {
     if (loadMoreInView && videos.length > 0 && hasMore && !loading) {
-      console.log("Fetching more videos");
       fetchMoreVideos();
     }
   }, [loadMoreInView, fetchMoreVideos, videos.length, hasMore, loading]);
@@ -98,20 +75,6 @@ export default function FeedList() {
     }
   };
 
-  // Handle keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowDown" && currentVideoIndex < videos.length - 1) {
-        setCurrentVideoIndex(currentVideoIndex + 1);
-      } else if (e.key === "ArrowUp" && currentVideoIndex > 0) {
-        setCurrentVideoIndex(currentVideoIndex - 1);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentVideoIndex, videos.length, setCurrentVideoIndex]);
-
   // Navigation handlers
   const handleNavigateNext = () => {
     if (currentVideoIndex < videos.length - 1) {
@@ -151,7 +114,7 @@ export default function FeedList() {
         ))
       )}
       
-      {/* Load more trigger - placed at the end of the current videos */}
+      {/* Load more trigger */}
       {hasMore && (
         <div 
           ref={loadMoreRef} 
@@ -160,12 +123,10 @@ export default function FeedList() {
         />
       )}
       
-      {/* Loading indicator - centered with consistent size */}
+      {/* Loading indicator */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
-          <div className="h-16 w-16 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div>
-          </div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
         </div>
       )}
     </div>
