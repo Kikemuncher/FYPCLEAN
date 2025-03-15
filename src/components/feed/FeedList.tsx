@@ -104,6 +104,7 @@ function FeedList(): JSX.Element {
   const wheelEvents = useRef<number[]>([]);
   const lastWheelTime = useRef<number>(0);
   const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
+  const snapTimeout = useRef<NodeJS.Timeout | null>(null);
   
   // For trackpad movement detection
   const lastWheelMovement = useRef<number>(Date.now());
@@ -112,48 +113,52 @@ function FeedList(): JSX.Element {
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // IMPROVED: Modified handleScrollEnd to always snap to videos
+  // Force snap to video regardless of progress magnitude
+  const forceSnapToVideo = useCallback(() => {
+    if (isSwipeLocked) return;
+    
+    // Always lock during snap
+    setIsSwipeLocked(true);
+    
+    // Just reset progress - maintain current video
+    setSwipeProgress(0);
+    
+    // Release lock after animation completes
+    setTimeout(() => {
+      setIsSwipeLocked(false);
+    }, 400);
+  }, [isSwipeLocked]);
+  
+  // COMPLETELY REDESIGNED: Simple, foolproof snap decision based on direction only
   const handleScrollEnd = useCallback(() => {
     if (isSwipeLocked) return;
     
-    // If there's any scroll progress at all, make a decision
-    if (swipeProgress !== 0) {
-      setIsSwipeLocked(true);
-      
-      // Always snap to the nearest video instead of using a threshold
-      // This prevents getting stuck between videos
-      if (Math.abs(swipeProgress) > containerHeight * 0.01) {  // Just need minimal movement
-        // Decision based on direction and how far we've scrolled
-        if (swipeProgress < 0) {
-          // Scrolling down - next video if past halfway point
-          if (Math.abs(swipeProgress) > containerHeight * 0.25) {
-            setCurrentVideoIndex(Math.min(currentVideoIndex + 1, VIDEOS.length - 1));
-          }
-        } else {
-          // Scrolling up - previous video if past halfway point
-          if (Math.abs(swipeProgress) > containerHeight * 0.25) {
-            setCurrentVideoIndex(Math.max(currentVideoIndex - 1, 0));
-          }
-        }
-      }
-      
-      // Always reset progress to 0 
-      setSwipeProgress(0);
-      
-      // Longer unlock duration for smoother transitions
-      setTimeout(() => {
-        setIsSwipeLocked(false);
-      }, 400);
-    }
-  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
-
-  // Setup wheel end detection function - IMPROVED timing
-  const handleWheelEndEvent = useCallback(() => {
-    // Use a consistent timing approach for all scroll types
-    const timeSinceLastMovement = Date.now() - lastWheelMovement.current;
+    setIsSwipeLocked(true);
     
-    // Only trigger after a longer pause in scrolling to improve reliability
-    if (!isSwipeLocked && Math.abs(swipeProgress) > 0 && timeSinceLastMovement >= 120) {
+    // If we've moved at all, decide which video to snap to based on direction
+    if (Math.abs(swipeProgress) > 0) {
+      // Skip threshold checks completely - just use direction
+      if (swipeProgress < 0 && currentVideoIndex < VIDEOS.length - 1) {
+        // Scrolling down - always go to next video if we've moved even slightly down
+        setCurrentVideoIndex(currentVideoIndex + 1);
+      } else if (swipeProgress > 0 && currentVideoIndex > 0) {
+        // Scrolling up - always go to previous video if we've moved even slightly up
+        setCurrentVideoIndex(currentVideoIndex - 1);
+      }
+    }
+    
+    // Always reset progress
+    setSwipeProgress(0);
+    
+    // Longer lock duration for smoother transitions
+    setTimeout(() => {
+      setIsSwipeLocked(false);
+    }, 450);
+  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length]);
+
+  // Wheel end detection with no threshold
+  const handleWheelEndEvent = useCallback(() => {
+    if (!isSwipeLocked && Math.abs(swipeProgress) > 0) {
       handleScrollEnd();
     }
   }, [isSwipeLocked, swipeProgress, handleScrollEnd]);
@@ -237,12 +242,17 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // IMPROVED: Handle wheel event with non-linear scaling to prevent skipping
+  // SIMPLIFIED: Any scroll movement now results in a navigation change
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
     // Record this wheel movement time
     lastWheelMovement.current = Date.now();
+    
+    // Cancel any pending snap
+    if (snapTimeout.current) {
+      clearTimeout(snapTimeout.current);
+    }
     
     // Pass to detector
     detectTrackpad(e.nativeEvent);
@@ -251,7 +261,7 @@ function FeedList(): JSX.Element {
     
     const delta = e.deltaY;
     
-    // For mouse wheel clicks (not trackpad)
+    // For mouse wheel clicks (not trackpad), immediately navigate
     if (Math.abs(delta) > 30 && !isTrackpadScrolling) {
       if (delta > 0 && currentVideoIndex < VIDEOS.length - 1) {
         // Scrolling down - next video
@@ -273,20 +283,15 @@ function FeedList(): JSX.Element {
       return;
     }
     
-    // For trackpad scrolling, apply non-linear scaling to prevent skipping videos
-    // This ensures even fast swipes don't skip videos
+    // For trackpad, very simple visual feedback only (no continuous scrolling allowed)
+    // Direction-based only - any scrolling results in a snap decision
     let progressDelta = -delta;
-    if (Math.abs(progressDelta) > 20) {
-      // Apply logarithmic scaling to dampen large movements
-      const direction = progressDelta < 0 ? -1 : 1;
-      progressDelta = direction * (20 + Math.log10(Math.abs(progressDelta)) * 5);
-    }
     
-    // Apply sensitivity multiplier after dampening
-    progressDelta = progressDelta * 1.2;
+    // Apply sensitivity
+    progressDelta = progressDelta * 0.5;
     
-    // Update progress with the dampened delta
-    let newProgress = swipeProgress + progressDelta;
+    // Update progress (visual feedback only, decision is made on direction only)
+    let newProgress = progressDelta;
     
     // Apply resistance at the ends
     if ((currentVideoIndex === 0 && newProgress > 0) || 
@@ -294,17 +299,27 @@ function FeedList(): JSX.Element {
       newProgress = newProgress * 0.3;
     }
     
-    // Clamp maximum progress to prevent overshooting
-    const maxProgress = containerHeight * 0.5; // 50% of screen height
+    // Limit visual feedback range
+    const maxProgress = containerHeight * 0.3;
     newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
     
     setSwipeProgress(newProgress);
-  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length, detectTrackpad, isTrackpadScrolling, containerHeight]);
+    
+    // Set a snap timeout - if no more scrolling happens, snap based on direction
+    snapTimeout.current = setTimeout(() => {
+      handleScrollEnd();
+    }, 80);
+  }, [currentVideoIndex, VIDEOS.length, detectTrackpad, isTrackpadScrolling, isSwipeLocked, handleScrollEnd, containerHeight]);
   
-  // Handle touch events for mobile with increased sensitivity
+  // Handle touch events for mobile with immediate snap decision
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     touchStartY.current = e.touches[0].clientY;
     touchMoveY.current = e.touches[0].clientY;
+    
+    // Cancel any pending snap
+    if (snapTimeout.current) {
+      clearTimeout(snapTimeout.current);
+    }
   }, []);
   
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -314,11 +329,11 @@ function FeedList(): JSX.Element {
     const diff = touchStartY.current - currentY;
     touchMoveY.current = currentY;
     
-    // For touch, significantly increase sensitivity
-    const swipeDistance = diff * 2.5;
+    // Simple feedback only - decision will be made based on direction
+    const swipeDistance = diff * 1.0;
     
     // Calculate progress
-    let newProgress = -(swipeDistance / containerHeight) * 100;
+    let newProgress = -swipeDistance;
     
     // Apply resistance at the ends
     if ((currentVideoIndex === 0 && newProgress > 0) || 
@@ -327,43 +342,43 @@ function FeedList(): JSX.Element {
     }
     
     // Clamp to reasonable limits
-    const maxProgress = containerHeight * 0.5; // Increased maximum
+    const maxProgress = containerHeight * 0.3;
     newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
     
     setSwipeProgress(newProgress);
   }, [isSwipeLocked, currentVideoIndex, VIDEOS.length, containerHeight]);
   
-  // Reset progress when touch ends
+  // Reset progress when touch ends - immediate snap decision
   const handleTouchEnd = useCallback(() => {
     handleScrollEnd();
   }, [handleScrollEnd]);
   
-  // IMPROVED: Smoother transition settings
+  // IMPROVED: Instant response during scrolling, slow transition during snapping
   const getTransitionSettings = useCallback(() => {
     if (isSwipeLocked) {
       // Slower, smoother animation when snapping to a video
       return {
         type: "spring",
-        stiffness: 600,   // Reduced from 700 for smoother motion
-        damping: 90,      // Increased from 80 for less bounce
-        duration: 0.4,    // Increased for smoother transition
+        stiffness: 500,    // Reduced for smoother motion
+        damping: 100,      // Increased for less bounce
+        duration: 0.45,    // Longer for smoother transition
         restDelta: 0.0001
       };
     } else if (Math.abs(swipeProgress) > 0) {
-      // Very responsive during active scrolling
+      // Instant response during active scrolling
       return {
         type: "spring",
-        stiffness: 2000,  // Increased for more immediate response
-        damping: 120,     // Increased for more control
-        duration: 0.05    
+        stiffness: 3000,   // Very high for immediate response
+        damping: 150,      // High damping for control
+        duration: 0.02     // Almost instant
       };
     } else {
       // Default state - match the locked state for consistency
       return {
         type: "spring",
-        stiffness: 600,
-        damping: 90,
-        duration: 0.4
+        stiffness: 500,
+        damping: 100,
+        duration: 0.45
       };
     }
   }, [isSwipeLocked, swipeProgress]);
@@ -430,7 +445,15 @@ function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     
-    // IMPROVED: Wheel handler with longer timeout
+    // CRITICAL NEW CODE: Force snap to nearest video if stuck between videos
+    // This is a safety mechanism to ensure we never get stuck
+    const forceSnapInterval = setInterval(() => {
+      if (!isSwipeLocked && Math.abs(swipeProgress) > 0) {
+        forceSnapToVideo();
+      }
+    }, 800);
+    
+    // SIMPLER: Wheel handler with immediate snap
     const wheelHandler = () => {
       // Cancel previous timeouts
       if (wheelTimeout.current) {
@@ -440,13 +463,12 @@ function FeedList(): JSX.Element {
       // Update the last wheel movement time
       lastWheelMovement.current = Date.now();
       
-      // Use a longer timeout (120ms) to ensure scrolling has completely stopped
+      // Aggressive snap behavior - any pause in scrolling results in a snap
       wheelTimeout.current = setTimeout(() => {
-        const timeSinceLastMovement = Date.now() - lastWheelMovement.current;
-        if (timeSinceLastMovement >= 120) {
-          handleWheelEndEvent();
+        if (!isSwipeLocked && Math.abs(swipeProgress) > 0) {
+          handleScrollEnd();
         }
-      }, 120);
+      }, 60); // Very short timeout
     };
     
     window.addEventListener('wheel', wheelHandler, { passive: false });
@@ -456,11 +478,15 @@ function FeedList(): JSX.Element {
       window.removeEventListener('resize', updateDimensions);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('wheel', wheelHandler);
+      clearInterval(forceSnapInterval);
       if (wheelTimeout.current) {
         clearTimeout(wheelTimeout.current);
       }
+      if (snapTimeout.current) {
+        clearTimeout(snapTimeout.current);
+      }
     };
-  }, [currentVideoIndex, isMuted, isTrackpadScrolling, handleScrollEnd, swipeProgress, isSwipeLocked, handleWheelEndEvent]);
+  }, [currentVideoIndex, isMuted, handleScrollEnd, swipeProgress, isSwipeLocked, handleWheelEndEvent, forceSnapToVideo, VIDEOS.length]);
   
   // Handle video playback when current index changes
   useEffect(() => {
