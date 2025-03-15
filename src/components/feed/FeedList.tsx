@@ -3,8 +3,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 
+// Define video interface
+interface Video {
+  id: string;
+  url: string;
+  username: string;
+  caption: string;
+  song: string;
+  likes: number;
+  comments: number;
+}
+
 // Static data to ensure we always have videos
-const VIDEOS = [
+const VIDEOS: Video[] = [
   {
     id: "video1",
     url: "https://assets.mixkit.co/videos/preview/mixkit-young-mother-with-her-little-daughter-decorating-a-christmas-tree-39745-large.mp4",
@@ -53,7 +64,7 @@ const VIDEOS = [
 ];
 
 // Simple format function for large numbers
-const formatCount = (count) => {
+const formatCount = (count: number): string => {
   if (count >= 1000000) {
     return (count / 1000000).toFixed(1) + 'M';
   } else if (count >= 1000) {
@@ -62,31 +73,31 @@ const formatCount = (count) => {
   return count.toString();
 };
 
-export default function FeedList() {
+export default function FeedList(): JSX.Element {
   // Client-side rendering detection
-  const [isClient, setIsClient] = useState(false);
+  const [isClient, setIsClient] = useState<boolean>(false);
   
   // Current active video
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
   
   // Track likes
-  const [likedVideos, setLikedVideos] = useState({});
+  const [likedVideos, setLikedVideos] = useState<Record<string, boolean>>({});
   
   // Video playing state
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
   
   // Window height for proper sizing
-  const [windowHeight, setWindowHeight] = useState(0);
+  const [windowHeight, setWindowHeight] = useState<number>(0);
   
   // Video element references
-  const videoRefs = useRef({});
+  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   
   // Set up client-side detection
   useEffect(() => {
     setIsClient(true);
     
     // Set window height
-    const updateHeight = () => {
+    const updateHeight = (): void => {
       setWindowHeight(window.innerHeight);
     };
     
@@ -111,7 +122,7 @@ export default function FeedList() {
     }
     
     // Pause all videos first
-    Object.values(videoRefs.current).forEach(videoRef => {
+    Object.values(videoRefs.current).forEach((videoRef) => {
       if (videoRef && !videoRef.paused) {
         try {
           videoRef.pause();
@@ -130,7 +141,7 @@ export default function FeedList() {
         // Handle autoplay with error catching
         const playPromise = currentVideo.play();
         if (playPromise !== undefined) {
-          playPromise.catch(error => {
+          playPromise.catch((error) => {
             console.log("Auto-play prevented:", error);
           });
         }
@@ -141,30 +152,30 @@ export default function FeedList() {
   }, [currentIndex, isClient]);
   
   // Set video ref
-  const setVideoRef = (id, el) => {
+  const setVideoRef = (id: string, el: HTMLVideoElement | null): void => {
     videoRefs.current[id] = el;
   };
   
   // Toggle mute
-  const toggleMute = () => {
+  const toggleMute = (): void => {
     setIsMuted(!isMuted);
   };
   
   // Navigate through videos
-  const goToNext = () => {
+  const goToNext = (): void => {
     if (currentIndex < VIDEOS.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
   };
   
-  const goToPrevious = () => {
+  const goToPrevious = (): void => {
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
     }
   };
   
   // Toggle like
-  const toggleLike = (videoId) => {
+  const toggleLike = (videoId: string): void => {
     setLikedVideos(prev => ({
       ...prev,
       [videoId]: !prev[videoId]
@@ -172,7 +183,7 @@ export default function FeedList() {
   };
   
   // Handle wheel events
-  const handleWheel = (e) => {
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>): void => {
     e.preventDefault();
     
     if (e.deltaY > 50 && currentIndex < VIDEOS.length - 1) {
@@ -184,7 +195,7 @@ export default function FeedList() {
   
   // Handle key presses
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'ArrowDown' || e.key === 'j') {
         goToNext();
       } else if (e.key === 'ArrowUp' || e.key === 'k') {
@@ -265,8 +276,10 @@ export default function FeedList() {
                           className="w-full h-full object-cover"
                           loading="lazy"
                           onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = 'https://placehold.co/100/gray/white?text=User';
+                            // TypeScript fix for error event
+                            const target = e.target as HTMLImageElement;
+                            target.onerror = null;
+                            target.src = 'https://placehold.co/100/gray/white?text=User';
                           }}
                         />
                       </div>
