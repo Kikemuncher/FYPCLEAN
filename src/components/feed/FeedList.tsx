@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useVideoStore } from "@/store/videoStore";
-import { motion } from "framer-motion";
 
 export default function FeedList() {
   const { videos, currentVideoIndex, setCurrentVideoIndex, fetchVideos } = useVideoStore();
@@ -10,7 +9,6 @@ export default function FeedList() {
   const videoRefs = useRef<HTMLVideoElement[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
-  const lastNavigationTime = useRef(0);
 
   // Only run after component mounts (client-side)
   useEffect(() => {
@@ -49,39 +47,47 @@ export default function FeedList() {
       }
     });
 
-    // Allow scrolling again after animation completes but with a delay
+    // Allow scrolling again after 800ms
     setTimeout(() => {
       setIsScrolling(false);
     }, 800);
   }, [currentVideoIndex, videos, isClient]);
 
-  // Navigation function with rate limiting
-  const navigateToVideo = (direction: 'prev' | 'next') => {
-    // Rate limiting - prevent rapid navigation
-    const now = Date.now();
-    if (now - lastNavigationTime.current < 800 || isScrolling) {
-      return;
-    }
+  // Simple navigation functions
+  const goToNextVideo = () => {
+    if (isScrolling || currentVideoIndex >= videos.length - 1) return;
     
-    lastNavigationTime.current = now;
     setIsScrolling(true);
+    setCurrentVideoIndex(currentVideoIndex + 1);
+  };
+
+  const goToPrevVideo = () => {
+    if (isScrolling || currentVideoIndex <= 0) return;
     
-    if (direction === 'next' && currentVideoIndex < videos.length - 1) {
-      setCurrentVideoIndex(currentVideoIndex + 1);
-    } else if (direction === 'prev' && currentVideoIndex > 0) {
-      setCurrentVideoIndex(currentVideoIndex - 1);
-    } else {
-      setIsScrolling(false);
+    setIsScrolling(true);
+    setCurrentVideoIndex(currentVideoIndex - 1);
+  };
+
+  // Simple wheel handler
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    
+    if (isScrolling) return;
+    
+    if (e.deltaY > 50) {
+      goToNextVideo();
+    } else if (e.deltaY < -50) {
+      goToPrevVideo();
     }
   };
 
-  // VERY SIMPLE KEYBOARD NAVIGATION
+  // Simple keyboard handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp') {
-        navigateToVideo('prev');
+        goToPrevVideo();
       } else if (e.key === 'ArrowDown') {
-        navigateToVideo('next');
+        goToNextVideo();
       }
     };
     
@@ -89,40 +95,24 @@ export default function FeedList() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentVideoIndex, isScrolling]);
 
-  // WHEEL HANDLER - Simple but rate-limited
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    
-    if (e.deltaY > 40) {
-      navigateToVideo('next');
-    } else if (e.deltaY < -40) {
-      navigateToVideo('prev');
-    }
-  };
-
-  // TOUCH HANDLER - Simple but effective
-  const touchStartRef = useRef(0);
-  const touchMoveEnabled = useRef(true);
+  // Simple touch handlers
+  const touchStartY = useRef(0);
   
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartRef.current = e.touches[0].clientY;
-    touchMoveEnabled.current = true;
+    touchStartY.current = e.touches[0].clientY;
   };
   
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchMoveEnabled.current || isScrolling) return;
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (isScrolling) return;
     
-    const currentY = e.touches[0].clientY;
-    const diff = touchStartRef.current - currentY;
+    const touchEndY = e.changedTouches[0].clientY;
+    const touchDiff = touchStartY.current - touchEndY;
     
-    // If substantial movement, navigate and disable further movement until touchend
-    if (Math.abs(diff) > 60) {
-      touchMoveEnabled.current = false;
-      
-      if (diff > 0) {
-        navigateToVideo('next');
+    if (Math.abs(touchDiff) > 70) {
+      if (touchDiff > 0) {
+        goToNextVideo();
       } else {
-        navigateToVideo('prev');
+        goToPrevVideo();
       }
     }
   };
@@ -161,30 +151,21 @@ export default function FeedList() {
     <div 
       className="h-screen w-full overflow-hidden bg-black relative"
       onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       onWheel={handleWheel}
     >
-      {/* Full-height container that moves up and down */}
-      <motion.div 
-        className="absolute w-full"
-        style={{ height: `${videos.length * 100}vh` }}
-        animate={{ y: `-${currentVideoIndex * 100}vh` }}
-        transition={{ 
-          duration: 0.7,
-          ease: [0.32, 0.72, 0.24, 0.99]  // Nice smooth custom easing
-        }}
+      <div 
+        className="absolute w-full h-screen transition-transform duration-700 ease-[cubic-bezier(0.32,0.72,0.24,0.99)]"
+        style={{ transform: `translateY(-${currentVideoIndex * 100}vh)` }}
       >
-        {/* Render all videos in position */}
         {videos.map((video, index) => (
           <div 
             key={video.id} 
             className="absolute w-full h-screen"
             style={{ top: `${index * 100}vh` }}
           >
-            {/* Only render videos that are close to the current one for performance */}
             {Math.abs(index - currentVideoIndex) <= 1 && (
               <>
-                {/* Video element */}
                 <video
                   ref={(el) => setVideoRef(el, index)}
                   src={video.videoUrl}
@@ -196,13 +177,11 @@ export default function FeedList() {
                   poster="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
                 />
                 
-                {/* Video info */}
                 <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/70 to-transparent">
                   <p className="font-bold text-white">@{video.username}</p>
                   <p className="text-white text-sm">{video.caption}</p>
                 </div>
                 
-                {/* Action buttons */}
                 <div className="absolute right-2 bottom-20 flex flex-col items-center space-y-3">
                   <button className="flex flex-col items-center">
                     <div className="rounded-full bg-transparent p-1">
@@ -244,12 +223,12 @@ export default function FeedList() {
             )}
           </div>
         ))}
-      </motion.div>
+      </div>
 
-      {/* Navigation buttons - CENTERED VERSION */}
-      <div className="absolute left-1/2 transform -translate-x-1/2 bottom-24 flex space-x-8 z-30">
+      {/* Left-Center Navigation buttons */}
+      <div className="absolute left-10 top-1/2 transform -translate-y-1/2 flex flex-col space-y-4 z-30">
         <button 
-          onClick={() => navigateToVideo('prev')}
+          onClick={goToPrevVideo}
           className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-3 ${
             currentVideoIndex === 0 || isScrolling ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
           }`}
@@ -260,7 +239,7 @@ export default function FeedList() {
           </svg>
         </button>
         <button 
-          onClick={() => navigateToVideo('next')}
+          onClick={goToNextVideo}
           className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-3 ${
             currentVideoIndex === videos.length - 1 || isScrolling ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
           }`}
