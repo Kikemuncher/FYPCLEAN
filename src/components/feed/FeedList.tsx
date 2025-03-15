@@ -9,7 +9,7 @@ export default function FeedList() {
   const [isClient, setIsClient] = useState(false);
   const videoRefs = useRef<HTMLVideoElement[]>([]);
   const [isMuted, setIsMuted] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
+  const [isScrollLocked, setIsScrollLocked] = useState(false);
 
   // Only run after component mounts (client-side)
   useEffect(() => {
@@ -27,11 +27,15 @@ export default function FeedList() {
       
       if (index === currentVideoIndex) {
         // Play the current video
-        const playPromise = videoRef.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.log("Autoplay prevented:", error);
-          });
+        try {
+          const playPromise = videoRef.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(error => {
+              console.log("Autoplay prevented:", error);
+            });
+          }
+        } catch (error) {
+          console.error("Error playing video:", error);
         }
       } else {
         // Pause all other videos
@@ -43,76 +47,64 @@ export default function FeedList() {
         }
       }
     });
+
+    // Unlock scrolling after a short delay to prevent rapid scrolling
+    setTimeout(() => {
+      setIsScrollLocked(false);
+    }, 500);
   }, [currentVideoIndex, videos, isClient]);
 
-  // Controlled navigation with debounce to prevent skipping
-  const navigateToVideo = (direction: 'prev' | 'next') => {
-    if (isScrolling) return; // Prevent navigation while already scrolling
+  // Simple navigation function with scroll locking
+  const goToNextVideo = () => {
+    if (isScrollLocked || currentVideoIndex >= videos.length - 1) return;
     
-    setIsScrolling(true); // Lock scrolling
-    
-    if (direction === 'next' && currentVideoIndex < videos.length - 1) {
-      setCurrentVideoIndex(currentVideoIndex + 1);
-    } else if (direction === 'prev' && currentVideoIndex > 0) {
-      setCurrentVideoIndex(currentVideoIndex - 1);
-    }
-    
-    // Release scroll lock after animation completes
-    setTimeout(() => {
-      setIsScrolling(false);
-    }, 650); // Slightly longer than animation duration
+    setIsScrollLocked(true);
+    setCurrentVideoIndex(currentVideoIndex + 1);
   };
 
-  // Handle touch gestures for swiping - with controlled sensitivity
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const touchThreshold = 100; // Higher threshold to prevent accidental swipes
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.touches[0].clientY);
+  const goToPrevVideo = () => {
+    if (isScrollLocked || currentVideoIndex <= 0) return;
+    
+    setIsScrollLocked(true);
+    setCurrentVideoIndex(currentVideoIndex - 1);
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.touches[0].clientY);
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd || isScrolling) return;
-    
-    const distance = touchStart - touchEnd;
-    
-    // Only trigger if swipe distance exceeds threshold
-    if (distance > touchThreshold) {
-      navigateToVideo('next');
-    } else if (distance < -touchThreshold) {
-      navigateToVideo('prev');
-    }
-    
-    setTouchStart(null);
-    setTouchEnd(null);
-  };
-
-  // Handle wheel events with debouncing to prevent skipping
-  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
+  // Touch handling
+  const [startY, setStartY] = useState(0);
   
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setStartY(e.touches[0].clientY);
+  };
+  
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (isScrollLocked) return;
+    
+    const endY = e.changedTouches[0].clientY;
+    const diff = startY - endY;
+    
+    // Threshold for swipe detection
+    if (Math.abs(diff) > 70) {
+      if (diff > 0) {
+        // Swipe up - next video
+        goToNextVideo();
+      } else {
+        // Swipe down - previous video
+        goToPrevVideo();
+      }
+    }
+  };
+
+  // Wheel handling
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     
-    if (isScrolling) return;
+    if (isScrollLocked) return;
     
-    // Clear any existing timeout
-    if (wheelTimeout.current) {
-      clearTimeout(wheelTimeout.current);
+    if (e.deltaY > 0) {
+      goToNextVideo();
+    } else if (e.deltaY < 0) {
+      goToPrevVideo();
     }
-    
-    // Set a new timeout
-    wheelTimeout.current = setTimeout(() => {
-      if (e.deltaY > 50) {
-        navigateToVideo('next');
-      } else if (e.deltaY < -50) {
-        navigateToVideo('prev');
-      }
-    }, 50);
   };
 
   // Set video refs for controlling play/pause
@@ -149,7 +141,6 @@ export default function FeedList() {
     <div 
       className="h-screen w-full overflow-hidden bg-black relative"
       onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onWheel={handleWheel}
     >
@@ -160,8 +151,8 @@ export default function FeedList() {
         animate={{ y: `-${currentVideoIndex * 100}vh` }}
         transition={{ 
           type: "spring", 
-          stiffness: 200,  // Reduced for smoother motion
-          damping: 25,     // Better damping
+          stiffness: 200,
+          damping: 25,
           duration: 0.6
         }}
       >
@@ -183,6 +174,7 @@ export default function FeedList() {
                   loop
                   playsInline
                   muted={isMuted}
+                  controls={false}
                   poster="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
                 />
                 
@@ -239,22 +231,22 @@ export default function FeedList() {
       {/* Navigation buttons */}
       <div className="absolute left-2 bottom-20 flex flex-col space-y-3 z-30">
         <button 
-          onClick={() => navigateToVideo('prev')}
+          onClick={goToPrevVideo}
           className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-2 ${
-            currentVideoIndex === 0 || isScrolling ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
+            currentVideoIndex === 0 || isScrollLocked ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
           }`}
-          disabled={currentVideoIndex === 0 || isScrolling}
+          disabled={currentVideoIndex === 0 || isScrollLocked}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>
         </button>
         <button 
-          onClick={() => navigateToVideo('next')}
+          onClick={goToNextVideo}
           className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-2 ${
-            currentVideoIndex === videos.length - 1 || isScrolling ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
+            currentVideoIndex === videos.length - 1 || isScrollLocked ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
           }`}
-          disabled={currentVideoIndex === videos.length - 1 || isScrolling}
+          disabled={currentVideoIndex === videos.length - 1 || isScrollLocked}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
