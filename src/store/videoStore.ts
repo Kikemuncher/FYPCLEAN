@@ -99,7 +99,7 @@ const sampleVideos: VideoData[] = [
 ];
 
 // Additional videos for infinite scroll
-const moreVideoSets = [
+const moreVideoSets: VideoData[] = [
   {
     id: 'more-1',
     username: 'city_explorer',
@@ -258,4 +258,22 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     const { videos } = get();
     const updatedVideos = videos.map(video => 
       video.id === videoId 
-        ? { ...video, saves
+        ? { ...video, saves: video.saves + 1 } 
+        : video
+    );
+    
+    set({ videos: updatedVideos });
+  },
+  
+  // Increment view count
+  incrementView: (videoId) => {
+    const { videos } = get();
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, views: video.views + 1 } 
+        : video
+    );
+    
+    set({ videos: updatedVideos });
+  }
+}));
