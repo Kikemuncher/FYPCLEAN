@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 
 // Import FeedList component with no SSR to prevent hydration issues
-const FeedList = dynamic(() => import("../components/feed/FeedList"), {
+const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -13,9 +13,9 @@ const FeedList = dynamic(() => import("../components/feed/FeedList"), {
   ),
 });
 
-export default function Home() {
+export default function Home(): JSX.Element {
   // Track whether we're in the browser
-  const [isMounted, setIsMounted] = useState(false);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
 
   // Set mounted state after component mounts
   useEffect(() => {
