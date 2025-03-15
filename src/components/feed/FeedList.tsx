@@ -190,36 +190,25 @@ export default function FeedList(): JSX.Element {
   
   // Handle wheel end event for trackpad scrolling
   const handleScrollEnd = useCallback(() => {
-    if (isSwipeLocked || Math.abs(swipeProgress) === 0) return;
+    if (isSwipeLocked) return;
     
-    // Check if we've scrolled enough to change videos
-    const threshold = containerHeight * 0.15; // 15% of screen height threshold
-    
-    if (swipeProgress < -threshold && currentVideoIndex > 0) {
-      // Scrolled up enough to go to previous video
-      setIsSwipeLocked(true);
-      setCurrentVideoIndex(currentVideoIndex - 1);
-      
-      // Reset after animation
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 400);
-    } else if (swipeProgress > threshold && currentVideoIndex < VIDEOS.length - 1) {
-      // Scrolled down enough to go to next video
-      setIsSwipeLocked(true);
-      setCurrentVideoIndex(currentVideoIndex + 1);
-      
-      // Reset after animation
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 400);
-    } else {
-      // Not scrolled enough, animate back to current video
+    // If there's meaningful progress
+    if (Math.abs(swipeProgress) > 0) {
       setIsSwipeLocked(true);
       
-      // Use a simple timeout to reset
+      // Check which video is more than 50% in view
+      const progressPercent = Math.abs(swipeProgress) / containerHeight;
+      const threshold = 0.1; // 10% threshold for changing videos
+      
+      if (swipeProgress > 0 && progressPercent > threshold && currentVideoIndex < VIDEOS.length - 1) {
+        // Progress is positive (scrolling down) - go to next video
+        setCurrentVideoIndex(currentVideoIndex + 1);
+      } else if (swipeProgress < 0 && progressPercent > threshold && currentVideoIndex > 0) {
+        // Progress is negative (scrolling up) - go to previous video
+        setCurrentVideoIndex(currentVideoIndex - 1);
+      }
+      
+      // Always reset to a clean state after deciding
       setTimeout(() => {
         setSwipeProgress(0);
         setIsSwipeLocked(false);
@@ -244,11 +233,21 @@ export default function FeedList(): JSX.Element {
     // For discrete mouse wheel, move directly to next/prev video
     if (isDiscreteWheel) {
       if (delta > 0 && currentVideoIndex < VIDEOS.length - 1) {
+        // Scrolling down - next video
+        setIsSwipeLocked(true);
         setCurrentVideoIndex(currentVideoIndex + 1);
         setSwipeProgress(0);
+        setTimeout(() => {
+          setIsSwipeLocked(false);
+        }, 300);
       } else if (delta < 0 && currentVideoIndex > 0) {
+        // Scrolling up - previous video
+        setIsSwipeLocked(true);
         setCurrentVideoIndex(currentVideoIndex - 1);
         setSwipeProgress(0);
+        setTimeout(() => {
+          setIsSwipeLocked(false);
+        }, 300);
       }
       return;
     }
@@ -319,28 +318,29 @@ export default function FeedList(): JSX.Element {
   // Custom transition settings based on interaction type
   const getTransitionSettings = useCallback(() => {
     if (isSwipeLocked) {
-      // Full animation when snapping to a video
+      // Full animation when snapping to a video - stiffer spring for more decisive snapping
       return {
         type: "spring",
-        stiffness: 300,
-        damping: 30,
-        duration: 0.5
+        stiffness: 400,
+        damping: 40,
+        duration: 0.3,
+        restDelta: 0.001 // Ensures animation completes fully
       };
     } else if (Math.abs(swipeProgress) > 0) {
       // Responsive movement during active scrolling
       return {
         type: "spring",
         stiffness: 1000,
-        damping: 90,
+        damping: 100,
         duration: 0.1
       };
     } else {
       // Default state
       return {
         type: "spring",
-        stiffness: 300,
-        damping: 30,
-        duration: 0.2
+        stiffness: 400,
+        damping: 40,
+        duration: 0.3
       };
     }
   }, [isSwipeLocked, swipeProgress]);
@@ -364,11 +364,19 @@ export default function FeedList(): JSX.Element {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp' || e.key === 'k') {
         if (currentVideoIndex > 0) {
+          setIsSwipeLocked(true);
           setCurrentVideoIndex(currentVideoIndex - 1);
+          setTimeout(() => {
+            setIsSwipeLocked(false);
+          }, 300);
         }
       } else if (e.key === 'ArrowDown' || e.key === 'j') {
         if (currentVideoIndex < VIDEOS.length - 1) {
+          setIsSwipeLocked(true);
           setCurrentVideoIndex(currentVideoIndex + 1);
+          setTimeout(() => {
+            setIsSwipeLocked(false);
+          }, 300);
         }
       } else if (e.key === 'm') {
         setIsMuted(!isMuted);
@@ -387,20 +395,20 @@ export default function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     
-    // Setup wheel end detection
+    // Setup wheel end detection with a shorter timeout for better responsiveness
     const handleWheelEndEvent = () => {
-      if (isTrackpadScrolling) {
+      if (isTrackpadScrolling && !isSwipeLocked) {
         handleScrollEnd();
       }
     };
     
-    // Listen for the end of scrolling
+    // Listen for the end of scrolling with more frequent checks
     window.addEventListener('wheel', () => {
       if (wheelTimeout.current) {
         clearTimeout(wheelTimeout.current);
       }
       
-      wheelTimeout.current = setTimeout(handleWheelEndEvent, 150);
+      wheelTimeout.current = setTimeout(handleWheelEndEvent, 90); // Shorter timeout (was 150ms)
     }, { passive: false });
     
     // Cleanup
