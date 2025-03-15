@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 
 // Define video interface
@@ -78,29 +78,29 @@ export default function FeedList(): JSX.Element {
   const [isClient, setIsClient] = useState<boolean>(false);
   
   // Current active video
-  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState<number>(0);
   
   // Track likes
   const [likedVideos, setLikedVideos] = useState<Record<string, boolean>>({});
   
   // Video playing state
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
   
   // Window height for proper sizing
-  const [windowHeight, setWindowHeight] = useState<number>(0);
+  const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // For swipe functionality
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  // Scroll-related state
+  const [swipeProgress, setSwipeProgress] = useState<number>(0);
   const [isSwipeLocked, setIsSwipeLocked] = useState<boolean>(false);
   
-  // For scroll wheel debouncing
-  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
-  const scrollDistance = useRef<number>(0);
+  // Touch refs
+  const touchStartY = useRef<number>(0);
+  const touchMoveY = useRef<number>(0);
+  const lastTap = useRef<number>(0);
   
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const containerRef = useRef<HTMLDivElement | null>(null);
   
   // Set up client-side detection
   useEffect(() => {
@@ -108,7 +108,7 @@ export default function FeedList(): JSX.Element {
     
     // Set window height
     const updateHeight = (): void => {
-      setWindowHeight(window.innerHeight);
+      setContainerHeight(window.innerHeight);
     };
     
     // Initialize height
@@ -117,25 +117,46 @@ export default function FeedList(): JSX.Element {
     // Listen for resize
     window.addEventListener('resize', updateHeight);
     
+    // Add keyboard navigation
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp' || e.key === 'k') {
+        if (currentVideoIndex > 0) {
+          setCurrentVideoIndex(currentVideoIndex - 1);
+        }
+      } else if (e.key === 'ArrowDown' || e.key === 'j') {
+        if (currentVideoIndex < VIDEOS.length - 1) {
+          setCurrentVideoIndex(currentVideoIndex + 1);
+        }
+      } else if (e.key === 'm') {
+        setIsMuted(!isMuted);
+      } else if (e.key === ' ' || e.key === 'p') {
+        // Toggle play/pause
+        const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
+        if (currentVideo) {
+          if (currentVideo.paused) {
+            currentVideo.play().catch(e => console.error("Play failed:", e));
+          } else {
+            currentVideo.pause();
+          }
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    
     // Cleanup
-    return () => window.removeEventListener('resize', updateHeight);
-  }, []);
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentVideoIndex, isMuted]);
   
   // Handle video playback when current index changes
   useEffect(() => {
     if (!isClient) return;
-    
-    // Safety check
-    if (currentIndex < 0 || currentIndex >= VIDEOS.length) {
-      setCurrentIndex(0);
-      return;
-    }
-    
-    // Reset pause state for new video
-    setIsPaused(false);
-    
-    // Pause all videos first
-    Object.values(videoRefs.current).forEach((videoRef) => {
+
+    // Pause all videos
+    Object.values(videoRefs.current).forEach(videoRef => {
       if (videoRef && !videoRef.paused) {
         try {
           videoRef.pause();
@@ -144,198 +165,160 @@ export default function FeedList(): JSX.Element {
         }
       }
     });
-    
-    // Play current video with retry
-    const playCurrentVideo = async (): Promise<void> => {
-      const currentVideo = videoRefs.current[VIDEOS[currentIndex].id];
-      if (!currentVideo) return;
+
+    // Get current video
+    const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
+    if (currentVideo) {
+      // Reset to beginning
+      currentVideo.currentTime = 0;
       
-      try {
-        // Reset playback position
-        currentVideo.currentTime = 0;
-        
-        // Use click to play as a workaround for autoplay policy
-        const playAttempt = await currentVideo.play();
-        console.log("Video started playing");
-      } catch (error) {
-        console.error("Autoplay failed, trying with user interaction:", error);
-        setIsPaused(true);
+      // Attempt to play with error handling
+      const playPromise = currentVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log("Auto-play prevented, waiting for user interaction");
+          
+          // Add a one-time click event listener to play the video
+          const playOnInteraction = () => {
+            currentVideo.play().catch(e => console.error("Play still failed:", e));
+            document.removeEventListener('click', playOnInteraction);
+            document.removeEventListener('touchstart', playOnInteraction);
+          };
+          
+          document.addEventListener('click', playOnInteraction, { once: true });
+          document.addEventListener('touchstart', playOnInteraction, { once: true });
+        });
       }
-    };
-    
-    playCurrentVideo();
-    
-  }, [currentIndex, isClient]);
-  
-  // Monitor video play/pause state
-  useEffect(() => {
-    if (!isClient) return;
-    
-    const currentVideoId = VIDEOS[currentIndex]?.id;
-    if (!currentVideoId) return;
-    
-    const currentVideo = videoRefs.current[currentVideoId];
-    if (!currentVideo) return;
-    
-    const handlePlay = () => setIsPaused(false);
-    const handlePause = () => setIsPaused(true);
-    
-    currentVideo.addEventListener('play', handlePlay);
-    currentVideo.addEventListener('pause', handlePause);
-    
-    return () => {
-      currentVideo.removeEventListener('play', handlePlay);
-      currentVideo.removeEventListener('pause', handlePause);
-    };
-  }, [currentIndex, isClient]);
+    }
+  }, [currentVideoIndex, isClient]);
   
   // Set video ref
-  const setVideoRef = (id: string, el: HTMLVideoElement | null): void => {
-    videoRefs.current[id] = el;
-  };
+  const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
+    if (id) {
+      videoRefs.current[id] = el;
+    }
+  }, []);
   
-  // Toggle play/pause
-  const togglePlayPause = (): void => {
-    const currentVideoId = VIDEOS[currentIndex]?.id;
-    if (!currentVideoId) return;
+  // Toggle mute function
+  const toggleMute = useCallback(() => {
+    setIsMuted(prev => !prev);
+  }, []);
+  
+  // Double tap to like
+  const handleDoubleTap = useCallback(() => {
+    const currentTime = new Date().getTime();
+    const tapLength = currentTime - lastTap.current;
     
-    const currentVideo = videoRefs.current[currentVideoId];
-    if (!currentVideo) return;
+    if (tapLength < 300 && tapLength > 0) {
+      // Double tap detected
+      const currentVideoId = VIDEOS[currentVideoIndex]?.id;
+      if (currentVideoId) {
+        // Update like status
+        setLikedVideos(prev => ({
+          ...prev,
+          [currentVideoId]: true
+        }));
+      }
+    }
     
-    if (currentVideo.paused) {
-      currentVideo.play().catch(e => console.error("Play failed:", e));
-    } else {
-      currentVideo.pause();
-    }
-  };
+    lastTap.current = currentTime;
+  }, [currentVideoIndex]);
   
-  // Toggle mute
-  const toggleMute = (): void => {
-    setIsMuted(!isMuted);
-  };
-  
-  // Navigate through videos
-  const goToNext = (): void => {
-    if (currentIndex < VIDEOS.length - 1 && !isSwipeLocked) {
-      setIsSwipeLocked(true);
-      setCurrentIndex(currentIndex + 1);
-      setTimeout(() => setIsSwipeLocked(false), 300);
-    }
-  };
-  
-  const goToPrevious = (): void => {
-    if (currentIndex > 0 && !isSwipeLocked) {
-      setIsSwipeLocked(true);
-      setCurrentIndex(currentIndex - 1);
-      setTimeout(() => setIsSwipeLocked(false), 300);
-    }
-  };
-  
-  // Toggle like
-  const toggleLike = (videoId: string): void => {
+  // Toggle like directly
+  const toggleLike = useCallback((videoId: string) => {
     setLikedVideos(prev => ({
       ...prev,
       [videoId]: !prev[videoId]
     }));
-  };
+  }, []);
   
-  // Handle wheel events with improved scrolling
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>): void => {
+  // Handle wheel event for scrolling
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
     if (isSwipeLocked) return;
     
-    // Accumulate scroll distance
-    scrollDistance.current += e.deltaY;
+    // Apply a multiplier for more sensitive scrolling
+    const delta = e.deltaY * 0.5; // Adjust this value to control sensitivity
     
-    // Clear existing timeout
-    if (scrollTimeout.current) {
-      clearTimeout(scrollTimeout.current);
+    // Update progress for visual feedback
+    let newProgress = swipeProgress + delta;
+    
+    // Apply resistance at the ends
+    if ((currentVideoIndex === 0 && newProgress < 0) || 
+        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
+      newProgress = newProgress * 0.3; // Resistance factor
     }
     
-    // Set a new timeout
-    scrollTimeout.current = setTimeout(() => {
-      const distance = scrollDistance.current;
-      scrollDistance.current = 0;
+    setSwipeProgress(newProgress);
+    
+    // Check if we've crossed the threshold to change videos
+    if (Math.abs(newProgress) > 50) { // Threshold for triggering navigation
+      setIsSwipeLocked(true);
       
-      // Threshold for changing videos
-      const threshold = 100;
+      if (newProgress > 0 && currentVideoIndex < VIDEOS.length - 1) {
+        // Go to next video
+        setCurrentVideoIndex(currentVideoIndex + 1);
+      } else if (newProgress < 0 && currentVideoIndex > 0) {
+        // Go to previous video
+        setCurrentVideoIndex(currentVideoIndex - 1);
+      }
       
-      if (distance > threshold && currentIndex < VIDEOS.length - 1) {
-        goToNext();
-      } else if (distance < -threshold && currentIndex > 0) {
-        goToPrevious();
-      }
-    }, 50); // Short delay to accumulate scrolls
-  };
+      // Reset after animation
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 400); // Animation duration
+    }
+  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length]);
   
-  // Touch gesture handlers
-  const handleTouchStart = (e: React.TouchEvent): void => {
+  // Handle touch events for mobile
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchMoveY.current = e.touches[0].clientY;
+  }, []);
+  
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     if (isSwipeLocked) return;
-    setTouchStart(e.targetTouches[0].clientY);
-  };
-  
-  const handleTouchMove = (e: React.TouchEvent): void => {
-    if (isSwipeLocked) return;
-    setTouchEnd(e.targetTouches[0].clientY);
-  };
-  
-  const handleTouchEnd = (): void => {
-    if (isSwipeLocked || !touchStart || !touchEnd) return;
     
-    const distance = touchStart - touchEnd;
-    const minSwipeDistance = 30; // Lower threshold for easier swiping
+    const currentY = e.touches[0].clientY;
+    const diff = touchMoveY.current - currentY;
+    touchMoveY.current = currentY;
     
-    if (distance > minSwipeDistance && currentIndex < VIDEOS.length - 1) {
-      // Swipe up
-      goToNext();
-    } else if (distance < -minSwipeDistance && currentIndex > 0) {
-      // Swipe down
-      goToPrevious();
+    // Similar logic to wheel handler but with different sensitivity
+    const delta = diff * 0.8; // Mobile sensitivity is higher
+    let newProgress = swipeProgress + delta;
+    
+    // Apply same resistance logic as wheel handler
+    if ((currentVideoIndex === 0 && newProgress < 0) || 
+        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
+      newProgress = newProgress * 0.3;
     }
     
-    // Reset values
-    setTouchStart(null);
-    setTouchEnd(null);
-  };
-  
-  // Handle key presses
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'ArrowDown' || e.key === 'j') {
-        goToNext();
-      } else if (e.key === 'ArrowUp' || e.key === 'k') {
-        goToPrevious();
-      } else if (e.key === 'm') {
-        toggleMute();
-      } else if (e.key === ' ' || e.key === 'p') {
-        togglePlayPause();
+    setSwipeProgress(newProgress);
+    
+    if (Math.abs(newProgress) > 50) {
+      setIsSwipeLocked(true);
+      
+      if (newProgress > 0 && currentVideoIndex < VIDEOS.length - 1) {
+        setCurrentVideoIndex(currentVideoIndex + 1);
+      } else if (newProgress < 0 && currentVideoIndex > 0) {
+        setCurrentVideoIndex(currentVideoIndex - 1);
       }
-    };
-    
-    if (isClient) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
+      
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 400);
     }
-  }, [isClient, currentIndex]);
+  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length]);
   
-  // Double tap to like
-  const lastTap = useRef<number>(0);
-  
-  const handleDoubleTap = (): void => {
-    const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300; // ms
-    
-    if (now - lastTap.current < DOUBLE_TAP_DELAY) {
-      // It's a double tap
-      const videoId = VIDEOS[currentIndex]?.id;
-      if (videoId) {
-        toggleLike(videoId);
-      }
+  // Reset progress when touch ends
+  const handleTouchEnd = useCallback(() => {
+    if (!isSwipeLocked) {
+      setSwipeProgress(0);
     }
-    
-    lastTap.current = now;
-  };
+  }, [isSwipeLocked]);
   
   // Loading state
   if (!isClient) {
@@ -348,6 +331,7 @@ export default function FeedList(): JSX.Element {
   
   return (
     <div 
+      ref={containerRef}
       className="h-screen w-full overflow-hidden bg-black relative"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
@@ -355,37 +339,38 @@ export default function FeedList(): JSX.Element {
       onTouchEnd={handleTouchEnd}
       onClick={handleDoubleTap}
     >
-      {/* Video Feed Container */}
+      {/* Main feed container with smooth transitions */}
       <motion.div 
         className="absolute w-full"
-        style={{ 
-          height: windowHeight * VIDEOS.length,
-          y: -currentIndex * windowHeight
-        }}
+        style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
-          y: -currentIndex * windowHeight 
+          y: -currentVideoIndex * containerHeight + swipeProgress 
         }}
         transition={{ 
-          duration: 0.3,
-          ease: [0.16, 1, 0.3, 1]
+          y: {
+            type: "spring",
+            stiffness: 300, // Controls "springiness"
+            damping: 30,    // Controls bounce reduction
+            duration: isSwipeLocked ? 0.5 : 0.2 // Faster during manual scrolling
+          }
         }}
       >
         {VIDEOS.map((videoItem, index) => {
-          const isVisible = Math.abs(index - currentIndex) <= 1;
-          const isActive = index === currentIndex;
+          // Only render videos that are close to the current one for performance
+          const isVisible = Math.abs(index - currentVideoIndex) <= 1;
           
           return (
             <div 
               key={videoItem.id} 
               className="absolute w-full"
               style={{ 
-                height: windowHeight, 
-                top: index * windowHeight
+                height: containerHeight, 
+                top: index * containerHeight,
               }}
             >
               {isVisible && (
-                <div className="relative w-full h-full">
-                  {/* Video Element */}
+                <div className="relative w-full h-full overflow-hidden">
+                  {/* Video element */}
                   <video
                     ref={(el) => setVideoRef(videoItem.id, el)}
                     src={videoItem.url}
@@ -397,32 +382,10 @@ export default function FeedList(): JSX.Element {
                     controls={false}
                   />
                   
-                  {/* Play/Pause Button - Only show when the active video is paused */}
-                  {isActive && isPaused && (
-                    <button
-                      className="absolute inset-0 flex items-center justify-center bg-black/30 z-20"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        togglePlayPause();
-                      }}
-                    >
-                      <div className="rounded-full bg-black/50 p-4">
-                        <svg 
-                          xmlns="http://www.w3.org/2000/svg" 
-                          className="h-12 w-12 text-white" 
-                          fill="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                      </div>
-                    </button>
-                  )}
-                  
-                  {/* Video Info Overlay */}
+                  {/* Video info overlay */}
                   <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
                     <div className="flex items-center mb-2">
-                      <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30 bg-gray-700">
+                      <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
                         <img 
                           src={`https://randomuser.me/api/portraits/men/${index + 1}.jpg`}
                           alt={videoItem.username} 
@@ -436,20 +399,23 @@ export default function FeedList(): JSX.Element {
                         />
                       </div>
                       <div>
-                        <p className="font-bold text-white">
+                        <p className="font-bold text-white flex items-center">
                           @{videoItem.username}
+                          <span className="inline-flex ml-2 items-center justify-center rounded-full bg-tiktok-pink/30 px-2 py-0.5 text-xs text-white">
+                            Follow
+                          </span>
                         </p>
                         <p className="text-white text-xs opacity-80">{videoItem.song}</p>
                       </div>
                     </div>
-                    <p className="text-white text-sm mb-4">{videoItem.caption}</p>
+                    <p className="text-white text-sm mb-4 max-w-[80%]">{videoItem.caption}</p>
                   </div>
                   
-                  {/* Side Actions */}
+                  {/* Side actions */}
                   <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5">
                     <button 
                       className="flex flex-col items-center"
-                      onClick={(e) => {
+                      onClick={(e: React.MouseEvent) => {
                         e.stopPropagation();
                         toggleLike(videoItem.id);
                       }}
@@ -483,75 +449,37 @@ export default function FeedList(): JSX.Element {
         })}
       </motion.div>
       
-      {/* Video Controls */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center space-x-3 z-30">
-        <button
-          onClick={togglePlayPause}
-          className="bg-black/30 hover:bg-black/50 rounded-full p-2 transition-colors"
-        >
-          {isPaused ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-            </svg>
-          )}
-        </button>
-        
-        <button
-          onClick={toggleMute}
-          className="bg-black/30 hover:bg-black/50 rounded-full p-2 transition-colors"
-        >
-          {isMuted ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-            </svg>
-          )}
-        </button>
-      </div>
-      
-      {/* Navigation Controls */}
-      <div className="absolute right-4 top-1/2 transform -translate-y-1/2 space-y-4 z-30">
-        <button 
-          onClick={goToPrevious} 
-          className={`bg-black/30 p-2 rounded-full ${currentIndex === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/50'}`}
-          disabled={currentIndex === 0 || isSwipeLocked}
-        >
+      {/* Sound toggle button */}
+      <button 
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          toggleMute();
+        }}
+        className="absolute top-4 right-4 bg-black/30 hover:bg-black/50 rounded-full p-2 z-30 transition-colors"
+      >
+        {isMuted ? (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
           </svg>
-        </button>
-        <button 
-          onClick={goToNext} 
-          className={`bg-black/30 p-2 rounded-full ${currentIndex === VIDEOS.length - 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/50'}`}
-          disabled={currentIndex === VIDEOS.length - 1 || isSwipeLocked}
-        >
+        ) : (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
           </svg>
-        </button>
-      </div>
-      
-      {/* Counter Indicator */}
+        )}
+      </button>
+
+      {/* Video counter indicator */}
       <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
-        <span className="text-white text-sm">{currentIndex + 1} / {VIDEOS.length}</span>
+        <span className="text-white text-sm">{currentVideoIndex + 1} / {VIDEOS.length}</span>
       </div>
       
-      {/* Scroll indicator (helpful for first-time users) */}
-      {currentIndex === 0 && (
-        <div className="absolute left-4 bottom-20 flex flex-col items-center z-30">
-          <div className="bg-black/30 rounded-full px-3 py-1 mb-2">
-            <span className="text-white text-sm">Scroll to navigate</span>
-          </div>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 22h6M12 17v4M12 11l1.5 1.5M12 6v5M12 2v4" />
+      {/* Scroll guide indicator */}
+      {VIDEOS.length > 1 && currentVideoIndex === 0 && (
+        <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/30 px-3 py-1 rounded-full z-30 flex items-center">
+          <span className="mr-2">Swipe up for more</span>
+          <svg className="h-4 w-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
           </svg>
         </div>
       )}
