@@ -9,7 +9,8 @@ export default function FeedList() {
   const [isClient, setIsClient] = useState(false);
   const videoRefs = useRef<HTMLVideoElement[]>([]);
   const [isMuted, setIsMuted] = useState(false);
-  const [isScrollLocked, setIsScrollLocked] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const lastInteractionTime = useRef(Date.now());
 
   // Only run after component mounts (client-side)
   useEffect(() => {
@@ -17,7 +18,7 @@ export default function FeedList() {
     fetchVideos();
   }, [fetchVideos]);
 
-  // Focus on current video: play current, pause others
+  // Control which video is playing
   useEffect(() => {
     if (!isClient || videos.length === 0) return;
 
@@ -48,78 +49,111 @@ export default function FeedList() {
       }
     });
 
-    // Unlock scrolling after a short delay to prevent rapid scrolling
+    // Animation is complete
     setTimeout(() => {
-      setIsScrollLocked(false);
-    }, 500);
+      setIsAnimating(false);
+    }, 600);
   }, [currentVideoIndex, videos, isClient]);
 
-  // Simple navigation function with scroll locking
+  // Super strict navigation functions
   const goToNextVideo = () => {
-    if (isScrollLocked || currentVideoIndex >= videos.length - 1) return;
+    // Multiple levels of protection against skipping
+    if (isAnimating) return; // Don't allow if animation is in progress
+    if (Date.now() - lastInteractionTime.current < 1000) return; // Minimum 1s between navigations
+    if (currentVideoIndex >= videos.length - 1) return; // Don't go past the end
     
-    setIsScrollLocked(true);
+    lastInteractionTime.current = Date.now();
+    setIsAnimating(true);
     setCurrentVideoIndex(currentVideoIndex + 1);
   };
 
   const goToPrevVideo = () => {
-    if (isScrollLocked || currentVideoIndex <= 0) return;
+    // Multiple levels of protection against skipping
+    if (isAnimating) return; // Don't allow if animation is in progress
+    if (Date.now() - lastInteractionTime.current < 1000) return; // Minimum 1s between navigations
+    if (currentVideoIndex <= 0) return; // Don't go before the start
     
-    setIsScrollLocked(true);
+    lastInteractionTime.current = Date.now();
+    setIsAnimating(true);
     setCurrentVideoIndex(currentVideoIndex - 1);
   };
 
-  // Touch handling
-  const [startY, setStartY] = useState(0);
+  // Extremely selective touch handling
+  const touchStartY = useRef(0);
+  const touchStartTime = useRef(0);
+  const hasMoved = useRef(false);
   
   const handleTouchStart = (e: React.TouchEvent) => {
-    setStartY(e.touches[0].clientY);
+    // Record the start position and time
+    touchStartY.current = e.touches[0].clientY;
+    touchStartTime.current = Date.now();
+    hasMoved.current = false;
+  };
+  
+  const handleTouchMove = (e: React.TouchEvent) => {
+    // Just mark that movement happened
+    hasMoved.current = true;
   };
   
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (isScrollLocked) return;
+    // Only process if enough time has passed and we have movement
+    if (!hasMoved.current) return;
+    if (Date.now() - touchStartTime.current < 100) return; // Ignore very quick taps
+    if (isAnimating) return;
     
     const endY = e.changedTouches[0].clientY;
-    const diff = startY - endY;
+    const diff = touchStartY.current - endY;
     
-    // Threshold for swipe detection
-    if (Math.abs(diff) > 70) {
-      if (diff > 0) {
+    // Very strict threshold - must be a deliberate swipe
+    if (Math.abs(diff) > 100) {
+      if (diff > 0 && currentVideoIndex < videos.length - 1) {
         // Swipe up - next video
         goToNextVideo();
-      } else {
+      } else if (diff < 0 && currentVideoIndex > 0) {
         // Swipe down - previous video
         goToPrevVideo();
       }
     }
   };
 
-  // Wheel handling
+  // Strict wheel handling with cooldown
+  const wheelCooldown = useRef(false);
+  
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     
-    if (isScrollLocked) return;
+    // Ignore if we're in a cooldown period or animating
+    if (wheelCooldown.current || isAnimating) return;
     
-    if (e.deltaY > 0) {
+    // Apply a cooldown to prevent multiple wheel events
+    wheelCooldown.current = true;
+    setTimeout(() => {
+      wheelCooldown.current = false;
+    }, 1000);
+    
+    // Only respond to significant wheel movements
+    if (Math.abs(e.deltaY) < 50) return;
+    
+    if (e.deltaY > 0 && currentVideoIndex < videos.length - 1) {
       goToNextVideo();
-    } else if (e.deltaY < 0) {
+    } else if (e.deltaY < 0 && currentVideoIndex > 0) {
       goToPrevVideo();
     }
   };
 
-  // Set video refs for controlling play/pause
+  // Set video refs
   const setVideoRef = (el: HTMLVideoElement | null, index: number) => {
     if (el) {
       videoRefs.current[index] = el;
     }
   };
 
-  // Toggle video mute state
+  // Toggle mute
   const toggleMute = () => {
     setIsMuted(!isMuted);
   };
 
-  // Handle server-side rendering gracefully
+  // Server-side rendering fallback
   if (!isClient) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -128,7 +162,7 @@ export default function FeedList() {
     );
   }
 
-  // Show fallback if no videos are available
+  // No videos fallback
   if (videos.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -141,6 +175,7 @@ export default function FeedList() {
     <div 
       className="h-screen w-full overflow-hidden bg-black relative"
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onWheel={handleWheel}
     >
@@ -153,7 +188,7 @@ export default function FeedList() {
           type: "spring", 
           stiffness: 200,
           damping: 25,
-          duration: 0.6
+          duration: 0.5
         }}
       >
         {/* Render all videos in position */}
@@ -233,9 +268,9 @@ export default function FeedList() {
         <button 
           onClick={goToPrevVideo}
           className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-2 ${
-            currentVideoIndex === 0 || isScrollLocked ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
+            currentVideoIndex === 0 || isAnimating ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
           }`}
-          disabled={currentVideoIndex === 0 || isScrollLocked}
+          disabled={currentVideoIndex === 0 || isAnimating}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -244,9 +279,9 @@ export default function FeedList() {
         <button 
           onClick={goToNextVideo}
           className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-2 ${
-            currentVideoIndex === videos.length - 1 || isScrollLocked ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
+            currentVideoIndex === videos.length - 1 || isAnimating ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
           }`}
-          disabled={currentVideoIndex === videos.length - 1 || isScrollLocked}
+          disabled={currentVideoIndex === videos.length - 1 || isAnimating}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -278,6 +313,18 @@ export default function FeedList() {
       <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
         <span className="text-white text-sm">{currentVideoIndex + 1} / {videos.length}</span>
       </div>
+      
+      {/* Loading indicator when changing videos */}
+      {isAnimating && (
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40">
+          <div className="bg-black/50 rounded-full px-3 py-1 flex items-center">
+            <div className="w-4 h-4 mr-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+            </div>
+            <span className="text-white text-xs">Changing video...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
