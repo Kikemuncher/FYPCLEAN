@@ -11,7 +11,7 @@ export default function FeedList() {
   const [isClient, setIsClient] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isScrollLocked, setIsScrollLocked] = useState(false);
-  const scrollTimeout = useRef(null);
+  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Only run client-side
   useEffect(() => {
@@ -27,7 +27,7 @@ export default function FeedList() {
   }, [fetchVideos]);
 
   // Navigation with scroll lock
-  const navigateTo = (index) => {
+  const navigateTo = (index: number) => {
     // Don't navigate if already navigating
     if (isScrollLocked) return;
     
@@ -71,7 +71,7 @@ export default function FeedList() {
   // Handle wheel event with throttling
   const lastWheelTime = useRef(0);
   
-  const handleWheel = (e) => {
+  const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     
     // Don't process if locked or too soon after last wheel
@@ -93,12 +93,12 @@ export default function FeedList() {
   const touchStartY = useRef(0);
   const touchStartTime = useRef(0);
   
-  const handleTouchStart = (e) => {
+  const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
     touchStartTime.current = Date.now();
   };
   
-  const handleTouchEnd = (e) => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
     // Skip if already scrolling
     if (isScrollLocked) return;
     
