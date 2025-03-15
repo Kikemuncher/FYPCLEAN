@@ -195,7 +195,7 @@ export default function FeedList(): JSX.Element {
     // Check if we've scrolled enough to change videos
     const threshold = containerHeight * 0.15; // 15% of screen height threshold
     
-    if (swipeProgress > threshold && currentVideoIndex > 0) {
+    if (swipeProgress < -threshold && currentVideoIndex > 0) {
       // Scrolled up enough to go to previous video
       setIsSwipeLocked(true);
       setCurrentVideoIndex(currentVideoIndex - 1);
@@ -205,7 +205,7 @@ export default function FeedList(): JSX.Element {
         setSwipeProgress(0);
         setIsSwipeLocked(false);
       }, 400);
-    } else if (swipeProgress < -threshold && currentVideoIndex < VIDEOS.length - 1) {
+    } else if (swipeProgress > threshold && currentVideoIndex < VIDEOS.length - 1) {
       // Scrolled down enough to go to next video
       setIsSwipeLocked(true);
       setCurrentVideoIndex(currentVideoIndex + 1);
@@ -255,15 +255,14 @@ export default function FeedList(): JSX.Element {
     
     // For trackpad or continuous scrolling, update progress in a natural direction
     // Apply a multiplier for sensitivity adjustment
-    // Note: we're negating the delta so scrolling down/up moves the content in the expected direction
-    const progressDelta = -delta * 0.5;
+    const progressDelta = delta * 0.5;
     
     // Update progress for visual feedback
     let newProgress = swipeProgress + progressDelta;
     
     // Apply resistance at the ends
-    if ((currentVideoIndex === 0 && newProgress > 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
+    if ((currentVideoIndex === 0 && newProgress < 0) || 
+        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
       newProgress = newProgress * 0.3; // Resistance factor
     }
     
@@ -295,11 +294,11 @@ export default function FeedList(): JSX.Element {
     const swipeDistance = diff * 1.2; // Adjust sensitivity
     
     // Calculate progress as a percentage of the container height for consistency
-    let newProgress = -(swipeDistance / containerHeight) * 100;
+    let newProgress = (swipeDistance / containerHeight) * 100;
     
-    // Apply resistance at the ends (reversed from scroll since directions are natural)
-    if ((currentVideoIndex === 0 && newProgress > 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
+    // Apply resistance at the ends
+    if ((currentVideoIndex === 0 && newProgress < 0) || 
+        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
       newProgress = newProgress * 0.3;
     }
     
@@ -479,7 +478,7 @@ export default function FeedList(): JSX.Element {
         className="absolute w-full"
         style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
-          y: -currentVideoIndex * containerHeight - swipeProgress 
+          y: -currentVideoIndex * containerHeight + swipeProgress 
         }}
         transition={getTransitionSettings()}
       >
@@ -585,8 +584,8 @@ export default function FeedList(): JSX.Element {
             style={{ 
               height: `${Math.min(100, Math.abs(swipeProgress * 100 / 70))}%`,
               position: 'absolute',
-              bottom: swipeProgress > 0 ? 0 : 'auto',
-              top: swipeProgress < 0 ? 0 : 'auto'
+              bottom: swipeProgress < 0 ? 0 : 'auto',
+              top: swipeProgress > 0 ? 0 : 'auto'
             }}
           />
         </div>
