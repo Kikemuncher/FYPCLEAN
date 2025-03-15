@@ -1,21 +1,4 @@
-// Use a timeout to check for scrolling inactivity
-  useEffect(() => {
-    if (Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
-      const checkInactivityInterval = setInterval(() => {
-        // If it's been more than 150ms since the last wheel event and we have scroll progress
-        if (Date.now() - lastWheelMovement.current > 150 && Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
-          handleScrollEnd();
-        }
-      }, 100);
-      
-      return () => clearInterval(checkInactivityInterval);
-    }
-  }, [swipeProgress, isSwipeLocked, handleScrollEnd]);    // Setup wheel end detection function
-    const handleWheelEndEvent = () => {
-      if (isTrackpadScrolling && !isSwipeLocked && Math.abs(swipeProgress) > 0) {
-        handleScrollEnd();
-      }
-    };"use client";
+"use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
@@ -121,9 +104,53 @@ export default function FeedList(): JSX.Element {
   const lastWheelTime = useRef<number>(0);
   const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
   
+  // For trackpad movement detection
+  const lastWheelMovement = useRef<number>(Date.now());
+  
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
+  
+  // Handle wheel end event for trackpad scrolling
+  const handleScrollEnd = useCallback(() => {
+    if (isSwipeLocked) return;
+    
+    // If there's any scroll progress at all, make a decision
+    if (swipeProgress !== 0) {
+      setIsSwipeLocked(true);
+      
+      // Calculate how far we've scrolled relative to a threshold
+      // Use a more sensitive threshold since we ALWAYS want to snap
+      const threshold = containerHeight * 0.15; // 15% of screen height threshold
+      
+      if (Math.abs(swipeProgress) > threshold) {
+        // We've scrolled enough to trigger a video change
+        if (swipeProgress < 0 && currentVideoIndex < VIDEOS.length - 1) {
+          // Progress is negative (scrolling down) - go to next video
+          setCurrentVideoIndex(currentVideoIndex + 1);
+        } else if (swipeProgress > 0 && currentVideoIndex > 0) {
+          // Progress is positive (scrolling up) - go to previous video
+          setCurrentVideoIndex(currentVideoIndex - 1);
+        }
+      }
+      
+      // ALWAYS reset progress to 0 to avoid stuck state
+      // Do this immediately for a more responsive feel
+      setSwipeProgress(0);
+      
+      // Unlock after animation completes
+      setTimeout(() => {
+        setIsSwipeLocked(false);
+      }, 400);
+    }
+  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
+
+  // Setup wheel end detection function
+  const handleWheelEndEvent = () => {
+    if (isTrackpadScrolling && !isSwipeLocked && Math.abs(swipeProgress) > 0) {
+      handleScrollEnd();
+    }
+  };
   
   // Detect trackpad vs mouse wheel
   const detectTrackpad = useCallback((e: WheelEvent) => {
@@ -204,43 +231,6 @@ export default function FeedList(): JSX.Element {
       [videoId]: !prev[videoId]
     }));
   }, []);
-  
-  // Handle wheel end event for trackpad scrolling
-  const handleScrollEnd = useCallback(() => {
-    if (isSwipeLocked) return;
-    
-    // If there's any scroll progress at all, make a decision
-    if (swipeProgress !== 0) {
-      setIsSwipeLocked(true);
-      
-      // Calculate how far we've scrolled relative to a threshold
-      // Use a more sensitive threshold since we ALWAYS want to snap
-      const threshold = containerHeight * 0.15; // 15% of screen height threshold
-      
-      if (Math.abs(swipeProgress) > threshold) {
-        // We've scrolled enough to trigger a video change
-        if (swipeProgress < 0 && currentVideoIndex < VIDEOS.length - 1) {
-          // Progress is negative (scrolling down) - go to next video
-          setCurrentVideoIndex(currentVideoIndex + 1);
-        } else if (swipeProgress > 0 && currentVideoIndex > 0) {
-          // Progress is positive (scrolling up) - go to previous video
-          setCurrentVideoIndex(currentVideoIndex - 1);
-        }
-      }
-      
-      // ALWAYS reset progress to 0 to avoid stuck state
-      // Do this immediately for a more responsive feel
-      setSwipeProgress(0);
-      
-      // Unlock after animation completes
-      setTimeout(() => {
-        setIsSwipeLocked(false);
-      }, 400);
-    }
-  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
-  
-  // For trackpad movement detection
-  const lastWheelMovement = useRef<number>(Date.now());
   
   // Handle wheel event for scrolling with improved detection
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
@@ -331,7 +321,7 @@ export default function FeedList(): JSX.Element {
     }
     
     // Clamp to reasonable limits
-    const maxProgress = containerHeight * 0.4;
+    const maxProgress = containerHeight * 0.3;
     newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
     
     setSwipeProgress(newProgress);
@@ -373,6 +363,20 @@ export default function FeedList(): JSX.Element {
       };
     }
   }, [isSwipeLocked, swipeProgress]);
+  
+  // Use a timeout to check for scrolling inactivity
+  useEffect(() => {
+    if (Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
+      const checkInactivityInterval = setInterval(() => {
+        // If it's been more than 150ms since the last wheel event and we have scroll progress
+        if (Date.now() - lastWheelMovement.current > 150 && Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
+          handleScrollEnd();
+        }
+      }, 100);
+      
+      return () => clearInterval(checkInactivityInterval);
+    }
+  }, [swipeProgress, isSwipeLocked, handleScrollEnd]);
   
   // Set up client-side detection
   useEffect(() => {
@@ -466,7 +470,7 @@ export default function FeedList(): JSX.Element {
         clearTimeout(activeScrollTimeout);
       }
     };
-  }, [currentVideoIndex, isMuted, isTrackpadScrolling, handleScrollEnd]);
+  }, [currentVideoIndex, isMuted, isTrackpadScrolling, handleScrollEnd, swipeProgress, isSwipeLocked]);
   
   // Handle video playback when current index changes
   useEffect(() => {
