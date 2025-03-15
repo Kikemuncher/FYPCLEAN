@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useVideoStore } from "@/store/videoStore";
 import { motion } from "framer-motion";
 import { VideoData } from "@/types/video";
@@ -19,8 +19,11 @@ export default function FeedList() {
   
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const touchStartY = useRef(0);
+  const touchMoveY = useRef(0);
+  const lastTap = useRef(0);
   
-  // Initialize
+  // Initialize and set up event listeners
   useEffect(() => {
     setIsClient(true);
     fetchVideos();
@@ -86,28 +89,28 @@ export default function FeedList() {
     }
   }, [currentVideoIndex, videos, isClient, incrementView]);
   
-  // Handle setting video refs
-  const setVideoRef = (id: string, el: HTMLVideoElement | null) => {
+  // Set video ref callback function
+  const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
     videoRefs.current[id] = el;
-  };
+  }, []);
   
   // Toggle mute function
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-  };
+  const toggleMute = useCallback(() => {
+    setIsMuted(prev => !prev);
+  }, []);
   
   // Format numbers for display
-  const formatCount = (count: number): string => {
+  const formatCount = useCallback((count: number): string => {
     if (count >= 1000000) {
       return (count / 1000000).toFixed(1) + 'M';
     } else if (count >= 1000) {
       return (count / 1000).toFixed(1) + 'K';
     }
     return count.toString();
-  };
+  }, []);
   
   // Handle wheel event for scrolling
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
     if (isSwipeLocked) return;
@@ -144,18 +147,15 @@ export default function FeedList() {
         setIsSwipeLocked(false);
       }, 400);
     }
-  };
+  }, [swipeProgress, isSwipeLocked, currentVideoIndex, videos.length, setCurrentVideoIndex]);
   
-  // Handle touch events for mobile
-  const touchStartY = useRef(0);
-  const touchMoveY = useRef(0);
-  
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+  // Handle touch events
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     touchStartY.current = e.touches[0].clientY;
     touchMoveY.current = e.touches[0].clientY;
-  };
+  }, []);
   
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     if (isSwipeLocked) return;
     
     const currentY = e.touches[0].clientY;
@@ -187,18 +187,17 @@ export default function FeedList() {
         setIsSwipeLocked(false);
       }, 400);
     }
-  };
+  }, [isSwipeLocked, swipeProgress, currentVideoIndex, videos.length, setCurrentVideoIndex]);
   
-  const handleTouchEnd = () => {
+  const handleTouchEnd = useCallback(() => {
     // Reset progress if threshold not crossed
     if (!isSwipeLocked) {
       setSwipeProgress(0);
     }
-  };
+  }, [isSwipeLocked]);
   
   // Double tap to like
-  const lastTap = useRef(0);
-  const handleDoubleTap = () => {
+  const handleDoubleTap = useCallback(() => {
     const currentTime = new Date().getTime();
     const tapLength = currentTime - lastTap.current;
     
@@ -217,19 +216,19 @@ export default function FeedList() {
     }
     
     lastTap.current = currentTime;
-  };
+  }, [currentVideoIndex, videos, likeVideo]);
   
-  // Handle toggling like directly (not via double tap)
-  const toggleLike = (videoId: string) => {
+  // Handle toggling like directly
+  const toggleLike = useCallback((videoId: string) => {
     setLikedVideos(prev => ({
       ...prev,
       [videoId]: !prev[videoId]
     }));
     
     likeVideo(videoId);
-  };
+  }, [likeVideo]);
 
-  // Render loading state
+  // Rendering states
   if (!isClient) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -238,7 +237,6 @@ export default function FeedList() {
     );
   }
 
-  // Render empty state
   if (videos.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -247,7 +245,6 @@ export default function FeedList() {
     );
   }
 
-  // Render main component
   return (
     <div 
       ref={containerRef}
@@ -275,7 +272,7 @@ export default function FeedList() {
         }}
       >
         {videos.map((video, index) => {
-          // Only render videos that are close to the current one (performance optimization)
+          // Only render videos that are close to the current one
           const isVisible = Math.abs(index - currentVideoIndex) <= 1;
           const isActive = index === currentVideoIndex;
           
