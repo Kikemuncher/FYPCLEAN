@@ -147,7 +147,9 @@ export default function FeedList(): JSX.Element {
 
   // Setup wheel end detection function
   const handleWheelEndEvent = () => {
+    // Only trigger when scrolling has completely stopped (mousepad released)
     if (isTrackpadScrolling && !isSwipeLocked && Math.abs(swipeProgress) > 0) {
+      // Since the user has fully stopped scrolling, now we decide what to do
       handleScrollEnd();
     }
   };
@@ -290,8 +292,8 @@ export default function FeedList(): JSX.Element {
     
     setSwipeProgress(newProgress);
     
-    // We don't trigger video changes during wheel events for trackpad scrolling
-    // This will only happen on wheel end/release
+    // IMPORTANT: We never change videos during wheel events, only on release
+    // This will only happen on wheel end/release via handleScrollEnd
   }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length, detectTrackpad, isTrackpadScrolling, containerHeight]);
   
   // Handle touch events for mobile with improved inertia
@@ -364,19 +366,16 @@ export default function FeedList(): JSX.Element {
     }
   }, [isSwipeLocked, swipeProgress]);
   
-  // Use a timeout to check for scrolling inactivity - more aggressively
+  // Use a timeout to check for scrolling inactivity, but ONLY trigger on complete release
   useEffect(() => {
-    if (Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
-      const checkInactivityInterval = setInterval(() => {
-        // If it's been more than 80ms since the last wheel event and we have scroll progress
-        if (Date.now() - lastWheelMovement.current > 80 && Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
-          handleScrollEnd();
-        }
-      }, 40); // Check twice as frequently
-      
-      return () => clearInterval(checkInactivityInterval);
-    }
-  }, [swipeProgress, isSwipeLocked, handleScrollEnd]);
+    // We don't need to actively check during scrolling as we only want to trigger
+    // when the user completely stops/releases the touchpad
+    
+    // For touch events, the handleTouchEnd will handle the scroll end logic
+    // For mouse events, the wheelHandler will set a timeout that only fires when scrolling stops
+    
+    // No need for an interval check that might trigger mid-scroll
+  }, []);
   
   // Set up client-side detection
   useEffect(() => {
@@ -429,7 +428,7 @@ export default function FeedList(): JSX.Element {
     window.addEventListener('keydown', handleKeyDown);
     
     // We force ending wheel events when no scroll has happened for a brief period
-    // But ALSO when the user is actively scrolling but pauses briefly
+    // But ONLY when the user stops scrolling completely (on mousepad release)
     let activeScrollTimeout: NodeJS.Timeout | null = null;
     
     // Listen for the end of scrolling with more frequent checks
@@ -442,18 +441,12 @@ export default function FeedList(): JSX.Element {
         clearTimeout(activeScrollTimeout);
       }
       
-      // If we have any progress at all, set a timeout to check if scrolling has paused
-      if (Math.abs(swipeProgress) > 0) {
-        activeScrollTimeout = setTimeout(() => {
-          // If we still have progress and we're not in a locked state, snap to a video
-          if (Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
-            handleScrollEnd();
-          }
-        }, 60); // Reduced from 120ms to 60ms - detect pauses much faster
-      }
-      
       // Set normal end detection timeout (when scrolling fully stops)
-      wheelTimeout.current = setTimeout(handleWheelEndEvent, 40); // Reduced from 60ms to 40ms
+      // This only triggers when the user RELEASES the mousepad or stops scrolling
+      wheelTimeout.current = setTimeout(handleWheelEndEvent, 40);
+      
+      // DO NOT set an additional timeout that would trigger during active scrolling
+      // Only change videos when the user fully stops scrolling/releases
     };
     
     window.addEventListener('wheel', wheelHandler, { passive: false });
@@ -558,8 +551,10 @@ export default function FeedList(): JSX.Element {
               {isVisible && (
                 <div className="relative w-full h-full overflow-hidden px-2 py-2">
                   {/* Video container with 9:16 aspect ratio */}
-                  <div className="relative w-full" style={{ 
-                    paddingTop: "177.78%", /* 16:9 Aspect Ratio (9 / 16 = 0.5625 or 56.25%) */
+                  <div className="relative mx-auto" style={{ 
+                    width: "56.25vh", /* Width based on height (9/16 of viewport height) */
+                    height: "100%",
+                    maxHeight: "calc(100vh - 16px)",
                     overflow: "hidden",
                     borderRadius: "16px"
                   }}>
