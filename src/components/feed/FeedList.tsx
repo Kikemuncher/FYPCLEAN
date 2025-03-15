@@ -86,6 +86,11 @@ export default function FeedList() {
     }
   }, [currentVideoIndex, videos, isClient, incrementView]);
   
+  // Handle setting video refs
+  const setVideoRef = (id: string, el: HTMLVideoElement | null) => {
+    videoRefs.current[id] = el;
+  };
+  
   // Toggle mute function
   const toggleMute = () => {
     setIsMuted(!isMuted);
@@ -287,7 +292,7 @@ export default function FeedList() {
                 <div className="relative w-full h-full overflow-hidden">
                   {/* Video element */}
                   <video
-                    ref={el => videoRefs.current[video.id] = el}
+                    ref={(el) => setVideoRef(video.id, el)}
                     src={video.videoUrl}
                     className="w-full h-full object-cover"
                     loop
