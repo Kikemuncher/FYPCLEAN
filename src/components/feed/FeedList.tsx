@@ -108,158 +108,45 @@ export default function FeedList(): JSX.Element {
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // Handle wheel end event for trackpad scrolling
-  const handleWheelEnd = useCallback(() => {
-    if (isSwipeLocked || Math.abs(swipeProgress) === 0) return;
+  // Detect trackpad vs mouse wheel
+  const detectTrackpad = useCallback((e: WheelEvent) => {
+    // Most trackpads send wheel events with smaller deltas and pixelated values
+    // While mouse wheels typically have larger deltas and are more discrete
+    const now = Date.now();
+    wheelEvents.current.push(Math.abs(e.deltaY));
     
-    // Check if we've scrolled enough to change videos
-    const threshold = containerHeight * 0.15; // 15% of screen height threshold
+    // Keep only recent events for analysis
+    const recentEvents = wheelEvents.current.slice(-5);
+    wheelEvents.current = recentEvents;
     
-    if (swipeProgress > threshold && currentVideoIndex > 0) {
-      // Scrolled up enough to go to previous video
-      setIsSwipeLocked(true);
-      setCurrentVideoIndex(currentVideoIndex - 1);
+    // If we have enough events to analyze
+    if (recentEvents.length >= 3) {
+      // Calculate average delta
+      const avgDelta = recentEvents.reduce((sum, delta) => sum + delta, 0) / recentEvents.length;
       
-      // Reset after animation
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 400);
-    } else if (swipeProgress < -threshold && currentVideoIndex < VIDEOS.length - 1) {
-      // Scrolled down enough to go to next video
-      setIsSwipeLocked(true);
-      setCurrentVideoIndex(currentVideoIndex + 1);
+      // Check time between events
+      const timeDiff = now - lastWheelTime.current;
       
-      // Reset after animation
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 400);
-    } else {
-      // Not scrolled enough, animate back to current video
-      setIsSwipeLocked(true);
+      // Trackpads typically send many small events in quick succession
+      const isLikelyTrackpad = 
+        (avgDelta < 10 || recentEvents.some(delta => delta < 5)) && 
+        timeDiff < 100; // Events are close together
       
-      // Use setTimeout to ensure we don't set swipeProgress too rapidly
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 300);
+      setIsTrackpadScrolling(isLikelyTrackpad);
     }
-  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
-  
-  // Reset progress when touch ends with improved deceleration
-  const handleTouchEnd = useCallback(() => {
-    handleWheelEnd();
-  }, [handleWheelEnd]);
-  
-  // Set up client-side detection
-  useEffect(() => {
-    setIsClient(true);
     
-    // Set window height
-    const updateHeight = (): void => {
-      setContainerHeight(window.innerHeight);
-    };
+    lastWheelTime.current = now;
     
-    // Initialize height
-    updateHeight();
-    
-    // Listen for resize
-    window.addEventListener('resize', updateHeight);
-    
-    // Add keyboard navigation
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' || e.key === 'k') {
-        if (currentVideoIndex > 0) {
-          setCurrentVideoIndex(currentVideoIndex - 1);
-        }
-      } else if (e.key === 'ArrowDown' || e.key === 'j') {
-        if (currentVideoIndex < VIDEOS.length - 1) {
-          setCurrentVideoIndex(currentVideoIndex + 1);
-        }
-      } else if (e.key === 'm') {
-        setIsMuted(!isMuted);
-      } else if (e.key === ' ' || e.key === 'p') {
-        // Toggle play/pause
-        const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
-        if (currentVideo) {
-          if (currentVideo.paused) {
-            currentVideo.play().catch(e => console.error("Play failed:", e));
-          } else {
-            currentVideo.pause();
-          }
-        }
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    
-    // Setup wheel end detection
-    const handleWheelEndEvent = () => {
-      if (isTrackpadScrolling) {
-        handleWheelEnd();
-      }
-    };
-    
-    // Listen for the end of scrolling
-    window.addEventListener('wheel', () => {
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
-      }
-      
-      wheelTimeout.current = setTimeout(handleWheelEndEvent, 150);
-    }, { passive: false });
-    
-    // Cleanup
-    return () => {
-      window.removeEventListener('resize', updateHeight);
-      window.removeEventListener('keydown', handleKeyDown);
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
-      }
-    };
-  }, [currentVideoIndex, isMuted, isTrackpadScrolling, handleWheelEnd]);
-  
-  // Handle video playback when current index changes
-  useEffect(() => {
-    if (!isClient) return;
-
-    // Pause all videos
-    Object.values(videoRefs.current).forEach(videoRef => {
-      if (videoRef && !videoRef.paused) {
-        try {
-          videoRef.pause();
-        } catch (error) {
-          console.error("Error pausing video:", error);
-        }
-      }
-    });
-
-    // Get current video
-    const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
-    if (currentVideo) {
-      // Reset to beginning
-      currentVideo.currentTime = 0;
-      
-      // Attempt to play with error handling
-      const playPromise = currentVideo.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.log("Auto-play prevented, waiting for user interaction");
-          
-          // Add a one-time click event listener to play the video
-          const playOnInteraction = () => {
-            currentVideo.play().catch(e => console.error("Play still failed:", e));
-            document.removeEventListener('click', playOnInteraction);
-            document.removeEventListener('touchstart', playOnInteraction);
-          };
-          
-          document.addEventListener('click', playOnInteraction, { once: true });
-          document.addEventListener('touchstart', playOnInteraction, { once: true });
-        });
-      }
+    // Reset trackpad detection after a period of inactivity
+    if (wheelTimeout.current) {
+      clearTimeout(wheelTimeout.current);
     }
-  }, [currentVideoIndex, isClient]);
+    
+    wheelTimeout.current = setTimeout(() => {
+      wheelEvents.current = [];
+      setIsTrackpadScrolling(false);
+    }, 500);
+  }, []);
   
   // Set video ref
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
@@ -301,45 +188,44 @@ export default function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // Detect trackpad vs mouse wheel
-  const detectTrackpad = useCallback((e: WheelEvent) => {
-    // Most trackpads send wheel events with smaller deltas and pixelated values
-    // While mouse wheels typically have larger deltas and are more discrete
-    const now = Date.now();
-    wheelEvents.current.push(Math.abs(e.deltaY));
+  // Handle wheel end event for trackpad scrolling
+  const handleScrollEnd = useCallback(() => {
+    if (isSwipeLocked || Math.abs(swipeProgress) === 0) return;
     
-    // Keep only recent events for analysis
-    const recentEvents = wheelEvents.current.slice(-5);
-    wheelEvents.current = recentEvents;
+    // Check if we've scrolled enough to change videos
+    const threshold = containerHeight * 0.15; // 15% of screen height threshold
     
-    // If we have enough events to analyze
-    if (recentEvents.length >= 3) {
-      // Calculate average delta
-      const avgDelta = recentEvents.reduce((sum, delta) => sum + delta, 0) / recentEvents.length;
+    if (swipeProgress > threshold && currentVideoIndex > 0) {
+      // Scrolled up enough to go to previous video
+      setIsSwipeLocked(true);
+      setCurrentVideoIndex(currentVideoIndex - 1);
       
-      // Check time between events
-      const timeDiff = now - lastWheelTime.current;
+      // Reset after animation
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 400);
+    } else if (swipeProgress < -threshold && currentVideoIndex < VIDEOS.length - 1) {
+      // Scrolled down enough to go to next video
+      setIsSwipeLocked(true);
+      setCurrentVideoIndex(currentVideoIndex + 1);
       
-      // Trackpads typically send many small events in quick succession
-      const isLikelyTrackpad = 
-        (avgDelta < 10 || recentEvents.some(delta => delta < 5)) && 
-        timeDiff < 100; // Events are close together
+      // Reset after animation
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 400);
+    } else {
+      // Not scrolled enough, animate back to current video
+      setIsSwipeLocked(true);
       
-      setIsTrackpadScrolling(isLikelyTrackpad);
+      // Use a simple timeout to reset
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 300);
     }
-    
-    lastWheelTime.current = now;
-    
-    // Reset trackpad detection after a period of inactivity
-    if (wheelTimeout.current) {
-      clearTimeout(wheelTimeout.current);
-    }
-    
-    wheelTimeout.current = setTimeout(() => {
-      wheelEvents.current = [];
-      setIsTrackpadScrolling(false);
-    }, 500);
-  }, []);
+  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
   
   // Handle wheel event for scrolling with improved detection
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
@@ -426,61 +312,11 @@ export default function FeedList(): JSX.Element {
     // We don't change videos during touch, only on touch end
   }, [isSwipeLocked, currentVideoIndex, VIDEOS.length, containerHeight]);
   
-  // Handle wheel end event for trackpad scrolling
-  const handleWheelEnd = useCallback(() => {
-    if (isSwipeLocked || Math.abs(swipeProgress) === 0) return;
-    
-    // Check if we've scrolled enough to change videos
-    const threshold = containerHeight * 0.15; // 15% of screen height threshold
-    
-    if (swipeProgress > threshold && currentVideoIndex > 0) {
-      // Scrolled up enough to go to previous video
-      setIsSwipeLocked(true);
-      setCurrentVideoIndex(currentVideoIndex - 1);
-      
-      // Reset after animation
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 400);
-    } else if (swipeProgress < -threshold && currentVideoIndex < VIDEOS.length - 1) {
-      // Scrolled down enough to go to next video
-      setIsSwipeLocked(true);
-      setCurrentVideoIndex(currentVideoIndex + 1);
-      
-      // Reset after animation
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 400);
-    } else {
-      // Not scrolled enough, animate back to current video
-      const decelerateToZero = () => {
-        setSwipeProgress((prev) => {
-          // Calculate new progress with deceleration
-          const newProgress = prev * 0.8;
-          
-          // Stop when close to zero to avoid endless tiny updates
-          if (Math.abs(newProgress) < 0.5) {
-            return 0;
-          }
-          
-          // Apply deceleration again on next frame
-          requestAnimationFrame(decelerateToZero);
-          return newProgress;
-        });
-      };
-      
-      // Start deceleration animation
-      requestAnimationFrame(decelerateToZero);
-    }
-  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
-  
   // Reset progress when touch ends with improved deceleration
   const handleTouchEnd = useCallback(() => {
-    handleWheelEnd();
-  }, [handleWheelEnd]);
-
+    handleScrollEnd();
+  }, [handleScrollEnd]);
+  
   // Custom transition settings based on interaction type
   const getTransitionSettings = useCallback(() => {
     if (isSwipeLocked) {
@@ -509,6 +345,115 @@ export default function FeedList(): JSX.Element {
       };
     }
   }, [isSwipeLocked, swipeProgress]);
+  
+  // Set up client-side detection
+  useEffect(() => {
+    setIsClient(true);
+    
+    // Set window height
+    const updateHeight = (): void => {
+      setContainerHeight(window.innerHeight);
+    };
+    
+    // Initialize height
+    updateHeight();
+    
+    // Listen for resize
+    window.addEventListener('resize', updateHeight);
+    
+    // Add keyboard navigation
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp' || e.key === 'k') {
+        if (currentVideoIndex > 0) {
+          setCurrentVideoIndex(currentVideoIndex - 1);
+        }
+      } else if (e.key === 'ArrowDown' || e.key === 'j') {
+        if (currentVideoIndex < VIDEOS.length - 1) {
+          setCurrentVideoIndex(currentVideoIndex + 1);
+        }
+      } else if (e.key === 'm') {
+        setIsMuted(!isMuted);
+      } else if (e.key === ' ' || e.key === 'p') {
+        // Toggle play/pause
+        const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
+        if (currentVideo) {
+          if (currentVideo.paused) {
+            currentVideo.play().catch(e => console.error("Play failed:", e));
+          } else {
+            currentVideo.pause();
+          }
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // Setup wheel end detection
+    const handleWheelEndEvent = () => {
+      if (isTrackpadScrolling) {
+        handleScrollEnd();
+      }
+    };
+    
+    // Listen for the end of scrolling
+    window.addEventListener('wheel', () => {
+      if (wheelTimeout.current) {
+        clearTimeout(wheelTimeout.current);
+      }
+      
+      wheelTimeout.current = setTimeout(handleWheelEndEvent, 150);
+    }, { passive: false });
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (wheelTimeout.current) {
+        clearTimeout(wheelTimeout.current);
+      }
+    };
+  }, [currentVideoIndex, isMuted, isTrackpadScrolling, handleScrollEnd]);
+  
+  // Handle video playback when current index changes
+  useEffect(() => {
+    if (!isClient) return;
+
+    // Pause all videos
+    Object.values(videoRefs.current).forEach(videoRef => {
+      if (videoRef && !videoRef.paused) {
+        try {
+          videoRef.pause();
+        } catch (error) {
+          console.error("Error pausing video:", error);
+        }
+      }
+    });
+
+    // Get current video
+    const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
+    if (currentVideo) {
+      // Reset to beginning
+      currentVideo.currentTime = 0;
+      
+      // Attempt to play with error handling
+      const playPromise = currentVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log("Auto-play prevented, waiting for user interaction");
+          
+          // Add a one-time click event listener to play the video
+          const playOnInteraction = () => {
+            currentVideo.play().catch(e => console.error("Play still failed:", e));
+            document.removeEventListener('click', playOnInteraction);
+            document.removeEventListener('touchstart', playOnInteraction);
+          };
+          
+          document.addEventListener('click', playOnInteraction, { once: true });
+          document.addEventListener('touchstart', playOnInteraction, { once: true });
+        });
+      }
+    }
+  }, [currentVideoIndex, isClient]);
   
   // Loading state
   if (!isClient) {
