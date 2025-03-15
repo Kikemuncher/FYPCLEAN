@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 import { useVideoStore } from "@/store/videoStore";
-import Image from "next/image";
 
 export default function FeedList() {
   const { videos, currentVideoIndex, setCurrentVideoIndex, fetchVideos } = useVideoStore();
@@ -26,15 +25,15 @@ export default function FeedList() {
     }
   };
 
-  // Simple touch handling
+  // Simple touch handling with proper TypeScript types
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
 
-  const handleTouchStart = (e) => {
+  const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStart(e.touches[0].clientY);
   };
 
-  const handleTouchMove = (e) => {
+  const handleTouchMove = (e: React.TouchEvent) => {
     setTouchEnd(e.touches[0].clientY);
   };
 
@@ -55,7 +54,7 @@ export default function FeedList() {
   };
 
   // Simple wheel handling
-  const handleWheel = (e) => {
+  const handleWheel = (e: React.WheelEvent) => {
     if (e.deltaY > 0 && currentVideoIndex < videos.length - 1) {
       setCurrentVideoIndex(currentVideoIndex + 1);
     } else if (e.deltaY < 0 && currentVideoIndex > 0) {
