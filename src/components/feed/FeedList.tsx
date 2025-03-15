@@ -196,23 +196,27 @@ export default function FeedList(): JSX.Element {
     if (Math.abs(swipeProgress) > 0) {
       setIsSwipeLocked(true);
       
-      // Check which video is more than 50% in view
-      const progressPercent = Math.abs(swipeProgress) / containerHeight;
-      const threshold = 0.1; // 10% threshold for changing videos
+      // Calculate absolute progress as percentage of container height
+      // This tells us how far we've scrolled relative to screen height
+      const progressRatio = Math.abs(swipeProgress / (containerHeight / 2));
       
-      if (swipeProgress < 0 && progressPercent > threshold && currentVideoIndex < VIDEOS.length - 1) {
-        // Progress is negative (scrolling down) - go to next video
-        setCurrentVideoIndex(currentVideoIndex + 1);
-      } else if (swipeProgress > 0 && progressPercent > threshold && currentVideoIndex > 0) {
-        // Progress is positive (scrolling up) - go to previous video
-        setCurrentVideoIndex(currentVideoIndex - 1);
+      // If we've scrolled more than 25% of half the screen height, change videos
+      // This is equivalent to having scrolled 12.5% of the full screen height
+      if (progressRatio > 0.25) {
+        if (swipeProgress < 0 && currentVideoIndex < VIDEOS.length - 1) {
+          // Progress is negative (scrolling down) - go to next video
+          setCurrentVideoIndex(currentVideoIndex + 1);
+        } else if (swipeProgress > 0 && currentVideoIndex > 0) {
+          // Progress is positive (scrolling up) - go to previous video
+          setCurrentVideoIndex(currentVideoIndex - 1);
+        }
       }
       
       // Always reset to a clean state after deciding
       setTimeout(() => {
         setSwipeProgress(0);
         setIsSwipeLocked(false);
-      }, 300);
+      }, 400);
     }
   }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
   
@@ -265,8 +269,8 @@ export default function FeedList(): JSX.Element {
       newProgress = newProgress * 0.3; // Resistance factor
     }
     
-    // Clamp the progress to reasonable limits
-    const maxProgress = containerHeight * 0.4; // Allow scrolling up to 40% of the screen
+    // Clamp the progress to reasonable limits - reduced maximum for more control
+    const maxProgress = containerHeight * 0.3; // Allow scrolling up to 30% of the screen (was 40%)
     newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
     
     setSwipeProgress(newProgress);
@@ -321,26 +325,26 @@ export default function FeedList(): JSX.Element {
       // Full animation when snapping to a video - stiffer spring for more decisive snapping
       return {
         type: "spring",
-        stiffness: 400,
-        damping: 40,
-        duration: 0.3,
-        restDelta: 0.001 // Ensures animation completes fully
+        stiffness: 500,  // Even stiffer for more decisive snapping (was 400)
+        damping: 50,     // Increased damping for less bounce (was 40)
+        duration: 0.4,   // Slightly longer for more complete transitions (was 0.3)
+        restDelta: 0.0001 // Ensures animation completes fully (was 0.001)
       };
     } else if (Math.abs(swipeProgress) > 0) {
       // Responsive movement during active scrolling
       return {
         type: "spring",
-        stiffness: 1000,
-        damping: 100,
+        stiffness: 1200, // Increased stiffness for more responsive feel (was 1000)
+        damping: 120,    // Increased damping (was 100)
         duration: 0.1
       };
     } else {
       // Default state
       return {
         type: "spring",
-        stiffness: 400,
-        damping: 40,
-        duration: 0.3
+        stiffness: 500,  // Matched to the locked state (was 400)
+        damping: 50,     // Matched to the locked state (was 40)
+        duration: 0.4    // Matched to the locked state (was 0.3)
       };
     }
   }, [isSwipeLocked, swipeProgress]);
@@ -408,7 +412,7 @@ export default function FeedList(): JSX.Element {
         clearTimeout(wheelTimeout.current);
       }
       
-      wheelTimeout.current = setTimeout(handleWheelEndEvent, 90); // Shorter timeout (was 150ms)
+      wheelTimeout.current = setTimeout(handleWheelEndEvent, 70); // Shorter timeout (was 90ms)
     }, { passive: false });
     
     // Cleanup
