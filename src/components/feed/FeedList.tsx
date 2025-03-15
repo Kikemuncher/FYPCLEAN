@@ -89,6 +89,11 @@ export default function FeedList(): JSX.Element {
   // Window height for proper sizing
   const [windowHeight, setWindowHeight] = useState<number>(0);
   
+  // For swipe functionality
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [isSwipeLocked, setIsSwipeLocked] = useState<boolean>(false);
+  
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   
@@ -132,24 +137,65 @@ export default function FeedList(): JSX.Element {
       }
     });
     
-    // Play current video
-    const currentVideo = videoRefs.current[VIDEOS[currentIndex].id];
-    if (currentVideo) {
+    // Play current video with retry
+    const playCurrentVideo = async (): Promise<void> => {
+      const currentVideo = videoRefs.current[VIDEOS[currentIndex].id];
+      if (!currentVideo) return;
+      
       try {
+        // Reset playback position
         currentVideo.currentTime = 0;
         
-        // Handle autoplay with error catching
-        const playPromise = currentVideo.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((error) => {
-            console.log("Auto-play prevented:", error);
-          });
-        }
+        // Use click to play as a workaround for autoplay policy
+        const playAttempt = await currentVideo.play();
+        
+        console.log("Video started playing");
       } catch (error) {
-        console.error("Error playing video:", error);
+        console.error("Autoplay failed, trying with user interaction:", error);
+        
+        // If autoplay is blocked by browser policy
+        const playOnInteraction = (): void => {
+          const videoElem = videoRefs.current[VIDEOS[currentIndex].id];
+          if (videoElem) {
+            videoElem.play()
+              .then(() => {
+                document.removeEventListener('click', playOnInteraction);
+                document.removeEventListener('touchstart', playOnInteraction);
+                console.log("Video started after user interaction");
+              })
+              .catch(err => console.error("Still couldn't play video:", err));
+          }
+        };
+        
+        document.addEventListener('click', playOnInteraction, { once: true });
+        document.addEventListener('touchstart', playOnInteraction, { once: true });
       }
-    }
+    };
+    
+    playCurrentVideo();
+    
   }, [currentIndex, isClient]);
+  
+  // Show play button overlay on first load to encourage user interaction
+  useEffect(() => {
+    if (isClient) {
+      // Force a touch event to trigger play for Safari
+      const triggerPlayEvent = (): void => {
+        const currentVideo = videoRefs.current[VIDEOS[currentIndex]?.id];
+        if (currentVideo && currentVideo.paused) {
+          currentVideo.play().catch(err => console.log("Still couldn't play:", err));
+        }
+      };
+      
+      window.addEventListener('touchstart', triggerPlayEvent, { once: true });
+      window.addEventListener('click', triggerPlayEvent, { once: true });
+      
+      return () => {
+        window.removeEventListener('touchstart', triggerPlayEvent);
+        window.removeEventListener('click', triggerPlayEvent);
+      };
+    }
+  }, [isClient, currentIndex]);
   
   // Set video ref
   const setVideoRef = (id: string, el: HTMLVideoElement | null): void => {
@@ -163,14 +209,18 @@ export default function FeedList(): JSX.Element {
   
   // Navigate through videos
   const goToNext = (): void => {
-    if (currentIndex < VIDEOS.length - 1) {
+    if (currentIndex < VIDEOS.length - 1 && !isSwipeLocked) {
+      setIsSwipeLocked(true);
       setCurrentIndex(currentIndex + 1);
+      setTimeout(() => setIsSwipeLocked(false), 500);
     }
   };
   
   const goToPrevious = (): void => {
-    if (currentIndex > 0) {
+    if (currentIndex > 0 && !isSwipeLocked) {
+      setIsSwipeLocked(true);
       setCurrentIndex(currentIndex - 1);
+      setTimeout(() => setIsSwipeLocked(false), 500);
     }
   };
   
@@ -186,11 +236,43 @@ export default function FeedList(): JSX.Element {
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>): void => {
     e.preventDefault();
     
+    if (isSwipeLocked) return;
+    
     if (e.deltaY > 50 && currentIndex < VIDEOS.length - 1) {
       goToNext();
     } else if (e.deltaY < -50 && currentIndex > 0) {
       goToPrevious();
     }
+  };
+  
+  // Touch gesture handlers
+  const handleTouchStart = (e: React.TouchEvent): void => {
+    if (isSwipeLocked) return;
+    setTouchStart(e.targetTouches[0].clientY);
+  };
+  
+  const handleTouchMove = (e: React.TouchEvent): void => {
+    if (isSwipeLocked) return;
+    setTouchEnd(e.targetTouches[0].clientY);
+  };
+  
+  const handleTouchEnd = (): void => {
+    if (isSwipeLocked || !touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const minSwipeDistance = 50;
+    
+    if (distance > minSwipeDistance && currentIndex < VIDEOS.length - 1) {
+      // Swipe up
+      goToNext();
+    } else if (distance < -minSwipeDistance && currentIndex > 0) {
+      // Swipe down
+      goToPrevious();
+    }
+    
+    // Reset values
+    setTouchStart(null);
+    setTouchEnd(null);
   };
   
   // Handle key presses
@@ -224,6 +306,9 @@ export default function FeedList(): JSX.Element {
     <div 
       className="h-screen w-full overflow-hidden bg-black relative"
       onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Video Feed Container */}
       <motion.div 
@@ -242,6 +327,7 @@ export default function FeedList(): JSX.Element {
       >
         {VIDEOS.map((video, index) => {
           const isVisible = Math.abs(index - currentIndex) <= 1;
+          const isActive = index === currentIndex;
           
           return (
             <div 
@@ -264,7 +350,32 @@ export default function FeedList(): JSX.Element {
                     muted={isMuted}
                     preload="auto"
                     controls={false}
+                    poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" // Transparent poster
                   />
+                  
+                  {/* Play button overlay - shows initially or when video is paused */}
+                  {isActive && (
+                    <div 
+                      className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer z-10"
+                      onClick={() => {
+                        const video = videoRefs.current[video.id];
+                        if (video) {
+                          if (video.paused) {
+                            video.play().catch(e => console.error("Play failed:", e));
+                          } else {
+                            video.pause();
+                          }
+                        }
+                      }}
+                    >
+                      <div className="rounded-full bg-black/50 p-5">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Video Info Overlay */}
                   <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
@@ -356,7 +467,7 @@ export default function FeedList(): JSX.Element {
         <button 
           onClick={goToPrevious} 
           className={`bg-black/30 p-2 rounded-full ${currentIndex === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/50'}`}
-          disabled={currentIndex === 0}
+          disabled={currentIndex === 0 || isSwipeLocked}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -365,7 +476,7 @@ export default function FeedList(): JSX.Element {
         <button 
           onClick={goToNext} 
           className={`bg-black/30 p-2 rounded-full ${currentIndex === VIDEOS.length - 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/50'}`}
-          disabled={currentIndex === VIDEOS.length - 1}
+          disabled={currentIndex === VIDEOS.length - 1 || isSwipeLocked}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -377,6 +488,18 @@ export default function FeedList(): JSX.Element {
       <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
         <span className="text-white text-sm">{currentIndex + 1} / {VIDEOS.length}</span>
       </div>
+      
+      {/* Swipe indicator (helpful for first-time users) */}
+      {currentIndex === 0 && (
+        <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex flex-col items-center z-30">
+          <div className="bg-black/30 rounded-full px-3 py-1 mb-2">
+            <span className="text-white text-sm">Swipe up for next video</span>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7-7-7" />
+          </svg>
+        </div>
+      )}
     </div>
   );
 }
