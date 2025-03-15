@@ -17,13 +17,10 @@ export default function FeedList() {
   const [isManualScrolling, setIsManualScrolling] = useState(false);
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
   const releaseTimeout = useRef<NodeJS.Timeout | null>(null);
-  const wheelEvents = useRef<number[]>([]);
-  const lastWheelTime = useRef(0);
 
   // Space between videos (padding)
   const VIDEO_SPACING = 40; // 40px spacing between videos
-  const MAX_MANUAL_OFFSET = 120; // Max pixels to offset during manual scrolling
-
+  
   // Only run client-side
   useEffect(() => {
     setIsClient(true);
@@ -90,77 +87,67 @@ export default function FeedList() {
     setIsMuted(!isMuted);
   };
 
-  // Handle wheel event with fast/slow detection
+  // Handle scroll release - check if we've passed 50% threshold
+  const handleScrollRelease = () => {
+    // Calculate if we've scrolled more than 50% of the video height
+    const halfHeight = containerHeight / 2;
+    
+    if (Math.abs(manualOffset) > halfHeight) {
+      // We've scrolled more than 50% - snap to next/prev video
+      if (manualOffset > 0) {
+        goToNextVideo();
+      } else {
+        goToPrevVideo();
+      }
+    } else {
+      // Less than 50% - return to current video
+      setManualOffset(0);
+      setIsManualScrolling(false);
+    }
+  };
+
+  // Handle wheel event
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    
-    const now = Date.now();
-    const timeSinceLastWheel = now - lastWheelTime.current;
-    lastWheelTime.current = now;
-    
-    // Store recent wheel events for speed calculation
-    wheelEvents.current.push(now);
-    if (wheelEvents.current.length > 5) {
-      wheelEvents.current.shift(); // Keep last 5 events
-    }
     
     // Don't process if locked
     if (isScrollLocked) return;
     
-    // Calculate wheel speed - fast wheel = many events in short time
-    const isFastWheel = wheelEvents.current.length >= 3 && 
-                        (wheelEvents.current[wheelEvents.current.length - 1] - 
-                         wheelEvents.current[0]) < 300;
+    // Update manual offset
+    setIsManualScrolling(true);
     
-    if (isFastWheel) {
-      // Fast wheel - go to next/prev video
-      wheelEvents.current = []; // Reset wheel events
-      
-      if (e.deltaY > 0) {
-        goToNextVideo();
-      } else if (e.deltaY < 0) {
-        goToPrevVideo();
-      }
-    } else {
-      // Slow wheel - manual offset
-      setIsManualScrolling(true);
-      
-      // Clear any existing timeout
-      if (releaseTimeout.current) {
-        clearTimeout(releaseTimeout.current);
-      }
-      
-      // Calculate new offset with limits
-      let newOffset = manualOffset;
-      
-      if (e.deltaY > 0) {
-        // Scrolling down - increase offset (move content up)
-        newOffset = Math.min(newOffset + e.deltaY * 0.3, MAX_MANUAL_OFFSET);
-      } else {
-        // Scrolling up - decrease offset (move content down)
-        newOffset = Math.max(newOffset + e.deltaY * 0.3, -MAX_MANUAL_OFFSET);
-      }
-      
-      setManualOffset(newOffset);
-      
-      // Reset after no wheel events
-      releaseTimeout.current = setTimeout(() => {
-        setManualOffset(0);
-        setIsManualScrolling(false);
-        wheelEvents.current = [];
-      }, 300);
+    // Calculate new offset
+    let newOffset = manualOffset + e.deltaY * 0.6;
+    
+    // Limit offset based on position
+    if (currentVideoIndex === 0 && newOffset < 0) {
+      // First video - limit upward scrolling
+      newOffset = Math.max(newOffset, -50);
+    } else if (currentVideoIndex === videos.length - 1 && newOffset > 0) {
+      // Last video - limit downward scrolling
+      newOffset = Math.min(newOffset, 50);
     }
+    
+    setManualOffset(newOffset);
+    
+    // Clear any existing timeout
+    if (releaseTimeout.current) {
+      clearTimeout(releaseTimeout.current);
+    }
+    
+    // Set new timeout to check threshold when scrolling stops
+    releaseTimeout.current = setTimeout(() => {
+      handleScrollRelease();
+    }, 200);
   };
 
-  // Touch handling with fast/slow detection
+  // Touch handling with threshold detection
   const touchStartY = useRef(0);
-  const touchStartTime = useRef(0);
   const touchLastY = useRef(0);
   
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
     touchLastY.current = e.touches[0].clientY;
-    touchStartTime.current = Date.now();
     setIsManualScrolling(true);
   };
   
@@ -171,9 +158,18 @@ export default function FeedList() {
     const diff = touchLastY.current - currentY;
     touchLastY.current = currentY;
     
-    // Update manual offset with limits
-    let newOffset = manualOffset + diff * 0.5;
-    newOffset = Math.max(Math.min(newOffset, MAX_MANUAL_OFFSET), -MAX_MANUAL_OFFSET);
+    // Update manual offset
+    let newOffset = manualOffset + diff * 1.2;
+    
+    // Limit offset based on position
+    if (currentVideoIndex === 0 && newOffset < 0) {
+      // First video - limit upward scrolling
+      newOffset = Math.max(newOffset, -50);
+    } else if (currentVideoIndex === videos.length - 1 && newOffset > 0) {
+      // Last video - limit downward scrolling
+      newOffset = Math.min(newOffset, 50);
+    }
+    
     setManualOffset(newOffset);
     
     // Clear any existing timeout
@@ -182,31 +178,12 @@ export default function FeedList() {
     }
   };
   
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    // Skip if already scrolling
+  const handleTouchEnd = () => {
+    // Skip if already locked
     if (isScrollLocked) return;
     
-    // Calculate distance, time and velocity
-    const touchEnd = e.changedTouches[0].clientY;
-    const touchDiff = touchStartY.current - touchEnd;
-    const touchTime = Date.now() - touchStartTime.current;
-    const velocity = Math.abs(touchDiff) / touchTime;
-    
-    // Fast swipe = high velocity
-    const isFastSwipe = velocity > 0.5 && Math.abs(touchDiff) > 50;
-    
-    if (isFastSwipe) {
-      // Fast swipe - go to next/prev video
-      if (touchDiff > 0) {
-        goToNextVideo();
-      } else {
-        goToPrevVideo();
-      }
-    } else {
-      // Slow swipe - reset offset
-      setManualOffset(0);
-      setIsManualScrolling(false);
-    }
+    // Check if we've passed the 50% threshold
+    handleScrollRelease();
   };
 
   // Loading state
@@ -231,7 +208,7 @@ export default function FeedList() {
   const totalHeight = videos.length * (containerHeight + VIDEO_SPACING) - VIDEO_SPACING;
   
   // Calculate the Y position for the current video including padding and manual offset
-  const currentY = currentVideoIndex * (containerHeight + VIDEO_SPACING) - manualOffset;
+  const currentY = currentVideoIndex * (containerHeight + VIDEO_SPACING) + manualOffset;
 
   return (
     <div 
@@ -249,7 +226,7 @@ export default function FeedList() {
           y: -currentY 
         }}
         transition={{ 
-          duration: isManualScrolling ? 0.2 : 0.6,
+          duration: isManualScrolling ? 0.15 : 0.6,
           ease: isManualScrolling ? "linear" : [0.32, 0.72, 0.24, 0.99]
         }}
       >
