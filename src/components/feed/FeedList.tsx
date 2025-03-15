@@ -325,13 +325,13 @@ export default function FeedList(): JSX.Element {
           ease: [0.16, 1, 0.3, 1]
         }}
       >
-        {VIDEOS.map((video, index) => {
+        {VIDEOS.map((videoItem, index) => {
           const isVisible = Math.abs(index - currentIndex) <= 1;
           const isActive = index === currentIndex;
           
           return (
             <div 
-              key={video.id} 
+              key={videoItem.id} 
               className="absolute w-full"
               style={{ 
                 height: windowHeight, 
@@ -342,8 +342,8 @@ export default function FeedList(): JSX.Element {
                 <div className="relative w-full h-full">
                   {/* Video Element */}
                   <video
-                    ref={(el) => setVideoRef(video.id, el)}
-                    src={video.url}
+                    ref={(el) => setVideoRef(videoItem.id, el)}
+                    src={videoItem.url}
                     className="w-full h-full object-cover"
                     loop
                     playsInline
@@ -358,12 +358,12 @@ export default function FeedList(): JSX.Element {
                     <div 
                       className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer z-10"
                       onClick={() => {
-                        const video = videoRefs.current[video.id];
-                        if (video) {
-                          if (video.paused) {
-                            video.play().catch(e => console.error("Play failed:", e));
+                        const videoElement = videoRefs.current[videoItem.id];
+                        if (videoElement) {
+                          if (videoElement.paused) {
+                            videoElement.play().catch(e => console.error("Play failed:", e));
                           } else {
-                            video.pause();
+                            videoElement.pause();
                           }
                         }
                       }}
@@ -383,7 +383,7 @@ export default function FeedList(): JSX.Element {
                       <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30 bg-gray-700">
                         <img 
                           src={`https://randomuser.me/api/portraits/men/${index + 1}.jpg`}
-                          alt={video.username} 
+                          alt={videoItem.username} 
                           className="w-full h-full object-cover"
                           loading="lazy"
                           onError={(e) => {
@@ -396,12 +396,12 @@ export default function FeedList(): JSX.Element {
                       </div>
                       <div>
                         <p className="font-bold text-white">
-                          @{video.username}
+                          @{videoItem.username}
                         </p>
-                        <p className="text-white text-xs opacity-80">{video.song}</p>
+                        <p className="text-white text-xs opacity-80">{videoItem.song}</p>
                       </div>
                     </div>
-                    <p className="text-white text-sm mb-4">{video.caption}</p>
+                    <p className="text-white text-sm mb-4">{videoItem.caption}</p>
                   </div>
                   
                   {/* Side Actions */}
@@ -410,20 +410,20 @@ export default function FeedList(): JSX.Element {
                       className="flex flex-col items-center"
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleLike(video.id);
+                        toggleLike(videoItem.id);
                       }}
                     >
                       <div className="rounded-full bg-black/20 p-2">
                         <svg 
-                          className={`h-8 w-8 ${likedVideos[video.id] ? 'text-red-500' : 'text-white'}`} 
-                          fill={likedVideos[video.id] ? "currentColor" : "none"} 
+                          className={`h-8 w-8 ${likedVideos[videoItem.id] ? 'text-red-500' : 'text-white'}`} 
+                          fill={likedVideos[videoItem.id] ? "currentColor" : "none"} 
                           viewBox="0 0 24 24" 
                           stroke="currentColor"
                         >
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                         </svg>
                       </div>
-                      <span className="text-white text-xs mt-1">{formatCount(video.likes)}</span>
+                      <span className="text-white text-xs mt-1">{formatCount(videoItem.likes)}</span>
                     </button>
                     
                     <button className="flex flex-col items-center">
@@ -432,7 +432,7 @@ export default function FeedList(): JSX.Element {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
                       </div>
-                      <span className="text-white text-xs mt-1">{formatCount(video.comments)}</span>
+                      <span className="text-white text-xs mt-1">{formatCount(videoItem.comments)}</span>
                     </button>
                   </div>
                 </div>
