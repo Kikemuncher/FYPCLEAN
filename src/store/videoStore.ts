@@ -193,4 +193,160 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     if (videos.length === 0) return;
     
     const safeIndex = Math.min(Math.max(0, index), videos.length - 1);
-    set({ current
+    set({ currentVideoIndex: safeIndex });
+  },
+  
+  // Initial fetch
+  fetchVideos: async () => {
+    set({ loading: true, error: null });
+    
+    try {
+      // Simulate network delay for a more realistic experience
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // For safety, check if videos have been loaded already
+      const { videos } = get();
+      if (videos.length > 0) {
+        set({ loading: false });
+        return;
+      }
+      
+      // Always use sample videos for reliability
+      set({ 
+        videos: sampleVideos,
+        loading: false,
+        hasMore: true,
+        lastVisible: { id: sampleVideos[sampleVideos.length - 1].id }
+      });
+    } catch (error) {
+      console.error("Error fetching videos:", error);
+      
+      // Fallback to sample videos in case of error
+      set({ 
+        videos: sampleVideos,
+        loading: false,
+        error: "Using sample videos due to connection issues.",
+        hasMore: true 
+      });
+    }
+  },
+  
+  // Fetch more videos for infinite scroll
+  fetchMoreVideos: async () => {
+    const { loading, hasMore } = get();
+    
+    if (loading || !hasMore) return;
+    
+    set({ loading: true, error: null });
+    
+    try {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const { videos } = get();
+      
+      // Check if we should add more videos
+      if (videos.length >= 15) {
+        set({ hasMore: false, loading: false });
+        return;
+      }
+      
+      // Get a slice of additional videos - create unique IDs
+      const additionalVideos = moreVideoSets.map((video, index) => ({
+        ...video,
+        id: `more-${Date.now()}-${index}`,
+      }));
+      
+      set({ 
+        videos: [...videos, ...additionalVideos],
+        loading: false,
+        hasMore: videos.length + additionalVideos.length < 15, // Limit for demo purposes
+        lastVisible: additionalVideos.length > 0 
+          ? { id: additionalVideos[additionalVideos.length - 1].id }
+          : get().lastVisible
+      });
+    } catch (error) {
+      console.error("Error fetching more videos:", error);
+      
+      // Add fallback videos in case of error
+      const { videos } = get();
+      
+      set({ 
+        videos: [...videos, ...fallbackVideos],
+        loading: false,
+        hasMore: false,
+        error: "Using fallback videos due to connection issues."
+      });
+    }
+  },
+  
+  // Like video
+  likeVideo: (videoId) => {
+    const { videos } = get();
+    if (!videoId) return;
+    
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, likes: video.likes + 1 } 
+        : video
+    );
+    
+    set({ videos: updatedVideos });
+  },
+  
+  // Unlike video
+  unlikeVideo: (videoId) => {
+    const { videos } = get();
+    if (!videoId) return;
+    
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, likes: Math.max(0, video.likes - 1) } 
+        : video
+    );
+    
+    set({ videos: updatedVideos });
+  },
+  
+  // Share video
+  shareVideo: (videoId) => {
+    const { videos } = get();
+    if (!videoId) return;
+    
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, shares: video.shares + 1 } 
+        : video
+    );
+    
+    set({ videos: updatedVideos });
+  },
+  
+  // Save video
+  saveVideo: (videoId) => {
+    const { videos } = get();
+    if (!videoId) return;
+    
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, saves: video.saves + 1 } 
+        : video
+    );
+    
+    set({ videos: updatedVideos });
+  },
+  
+  // Increment view count
+  incrementView: (videoId) => {
+    const { videos } = get();
+    if (!videoId) return;
+    
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, views: video.views + 1 } 
+        : video
+    );
+    
+    set({ videos: updatedVideos });
+  }
+}));
