@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import VideoCard from "./VideoCard";
 import { useVideoStore } from "@/store/videoStore";
 import { useInView } from "react-intersection-observer";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function FeedList() {
   const { 
@@ -20,6 +21,7 @@ export default function FeedList() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const [isScrolling, setIsScrolling] = useState(false);
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(null);
 
   // Ref for load more trigger
   const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
@@ -38,15 +40,19 @@ export default function FeedList() {
     }
   }, [loadMoreInView, fetchMoreVideos, videos.length, hasMore, loading]);
 
-  // Threshold for swipe detection (in pixels)
-  const minSwipeDistance = 50;
+  // Make videos globally available for VideoCard transition
+  useEffect(() => {
+    window.currentVideoIndex = currentVideoIndex;
+  }, [currentVideoIndex]);
 
-  // Improved swipe handling with debounce
+  // TikTok-style swipe with improved performance
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isScrolling) return;
     setTouchStart(e.targetTouches[0].clientY);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (isScrolling || !touchStart) return;
     setTouchEnd(e.targetTouches[0].clientY);
   };
 
@@ -54,74 +60,57 @@ export default function FeedList() {
     if (!touchStart || !touchEnd || isScrolling) return;
     
     const distance = touchStart - touchEnd;
-    const isUpSwipe = distance > minSwipeDistance;
-    const isDownSwipe = distance < -minSwipeDistance;
+    const minSwipeDistance = 40; // More sensitive TikTok-like swiping
     
-    if (isUpSwipe && currentVideoIndex < videos.length - 1) {
-      setIsScrolling(true);
-      setCurrentVideoIndex(currentVideoIndex + 1);
-      
-      // Allow scrolling again after animation completes
-      setTimeout(() => setIsScrolling(false), 400);
-    } else if (isDownSwipe && currentVideoIndex > 0) {
-      setIsScrolling(true);
-      setCurrentVideoIndex(currentVideoIndex - 1);
-      
-      // Allow scrolling again after animation completes
-      setTimeout(() => setIsScrolling(false), 400);
+    if (distance > minSwipeDistance && currentVideoIndex < videos.length - 1) {
+      // Swipe up - next video
+      handleScroll('down');
+    } else if (distance < -minSwipeDistance && currentVideoIndex > 0) {
+      // Swipe down - previous video
+      handleScroll('up');
     }
     
-    // Reset values
+    // Reset touch values
     setTouchStart(null);
     setTouchEnd(null);
   };
 
-  // Improved wheel event for desktop with debounce
+  // Smoother scroll handling for wheel/arrow navigation
+  const handleScroll = (direction: 'up' | 'down') => {
+    if (isScrolling) return;
+    
+    setIsScrolling(true);
+    setScrollDirection(direction);
+    
+    if (direction === 'down' && currentVideoIndex < videos.length - 1) {
+      setCurrentVideoIndex(currentVideoIndex + 1);
+    } else if (direction === 'up' && currentVideoIndex > 0) {
+      setCurrentVideoIndex(currentVideoIndex - 1);
+    }
+    
+    // Allow scrolling again after animation plus a small buffer
+    setTimeout(() => {
+      setIsScrolling(false);
+      setScrollDirection(null);
+    }, 350);
+  };
+
+  // Wheel event handler
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    
     if (isScrolling) return;
     
     if (e.deltaY > 0 && currentVideoIndex < videos.length - 1) {
-      setIsScrolling(true);
-      setCurrentVideoIndex(currentVideoIndex + 1);
-      
-      // Allow scrolling again after animation completes
-      setTimeout(() => setIsScrolling(false), 400);
+      handleScroll('down');
     } else if (e.deltaY < 0 && currentVideoIndex > 0) {
-      setIsScrolling(true);
-      setCurrentVideoIndex(currentVideoIndex - 1);
-      
-      // Allow scrolling again after animation completes
-      setTimeout(() => setIsScrolling(false), 400);
+      handleScroll('up');
     }
-  };
-
-  // Consistent navigation behavior for buttons
-  const handleNavigateNext = () => {
-    if (isScrolling || currentVideoIndex >= videos.length - 1) return;
-    
-    setIsScrolling(true);
-    setCurrentVideoIndex(currentVideoIndex + 1);
-    
-    // Allow scrolling again after animation completes
-    setTimeout(() => setIsScrolling(false), 400);
-  };
-
-  const handleNavigatePrev = () => {
-    if (isScrolling || currentVideoIndex <= 0) return;
-    
-    setIsScrolling(true);
-    setCurrentVideoIndex(currentVideoIndex - 1);
-    
-    // Allow scrolling again after animation completes
-    setTimeout(() => setIsScrolling(false), 400);
   };
 
   return (
     <div 
       ref={containerRef}
-      className="relative h-screen w-full overflow-hidden bg-black"
+      className="relative h-screen w-full overflow-hidden bg-black touch-none"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -132,18 +121,23 @@ export default function FeedList() {
           <p>No videos available.</p>
         </div>
       ) : (
-        // Add gap between videos that connects them
         <div className="relative w-full h-full">
-          {videos.map((video, index) => (
-            <VideoCard 
-              key={video.id} 
-              video={video} 
-              isActive={index === currentVideoIndex}
-              index={index}
-              onNavigateNext={handleNavigateNext}
-              onNavigatePrev={handleNavigatePrev}
-            />
-          ))}
+          {/* Only render active video and adjacent videos for performance */}
+          {videos.map((video, index) => {
+            if (index >= currentVideoIndex - 1 && index <= currentVideoIndex + 1) {
+              return (
+                <VideoCard 
+                  key={video.id} 
+                  video={video} 
+                  isActive={index === currentVideoIndex}
+                  index={index}
+                  onNavigateNext={() => handleScroll('down')}
+                  onNavigatePrev={() => handleScroll('up')}
+                />
+              );
+            }
+            return null;
+          })}
         </div>
       )}
       
@@ -156,14 +150,25 @@ export default function FeedList() {
         />
       )}
       
-      {/* Improved loading indicator with animation */}
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
-          <div className="h-16 w-16 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-2 border-t-white border-r-white border-b-transparent border-l-transparent"></div>
-          </div>
-        </div>
-      )}
+      {/* Loading indicator */}
+      <AnimatePresence>
+        {loading && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex items-center justify-center bg-black/30 z-50"
+          >
+            <div className="h-12 w-12">
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="rounded-full h-12 w-12 border-2 border-t-white border-r-white border-b-transparent border-l-transparent"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
