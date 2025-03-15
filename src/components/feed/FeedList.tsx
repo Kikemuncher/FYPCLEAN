@@ -1,76 +1,4 @@
-// Initialize
-  useEffect(() => {
-    setIsClient(true);
-    fetchVideos();
-    
-    // Set container height
-    const updateHeight = () => {
-      setContainerHeight(window.innerHeight);
-    };
-    
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-    
-    // Add keyboard navigation
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' || e.key === 'k') {
-        goToPrevVideo();
-      } else if (e.key === 'ArrowDown' || e.key === 'j') {
-        goToNextVideo();
-      } else if (e.key === 'm') {
-        toggleMute();
-      } else if (e.key === 'l') {
-        const currentVideoId = videos[currentVideoIndex]?.id;
-        if (currentVideoId) {
-          toggleLike(currentVideoId);
-        }
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    
-    // Add haptic feedback support for mobile
-    const handleVisibilityChange = () => {
-      // When tab becomes visible again, reset video playback
-      if (document.visibilityState === 'visible') {
-        const currentVideo = videoRefs.current[videos[currentVideoIndex]?.id];
-        if (currentVideo) {
-          attemptPlay(videos[currentVideoIndex].id);
-        }
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      window.removeEventListener('resize', updateHeight);
-      window.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      cleanupSwipe();
-    };
-  }, [
-    fetchVideos, 
-    goToNextVideo, 
-    goToPrevVideo, 
-    toggleMute, 
-    toggleLike, 
-    cleanupSwipe, 
-    videos, 
-    currentVideoIndex,
-    attemptPlay
-  ]);
-
-  // Format numbers for display
-  const formatCount = useCallback((count: number): string => {
-    if (count >= 1000000) {
-      return (count / 1000000).toFixed(1) + 'M';
-    } else if (count >= 1000) {
-      return (count / 1000).toFixed(1) + 'K';
-    }
-    return count.toString();
-  }, []);
-
-  // Loading state
+// Rendering logic - with proper conditional rendering
   if (!isClient) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -79,7 +7,6 @@
     );
   }
 
-  // No videos state
   if (videos.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -96,10 +23,7 @@
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      onClick={handleTap}
-      role="region"
-      aria-label="Video feed"
-      aria-roledescription="carousel"
+      onClick={handleDoubleTap}
     >
       {/* Main feed container with smooth transitions */}
       <motion.div 
@@ -130,7 +54,6 @@
                 height: containerHeight, 
                 top: index * containerHeight,
               }}
-              aria-hidden={!isActive}
             >
               {isVisible && (
                 <div className="relative w-full h-full overflow-hidden">
@@ -144,46 +67,7 @@
                     muted={isMuted}
                     preload="auto"
                     controls={false}
-                    poster={isActive ? undefined : "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="}
-                    onClick={isActive ? () => attemptPlay(video.id) : undefined}
-                    aria-label={`Video by ${video.username}: ${video.caption}`}
                   />
-                  
-                  {/* Playback error message */}
-                  {isActive && playbackError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                      <div 
-                        className="bg-black/80 rounded-lg p-4 max-w-xs text-center"
-                        onClick={() => attemptPlay(video.id)}
-                      >
-                        <p className="text-white">{playbackError}</p>
-                        <button className="mt-2 bg-white text-black px-4 py-2 rounded-full text-sm">
-                          Tap to play
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Double-tap heart animation */}
-                  <AnimatePresence>
-                    {showLikeAnimation && isActive && (
-                      <motion.div 
-                        className="absolute pointer-events-none"
-                        style={{
-                          left: likeAnimPosition.x - 50,
-                          top: likeAnimPosition.y - 50,
-                        }}
-                        initial={{ opacity: 0, scale: 0.5 }}
-                        animate={{ opacity: 1, scale: 1.5 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <svg className="w-24 h-24 text-white drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                        </svg>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                   
                   {/* Video info overlay */}
                   <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
@@ -217,8 +101,6 @@
                         e.stopPropagation();
                         toggleLike(video.id);
                       }}
-                      aria-label={likedVideos[video.id] ? "Unlike video" : "Like video"}
-                      aria-pressed={likedVideos[video.id]}
                     >
                       <div className="rounded-full bg-black/20 p-2">
                         <svg 
@@ -233,8 +115,7 @@
                       <span className="text-white text-xs mt-1">{formatCount(video.likes)}</span>
                     </button>
                     
-                    <button className="flex flex-col items-center"
-                      aria-label="Comment on video">
+                    <button className="flex flex-col items-center">
                       <div className="rounded-full bg-black/20 p-2">
                         <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -243,14 +124,7 @@
                       <span className="text-white text-xs mt-1">{formatCount(video.comments)}</span>
                     </button>
                     
-                    <button 
-                      className="flex flex-col items-center"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        saveVideo(video.id);
-                      }}
-                      aria-label="Save video"
-                    >
+                    <button className="flex flex-col items-center">
                       <div className="rounded-full bg-black/20 p-2">
                         <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -259,14 +133,7 @@
                       <span className="text-white text-xs mt-1">{formatCount(video.saves)}</span>
                     </button>
                     
-                    <button 
-                      className="flex flex-col items-center"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        shareVideo(video.id);
-                      }}
-                      aria-label="Share video"
-                    >
+                    <button className="flex flex-col items-center">
                       <div className="rounded-full bg-black/20 p-2">
                         <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -289,8 +156,6 @@
           toggleMute();
         }}
         className="absolute top-4 right-4 bg-black/30 hover:bg-black/50 rounded-full p-2 z-30 transition-colors"
-        aria-label={isMuted ? "Unmute video" : "Mute video"}
-        aria-pressed={isMuted}
       >
         {isMuted ? (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -309,156 +174,238 @@
         <span className="text-white text-sm">{currentVideoIndex + 1} / {videos.length}</span>
       </div>
       
-      {/* Scroll guide indicator (only shows when needed) */}
-      <AnimatePresence>
-        {videos.length > 1 && currentVideoIndex === 0 && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ delay: 1, duration: 0.5 }}
-            className="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/30 px-3 py-1 rounded-full z-30 flex items-center"
-          >
-            <span className="mr-2">Swipe up for more</span>
-            <svg className="h-4 w-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      
-      {/* Keyboard shortcuts help - show when pressing ? key */}
-      <AnimatePresence>
-        {isClient && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.2 }}
-            className="absolute bottom-2 left-2 text-white text-xs bg-black/50 px-2 py-1 rounded z-30"
-          >
-            <span className="text-tiktok-blue">Tip:</span> Use ↑/↓ or J/K to navigate, M to mute, L to like
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Scroll guide indicator */}
+      {videos.length > 1 && currentVideoIndex === 0 && (
+        <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/30 px-3 py-1 rounded-full z-30 flex items-center">
+          <span className="mr-2">Swipe up for more</span>
+          <svg className="h-4 w-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </div>
+      )}
     </div>
   );
 }"use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useVideoStore } from "@/store/videoStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { VideoData } from "@/types/video";
-import { useVideoPlayback } from "@/hooks/useVideoPlayback";
-import { useVerticalSwipe } from "@/hooks/useVerticalSwipe";
-import { useDoubleTap } from "@/hooks/useDoubleTap";
 
 export default function FeedList() {
   // Store state
-  const { 
-    videos, 
-    currentVideoIndex, 
-    setCurrentVideoIndex, 
-    fetchVideos,
-    likeVideo, 
-    unlikeVideo,
-    incrementView,
-    shareVideo,
-    saveVideo
-  } = useVideoStore();
+  const { videos, currentVideoIndex, setCurrentVideoIndex, fetchVideos, likeVideo, incrementView } = useVideoStore();
   
   // Local state
   const [isClient, setIsClient] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [containerHeight, setContainerHeight] = useState(0);
-  const [likedVideos, setLikedVideos] = useState<Record<string, boolean>>({});
-  const [showLikeAnimation, setShowLikeAnimation] = useState(false);
-  const [likeAnimPosition, setLikeAnimPosition] = useState({ x: 0, y: 0 });
-  const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [swipeProgress, setSwipeProgress] = useState(0);
+  const [isSwipeLocked, setIsSwipeLocked] = useState(false);
+  const [likedVideos, setLikedVideos] = useState({});
   
-  // Custom hooks
-  const { 
-    isMuted, 
-    toggleMute, 
-    isPlaying, 
-    playbackError, 
-    attemptPlay 
-  } = useVideoPlayback(videoRefs, currentVideoIndex, videos, (videoId) => {
-    // Track view when video plays
-    incrementView(videoId);
-  });
+  const videoRefs = useRef({});
+  const containerRef = useRef(null);
   
-  // Navigation handlers
-  const goToNextVideo = useCallback(() => {
-    if (currentVideoIndex < videos.length - 1) {
-      setCurrentVideoIndex(currentVideoIndex + 1);
-    }
-  }, [currentVideoIndex, videos.length, setCurrentVideoIndex]);
+  // Initialize
+  useEffect(() => {
+    setIsClient(true);
+    fetchVideos();
+    
+    // Set container height
+    const updateHeight = () => {
+      setContainerHeight(window.innerHeight);
+    };
+    
+    updateHeight();
+    window.addEventListener('resize', updateHeight);
+    
+    // Add keyboard navigation
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowUp' || e.key === 'k') {
+        if (currentVideoIndex > 0) {
+          setCurrentVideoIndex(currentVideoIndex - 1);
+        }
+      } else if (e.key === 'ArrowDown' || e.key === 'j') {
+        if (currentVideoIndex < videos.length - 1) {
+          setCurrentVideoIndex(currentVideoIndex + 1);
+        }
+      } else if (e.key === 'm') {
+        setIsMuted(!isMuted);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [fetchVideos, currentVideoIndex, videos.length, setCurrentVideoIndex, isMuted]);
+  
+  // Handle video playback when current index changes
+  useEffect(() => {
+    if (!isClient) return;
 
-  const goToPrevVideo = useCallback(() => {
-    if (currentVideoIndex > 0) {
-      setCurrentVideoIndex(currentVideoIndex - 1);
+    // Pause all videos
+    Object.values(videoRefs.current).forEach(videoRef => {
+      if (videoRef && !videoRef.paused) {
+        videoRef.pause();
+      }
+    });
+
+    // Play current video
+    const currentVideo = videoRefs.current[videos[currentVideoIndex]?.id];
+    if (currentVideo) {
+      currentVideo.currentTime = 0;
+      
+      const playPromise = currentVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log("Auto-play prevented, waiting for user interaction");
+        });
+      }
+      
+      // Track view
+      if (videos[currentVideoIndex]?.id) {
+        incrementView(videos[currentVideoIndex].id);
+      }
     }
-  }, [currentVideoIndex, setCurrentVideoIndex]);
+  }, [currentVideoIndex, videos, isClient, incrementView]);
   
-  // Swipe handlers with progress feedback
-  const { 
-    swipeProgress,
-    isLocked: isSwipeLocked,
-    handleWheel,
-    handleTouchStart,
-    handleTouchMove,
-    handleTouchEnd,
-    cleanup: cleanupSwipe
-  } = useVerticalSwipe({
-    onSwipeUp: goToNextVideo,
-    onSwipeDown: goToPrevVideo,
-    threshold: 50,
-    touchSensitivity: 0.8,
-    wheelSensitivity: 0.4
-  });
+  // Toggle mute function
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
+  };
   
-  // Double tap handler
-  const handleDoubleTap = useCallback((x: number, y: number) => {
-    const currentVideoId = videos[currentVideoIndex]?.id;
-    if (!currentVideoId) return;
+  // Format numbers for display
+  const formatCount = (count) => {
+    if (count >= 1000000) {
+      return (count / 1000000).toFixed(1) + 'M';
+    } else if (count >= 1000) {
+      return (count / 1000).toFixed(1) + 'K';
+    }
+    return count.toString();
+  };
+  
+  // Handle wheel event for scrolling
+  const handleWheel = (e) => {
+    e.preventDefault();
     
-    // Set animation position centered on tap point
-    setLikeAnimPosition({ x, y });
+    if (isSwipeLocked) return;
     
-    // Add like if not already liked
-    if (!likedVideos[currentVideoId]) {
-      setLikedVideos(prev => ({
-        ...prev,
-        [currentVideoId]: true
-      }));
-      likeVideo(currentVideoId);
+    // Apply a multiplier for more sensitive scrolling
+    const delta = e.deltaY * 0.5;
+    
+    // Update progress for visual feedback
+    let newProgress = swipeProgress + delta;
+    
+    // Apply resistance at the ends
+    if ((currentVideoIndex === 0 && newProgress < 0) || 
+        (currentVideoIndex === videos.length - 1 && newProgress > 0)) {
+      newProgress = newProgress * 0.3;
     }
     
-    // Show animation
-    setShowLikeAnimation(true);
-    setTimeout(() => setShowLikeAnimation(false), 1000);
-  }, [currentVideoIndex, videos, likedVideos, likeVideo]);
-  
-  // Use double tap hook
-  const { handleTap } = useDoubleTap({
-    onDoubleTap: handleDoubleTap
-  });
-  
-  // Toggle like directly (not via double tap)
-  const toggleLike = useCallback((videoId: string) => {
-    const isCurrentlyLiked = likedVideos[videoId];
+    setSwipeProgress(newProgress);
     
-    // Update local state
+    // Check if we've crossed the threshold to change videos
+    if (Math.abs(newProgress) > 50) {
+      setIsSwipeLocked(true);
+      
+      if (newProgress > 0 && currentVideoIndex < videos.length - 1) {
+        // Go to next video
+        setCurrentVideoIndex(currentVideoIndex + 1);
+      } else if (newProgress < 0 && currentVideoIndex > 0) {
+        // Go to previous video
+        setCurrentVideoIndex(currentVideoIndex - 1);
+      }
+      
+      // Reset after animation
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 400);
+    }
+  };
+  
+  // Handle touch events for mobile
+  const touchStartY = useRef(0);
+  const touchMoveY = useRef(0);
+  
+  const handleTouchStart = (e) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchMoveY.current = e.touches[0].clientY;
+  };
+  
+  const handleTouchMove = (e) => {
+    if (isSwipeLocked) return;
+    
+    const currentY = e.touches[0].clientY;
+    const diff = touchMoveY.current - currentY;
+    touchMoveY.current = currentY;
+    
+    // Similar logic to wheel handler but with different sensitivity
+    const delta = diff * 0.8;
+    let newProgress = swipeProgress + delta;
+    
+    if ((currentVideoIndex === 0 && newProgress < 0) || 
+        (currentVideoIndex === videos.length - 1 && newProgress > 0)) {
+      newProgress = newProgress * 0.3;
+    }
+    
+    setSwipeProgress(newProgress);
+    
+    if (Math.abs(newProgress) > 50) {
+      setIsSwipeLocked(true);
+      
+      if (newProgress > 0 && currentVideoIndex < videos.length - 1) {
+        setCurrentVideoIndex(currentVideoIndex + 1);
+      } else if (newProgress < 0 && currentVideoIndex > 0) {
+        setCurrentVideoIndex(currentVideoIndex - 1);
+      }
+      
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 400);
+    }
+  };
+  
+  const handleTouchEnd = () => {
+    // Reset progress if threshold not crossed
+    if (!isSwipeLocked) {
+      setSwipeProgress(0);
+    }
+  };
+  
+  // Double tap to like
+  const lastTap = useRef(0);
+  const handleDoubleTap = () => {
+    const currentTime = new Date().getTime();
+    const tapLength = currentTime - lastTap.current;
+    
+    if (tapLength < 300 && tapLength > 0) {
+      // Double tap detected
+      const currentVideoId = videos[currentVideoIndex]?.id;
+      if (currentVideoId) {
+        // Update like status
+        setLikedVideos(prev => ({
+          ...prev,
+          [currentVideoId]: true
+        }));
+        
+        likeVideo(currentVideoId);
+      }
+    }
+    
+    lastTap.current = currentTime;
+  };
+  
+  // Handle toggling like directly (not via double tap)
+  const toggleLike = (videoId) => {
     setLikedVideos(prev => ({
       ...prev,
-      [videoId]: !isCurrentlyLiked
+      [videoId]: !prev[videoId]
     }));
     
-    // Update store
-    if (isCurrentlyLiked) {
-      unlikeVideo(videoId);
-    } else {
-      likeVideo(videoId);
-    }
-  }, [likedVideos, likeVideo, unlikeVideo]);
+    likeVideo(videoId);
+  };
