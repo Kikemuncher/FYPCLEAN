@@ -61,7 +61,7 @@ export default function FeedList() {
   
   // Handle video playback when current index changes
   useEffect(() => {
-    if (!isClient) return;
+    if (!isClient || videos.length === 0) return;
 
     // Pause all videos
     Object.values(videoRefs.current).forEach(videoRef => {
@@ -70,8 +70,10 @@ export default function FeedList() {
       }
     });
 
-    // Play current video
-    const currentVideo = videoRefs.current[videos[currentVideoIndex]?.id];
+    // Safely access current video data
+    const currentVideo = currentVideoIndex < videos.length ? 
+      videoRefs.current[videos[currentVideoIndex]?.id] : null;
+      
     if (currentVideo) {
       currentVideo.currentTime = 0;
       
@@ -82,8 +84,8 @@ export default function FeedList() {
         });
       }
       
-      // Track view
-      if (videos[currentVideoIndex]?.id) {
+      // Track view safely
+      if (currentVideoIndex < videos.length && videos[currentVideoIndex]?.id) {
         incrementView(videos[currentVideoIndex].id);
       }
     }
@@ -91,7 +93,9 @@ export default function FeedList() {
   
   // Set video ref callback function
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
-    videoRefs.current[id] = el;
+    if (id) {
+      videoRefs.current[id] = el;
+    }
   }, []);
   
   // Toggle mute function
@@ -113,7 +117,7 @@ export default function FeedList() {
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    if (isSwipeLocked) return;
+    if (isSwipeLocked || videos.length === 0) return;
     
     // Apply a multiplier for more sensitive scrolling
     const delta = e.deltaY * 0.5;
@@ -156,7 +160,7 @@ export default function FeedList() {
   }, []);
   
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isSwipeLocked) return;
+    if (isSwipeLocked || videos.length === 0) return;
     
     const currentY = e.touches[0].clientY;
     const diff = touchMoveY.current - currentY;
@@ -198,12 +202,16 @@ export default function FeedList() {
   
   // Double tap to like
   const handleDoubleTap = useCallback(() => {
+    if (videos.length === 0) return;
+    
     const currentTime = new Date().getTime();
     const tapLength = currentTime - lastTap.current;
     
     if (tapLength < 300 && tapLength > 0) {
       // Double tap detected
-      const currentVideoId = videos[currentVideoIndex]?.id;
+      const currentVideoId = currentVideoIndex < videos.length ? 
+        videos[currentVideoIndex]?.id : null;
+        
       if (currentVideoId) {
         // Update like status
         setLikedVideos(prev => ({
@@ -240,9 +248,18 @@ export default function FeedList() {
   if (videos.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
-        <p className="text-white">No videos available</p>
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+          <p className="text-white">Loading videos...</p>
+        </div>
       </div>
     );
+  }
+
+  // Ensure currentVideoIndex is within bounds
+  const safeIndex = Math.min(Math.max(0, currentVideoIndex), videos.length - 1);
+  if (safeIndex !== currentVideoIndex) {
+    setCurrentVideoIndex(safeIndex);
   }
 
   return (
@@ -260,7 +277,7 @@ export default function FeedList() {
         className="absolute w-full"
         style={{ height: containerHeight * videos.length }}
         animate={{ 
-          y: -currentVideoIndex * containerHeight + swipeProgress 
+          y: -safeIndex * containerHeight + swipeProgress 
         }}
         transition={{ 
           y: {
@@ -273,8 +290,7 @@ export default function FeedList() {
       >
         {videos.map((video, index) => {
           // Only render videos that are close to the current one
-          const isVisible = Math.abs(index - currentVideoIndex) <= 1;
-          const isActive = index === currentVideoIndex;
+          const isVisible = Math.abs(index - safeIndex) <= 1;
           
           return (
             <div 
@@ -285,7 +301,7 @@ export default function FeedList() {
                 top: index * containerHeight,
               }}
             >
-              {isVisible && (
+              {isVisible && video.videoUrl && (
                 <div className="relative w-full h-full overflow-hidden">
                   {/* Video element */}
                   <video
@@ -304,7 +320,7 @@ export default function FeedList() {
                     <div className="flex items-center mb-2">
                       <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
                         <img 
-                          src={video.userAvatar} 
+                          src={video.userAvatar || 'https://randomuser.me/api/portraits/lego/1.jpg'} 
                           alt={video.username} 
                           className="w-full h-full object-cover"
                           loading="lazy"
@@ -401,11 +417,11 @@ export default function FeedList() {
 
       {/* Video counter indicator */}
       <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
-        <span className="text-white text-sm">{currentVideoIndex + 1} / {videos.length}</span>
+        <span className="text-white text-sm">{safeIndex + 1} / {videos.length}</span>
       </div>
       
       {/* Scroll guide indicator */}
-      {videos.length > 1 && currentVideoIndex === 0 && (
+      {videos.length > 1 && safeIndex === 0 && (
         <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/30 px-3 py-1 rounded-full z-30 flex items-center">
           <span className="mr-2">Swipe up for more</span>
           <svg className="h-4 w-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
