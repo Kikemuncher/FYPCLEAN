@@ -4,55 +4,62 @@ import React, { useEffect, useState, useRef } from "react";
 import { useVideoStore } from "@/store/videoStore";
 
 export default function FeedList() {
+  // Store state
   const { videos, currentVideoIndex, setCurrentVideoIndex, fetchVideos } = useVideoStore();
+  
+  // Local state
   const [isClient, setIsClient] = useState(false);
-  const videoRefs = useRef<HTMLVideoElement[]>([]);
   const [isMuted, setIsMuted] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [isScrollLocked, setIsScrollLocked] = useState(false);
+  const scrollTimeout = useRef(null);
 
-  // Load videos on mount
+  // Only run client-side
   useEffect(() => {
     setIsClient(true);
     fetchVideos();
+    
+    // Clean up any timeouts on unmount
+    return () => {
+      if (scrollTimeout.current) {
+        clearTimeout(scrollTimeout.current);
+      }
+    };
   }, [fetchVideos]);
 
-  // Play current video, pause others
-  useEffect(() => {
-    if (!isClient || videos.length === 0) return;
+  // Navigation with scroll lock
+  const navigateTo = (index) => {
+    // Don't navigate if already navigating
+    if (isScrollLocked) return;
+    
+    // Don't navigate beyond limits
+    if (index < 0 || index >= videos.length) return;
+    
+    // Set scroll lock
+    setIsScrollLocked(true);
+    
+    // Navigate
+    setCurrentVideoIndex(index);
+    
+    // Release lock after animation would complete
+    if (scrollTimeout.current) {
+      clearTimeout(scrollTimeout.current);
+    }
+    
+    scrollTimeout.current = setTimeout(() => {
+      setIsScrollLocked(false);
+    }, 1000);
+  };
 
-    videoRefs.current.forEach((videoRef, index) => {
-      if (!videoRef) return;
-      
-      if (index === currentVideoIndex) {
-        try {
-          videoRef.play().catch(() => {});
-        } catch (error) {}
-      } else {
-        try {
-          videoRef.pause();
-          videoRef.currentTime = 0;
-        } catch (error) {}
-      }
-    });
-  }, [currentVideoIndex, videos, isClient]);
-
-  // Simple navigation
+  // Simple navigation wrappers
   const goToNextVideo = () => {
     if (currentVideoIndex < videos.length - 1) {
-      setCurrentVideoIndex(currentVideoIndex + 1);
+      navigateTo(currentVideoIndex + 1);
     }
   };
 
   const goToPrevVideo = () => {
     if (currentVideoIndex > 0) {
-      setCurrentVideoIndex(currentVideoIndex - 1);
-    }
-  };
-
-  // Set video refs
-  const setVideoRef = (el: HTMLVideoElement | null, index: number) => {
-    if (el) {
-      videoRefs.current[index] = el;
+      navigateTo(currentVideoIndex - 1);
     }
   };
 
@@ -61,35 +68,52 @@ export default function FeedList() {
     setIsMuted(!isMuted);
   };
 
-  // Handle wheel events
-  const handleWheel = (e: React.WheelEvent) => {
+  // Handle wheel event with throttling
+  const lastWheelTime = useRef(0);
+  
+  const handleWheel = (e) => {
     e.preventDefault();
+    
+    // Don't process if locked or too soon after last wheel
+    const now = Date.now();
+    if (isScrollLocked || now - lastWheelTime.current < 500) {
+      return;
+    }
+    
+    lastWheelTime.current = now;
     
     if (e.deltaY > 0) {
       goToNextVideo();
-    } else {
+    } else if (e.deltaY < 0) {
       goToPrevVideo();
     }
   };
 
-  // Handle touch events
-  const [touchStart, setTouchStart] = useState(0);
-  const [touchEnd, setTouchEnd] = useState(0);
+  // Touch handling with strict limits
+  const touchStartY = useRef(0);
+  const touchStartTime = useRef(0);
   
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.touches[0].clientY);
+  const handleTouchStart = (e) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchStartTime.current = Date.now();
   };
   
-  const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.touches[0].clientY);
-  };
-  
-  const handleTouchEnd = () => {
-    const diff = touchStart - touchEnd;
-    if (diff > 50) {
-      goToNextVideo();
-    } else if (diff < -50) {
-      goToPrevVideo();
+  const handleTouchEnd = (e) => {
+    // Skip if already scrolling
+    if (isScrollLocked) return;
+    
+    // Calculate distance and time
+    const touchEnd = e.changedTouches[0].clientY;
+    const touchDiff = touchStartY.current - touchEnd;
+    const touchTime = Date.now() - touchStartTime.current;
+    
+    // Only process deliberate swipes (not taps)
+    if (Math.abs(touchDiff) > 70 && touchTime > 100 && touchTime < 1000) {
+      if (touchDiff > 0) {
+        goToNextVideo();
+      } else {
+        goToPrevVideo();
+      }
     }
   };
 
@@ -116,17 +140,14 @@ export default function FeedList() {
 
   return (
     <div 
-      ref={containerRef}
       className="h-screen w-full overflow-hidden bg-black relative"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       {/* Current Video */}
       <div className="w-full h-full relative">
         <video
-          ref={(el) => setVideoRef(el, currentVideoIndex)}
           src={currentVideo.videoUrl}
           className="w-full h-full object-cover"
           loop
@@ -181,14 +202,14 @@ export default function FeedList() {
           </button>
         </div>
         
-        {/* Navigation Buttons - more to the left */}
+        {/* Navigation Buttons - very far left */}
         <div className="absolute left-2 top-1/2 transform -translate-y-1/2 flex flex-col space-y-4 z-30">
           <button 
             onClick={goToPrevVideo}
             className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-3 ${
-              currentVideoIndex === 0 ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
+              currentVideoIndex === 0 || isScrollLocked ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
             }`}
-            disabled={currentVideoIndex === 0}
+            disabled={currentVideoIndex === 0 || isScrollLocked}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -197,9 +218,9 @@ export default function FeedList() {
           <button 
             onClick={goToNextVideo}
             className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-3 ${
-              currentVideoIndex === videos.length - 1 ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
+              currentVideoIndex === videos.length - 1 || isScrollLocked ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
             }`}
-            disabled={currentVideoIndex === videos.length - 1}
+            disabled={currentVideoIndex === videos.length - 1 || isScrollLocked}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -232,8 +253,17 @@ export default function FeedList() {
           <span className="text-white text-sm">{currentVideoIndex + 1} / {videos.length}</span>
         </div>
         
-        {/* Loading new video indicator - only show during transitions */}
-        {/* Removed for simplicity */}
+        {/* Lock indicator */}
+        {isScrollLocked && (
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-30">
+            <div className="bg-black/30 rounded-full px-3 py-1 flex items-center">
+              <div className="w-3 h-3 mr-2">
+                <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-white"></div>
+              </div>
+              <span className="text-white text-xs">Changing video...</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
