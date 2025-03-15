@@ -10,6 +10,7 @@ export default function FeedList() {
   const videoRefs = useRef<HTMLVideoElement[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
+  const lastNavigationTime = useRef(0);
 
   // Only run after component mounts (client-side)
   useEffect(() => {
@@ -48,93 +49,97 @@ export default function FeedList() {
       }
     });
 
-    // Allow scrolling again after animation completes
+    // Allow scrolling again after animation completes but with a delay
     setTimeout(() => {
       setIsScrolling(false);
-    }, 600);
+    }, 800);
   }, [currentVideoIndex, videos, isClient]);
 
-  // WHEEL NAVIGATION - Simple but effective
+  // Navigation function with rate limiting
+  const navigateToVideo = (direction: 'prev' | 'next') => {
+    // Rate limiting - prevent rapid navigation
+    const now = Date.now();
+    if (now - lastNavigationTime.current < 800 || isScrolling) {
+      return;
+    }
+    
+    lastNavigationTime.current = now;
+    setIsScrolling(true);
+    
+    if (direction === 'next' && currentVideoIndex < videos.length - 1) {
+      setCurrentVideoIndex(currentVideoIndex + 1);
+    } else if (direction === 'prev' && currentVideoIndex > 0) {
+      setCurrentVideoIndex(currentVideoIndex - 1);
+    } else {
+      setIsScrolling(false);
+    }
+  };
+
+  // VERY SIMPLE KEYBOARD NAVIGATION
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp') {
+        navigateToVideo('prev');
+      } else if (e.key === 'ArrowDown') {
+        navigateToVideo('next');
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentVideoIndex, isScrolling]);
+
+  // WHEEL HANDLER - Simple but rate-limited
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     
-    if (isScrolling) return;
-    
-    // Only respond to substantial wheel movements
-    if (Math.abs(e.deltaY) < 30) return;
-    
-    setIsScrolling(true);
-    
-    if (e.deltaY > 0 && currentVideoIndex < videos.length - 1) {
-      // Scroll down = next video
-      setCurrentVideoIndex(currentVideoIndex + 1);
-    } else if (e.deltaY < 0 && currentVideoIndex > 0) {
-      // Scroll up = previous video
-      setCurrentVideoIndex(currentVideoIndex - 1);
-    } else {
-      // If we didn't actually navigate, don't lock scrolling
-      setIsScrolling(false);
+    if (e.deltaY > 40) {
+      navigateToVideo('next');
+    } else if (e.deltaY < -40) {
+      navigateToVideo('prev');
     }
   };
 
-  // TOUCH NAVIGATION - Simplified for reliability
-  const [touchStartY, setTouchStartY] = useState(0);
+  // TOUCH HANDLER - Simple but effective
+  const touchStartRef = useRef(0);
+  const touchMoveEnabled = useRef(true);
   
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartY(e.touches[0].clientY);
+    touchStartRef.current = e.touches[0].clientY;
+    touchMoveEnabled.current = true;
   };
   
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (isScrolling) return;
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchMoveEnabled.current || isScrolling) return;
     
-    const touchEndY = e.changedTouches[0].clientY;
-    const touchDiff = touchStartY - touchEndY;
+    const currentY = e.touches[0].clientY;
+    const diff = touchStartRef.current - currentY;
     
-    // Only navigate if swipe is substantial
-    if (Math.abs(touchDiff) < 50) return;
-    
-    setIsScrolling(true);
-    
-    if (touchDiff > 0 && currentVideoIndex < videos.length - 1) {
-      // Swipe up = next video
-      setCurrentVideoIndex(currentVideoIndex + 1);
-    } else if (touchDiff < 0 && currentVideoIndex > 0) {
-      // Swipe down = previous video
-      setCurrentVideoIndex(currentVideoIndex - 1);
-    } else {
-      // If we didn't actually navigate, don't lock scrolling
-      setIsScrolling(false);
+    // If substantial movement, navigate and disable further movement until touchend
+    if (Math.abs(diff) > 60) {
+      touchMoveEnabled.current = false;
+      
+      if (diff > 0) {
+        navigateToVideo('next');
+      } else {
+        navigateToVideo('prev');
+      }
     }
   };
 
-  // BUTTON NAVIGATION - Direct and simple
-  const goToNextVideo = () => {
-    if (isScrolling || currentVideoIndex >= videos.length - 1) return;
-    
-    setIsScrolling(true);
-    setCurrentVideoIndex(currentVideoIndex + 1);
-  };
-
-  const goToPrevVideo = () => {
-    if (isScrolling || currentVideoIndex <= 0) return;
-    
-    setIsScrolling(true);
-    setCurrentVideoIndex(currentVideoIndex - 1);
-  };
-
-  // Set video refs for controlling play/pause
+  // Set video refs
   const setVideoRef = (el: HTMLVideoElement | null, index: number) => {
     if (el) {
       videoRefs.current[index] = el;
     }
   };
 
-  // Toggle video mute state
+  // Toggle mute
   const toggleMute = () => {
     setIsMuted(!isMuted);
   };
 
-  // Handle server-side rendering gracefully
+  // Server-side rendering fallback
   if (!isClient) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -143,7 +148,7 @@ export default function FeedList() {
     );
   }
 
-  // Show fallback if no videos are available
+  // No videos fallback
   if (videos.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -156,7 +161,7 @@ export default function FeedList() {
     <div 
       className="h-screen w-full overflow-hidden bg-black relative"
       onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
       onWheel={handleWheel}
     >
       {/* Full-height container that moves up and down */}
@@ -165,10 +170,8 @@ export default function FeedList() {
         style={{ height: `${videos.length * 100}vh` }}
         animate={{ y: `-${currentVideoIndex * 100}vh` }}
         transition={{ 
-          type: "spring", 
-          stiffness: 200,
-          damping: 25,
-          duration: 0.6
+          duration: 0.7,
+          ease: [0.32, 0.72, 0.24, 0.99]  // Nice smooth custom easing
         }}
       >
         {/* Render all videos in position */}
@@ -243,27 +246,27 @@ export default function FeedList() {
         ))}
       </motion.div>
 
-      {/* Navigation buttons */}
-      <div className="absolute left-2 bottom-20 flex flex-col space-y-3 z-30">
+      {/* Navigation buttons - CENTERED VERSION */}
+      <div className="absolute left-1/2 transform -translate-x-1/2 bottom-24 flex space-x-8 z-30">
         <button 
-          onClick={goToPrevVideo}
-          className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-2 ${
+          onClick={() => navigateToVideo('prev')}
+          className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-3 ${
             currentVideoIndex === 0 || isScrolling ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
           }`}
           disabled={currentVideoIndex === 0 || isScrolling}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>
         </button>
         <button 
-          onClick={goToNextVideo}
-          className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-2 ${
+          onClick={() => navigateToVideo('next')}
+          className={`bg-black/50 hover:bg-black/70 text-white rounded-full p-3 ${
             currentVideoIndex === videos.length - 1 || isScrolling ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
           }`}
           disabled={currentVideoIndex === videos.length - 1 || isScrolling}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
@@ -292,15 +295,6 @@ export default function FeedList() {
       {/* Video counter indicator */}
       <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
         <span className="text-white text-sm">{currentVideoIndex + 1} / {videos.length}</span>
-      </div>
-      
-      {/* Helper text for scrolling - for debugging only */}
-      <div className="absolute bottom-4 w-full flex justify-center">
-        <div className="bg-black/30 rounded-full px-3 py-1">
-          <span className="text-white text-xs">
-            Swipe or scroll to navigate {isScrolling ? '(changing...)' : ''}
-          </span>
-        </div>
       </div>
     </div>
   );
