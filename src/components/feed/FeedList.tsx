@@ -138,10 +138,10 @@ export default function FeedList(): JSX.Element {
       // Do this immediately for a more responsive feel
       setSwipeProgress(0);
       
-      // Unlock after animation completes
+      // Unlock after animation completes - REDUCED from 400ms to 200ms
       setTimeout(() => {
         setIsSwipeLocked(false);
-      }, 400);
+      }, 200);
     }
   }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
 
@@ -272,8 +272,8 @@ export default function FeedList(): JSX.Element {
     }
     
     // For trackpad or continuous scrolling, update progress in a natural direction
-    // Apply a multiplier for sensitivity adjustment - Increased by 20%
-    const progressDelta = -delta * 0.6; // Was 0.5, increased to 0.6 for 20% more sensitivity
+    // Apply a multiplier for sensitivity adjustment - Significantly increased for more responsiveness
+    const progressDelta = -delta * 0.9; // Was 0.6, increased to 0.9 for higher sensitivity
     
     // Update progress for visual feedback
     let newProgress = swipeProgress + progressDelta;
@@ -309,7 +309,7 @@ export default function FeedList(): JSX.Element {
     
     // For touch, we use the difference from the start position for more natural feel
     // This creates a direct 1:1 mapping between finger position and content position
-    const swipeDistance = diff * 1.44; // Increased from 1.2 to 1.44 (20% more sensitivity)
+    const swipeDistance = diff * 2.0; // Significantly increased from 1.44 for much higher sensitivity
     
     // Calculate progress - FLIPPED SIGN for consistent direction
     let newProgress = -(swipeDistance / containerHeight) * 100;
@@ -337,42 +337,42 @@ export default function FeedList(): JSX.Element {
   // Custom transition settings based on interaction type
   const getTransitionSettings = useCallback(() => {
     if (isSwipeLocked) {
-      // Full animation when snapping to a video - stiffer spring for more decisive snapping
+      // Full animation when snapping to a video - much faster with higher stiffness
       return {
         type: "spring",
-        stiffness: 500,  // Even stiffer for more decisive snapping (was 400)
-        damping: 50,     // Increased damping for less bounce (was 40)
-        duration: 0.4,   // Slightly longer for more complete transitions (was 0.3)
-        restDelta: 0.0001 // Ensures animation completes fully (was 0.001)
+        stiffness: 700,  // Increased from 500 to 700 for faster snapping
+        damping: 80,     // Increased from 50 to 80 for less bounce
+        duration: 0.2,   // Reduced from 0.4 to 0.2 for faster transitions
+        restDelta: 0.0001
       };
     } else if (Math.abs(swipeProgress) > 0) {
       // Responsive movement during active scrolling
       return {
         type: "spring",
-        stiffness: 1200, // Increased stiffness for more responsive feel (was 1000)
-        damping: 120,    // Increased damping (was 100)
-        duration: 0.1
+        stiffness: 1500, // Increased from 1200 for even more responsive feel
+        damping: 100,    // Reduced from 120 to 100 for slightly more fluid movement
+        duration: 0.05   // Reduced from 0.1 to 0.05 for faster response
       };
     } else {
       // Default state
       return {
         type: "spring",
-        stiffness: 500,  // Matched to the locked state (was 400)
-        damping: 50,     // Matched to the locked state (was 40)
-        duration: 0.4    // Matched to the locked state (was 0.3)
+        stiffness: 700,  // Matched to the locked state
+        damping: 80,     // Matched to the locked state
+        duration: 0.2    // Matched to the locked state
       };
     }
   }, [isSwipeLocked, swipeProgress]);
   
-  // Use a timeout to check for scrolling inactivity
+  // Use a timeout to check for scrolling inactivity - more aggressively
   useEffect(() => {
     if (Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
       const checkInactivityInterval = setInterval(() => {
-        // If it's been more than 150ms since the last wheel event and we have scroll progress
-        if (Date.now() - lastWheelMovement.current > 150 && Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
+        // If it's been more than 80ms since the last wheel event and we have scroll progress
+        if (Date.now() - lastWheelMovement.current > 80 && Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
           handleScrollEnd();
         }
-      }, 100);
+      }, 40); // Check twice as frequently
       
       return () => clearInterval(checkInactivityInterval);
     }
@@ -449,11 +449,11 @@ export default function FeedList(): JSX.Element {
           if (Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
             handleScrollEnd();
           }
-        }, 120); // Short pause in scrolling will trigger snapping
+        }, 60); // Reduced from 120ms to 60ms - detect pauses much faster
       }
       
       // Set normal end detection timeout (when scrolling fully stops)
-      wheelTimeout.current = setTimeout(handleWheelEndEvent, 60);
+      wheelTimeout.current = setTimeout(handleWheelEndEvent, 40); // Reduced from 60ms to 40ms
     };
     
     window.addEventListener('wheel', wheelHandler, { passive: false });
@@ -556,21 +556,28 @@ export default function FeedList(): JSX.Element {
               }}
             >
               {isVisible && (
-                <div className="relative w-full h-full overflow-hidden px-2 py-4">
-                  {/* Video element */}
-                  <video
-                    ref={(el) => setVideoRef(videoItem.id, el)}
-                    src={videoItem.url}
-                    className="w-full h-full object-cover rounded-2xl"
-                    loop
-                    playsInline
-                    muted={isMuted}
-                    preload="auto"
-                    controls={false}
-                  />
+                <div className="relative w-full h-full overflow-hidden px-2 py-2">
+                  {/* Video container with 9:16 aspect ratio */}
+                  <div className="relative w-full" style={{ 
+                    paddingTop: "177.78%", /* 16:9 Aspect Ratio (9 / 16 = 0.5625 or 56.25%) */
+                    overflow: "hidden",
+                    borderRadius: "16px"
+                  }}>
+                    {/* Video element */}
+                    <video
+                      ref={(el) => setVideoRef(videoItem.id, el)}
+                      src={videoItem.url}
+                      className="absolute top-0 left-0 w-full h-full object-cover rounded-2xl"
+                      loop
+                      playsInline
+                      muted={isMuted}
+                      preload="auto"
+                      controls={false}
+                    />
+                  </div>
                   
                   {/* Video info overlay */}
-                  <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent rounded-b-2xl">
+                  <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent rounded-b-2xl" style={{ zIndex: 10 }}>
                     <div className="flex items-center mb-2">
                       <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
                         <img 
@@ -599,7 +606,7 @@ export default function FeedList(): JSX.Element {
                   </div>
                   
                   {/* Side actions */}
-                  <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5">
+                  <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5" style={{ zIndex: 20 }}>
                     <button 
                       className="flex flex-col items-center"
                       onClick={(e: React.MouseEvent) => {
