@@ -108,6 +108,50 @@ export default function FeedList(): JSX.Element {
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
+  // Handle wheel end event for trackpad scrolling
+  const handleWheelEnd = useCallback(() => {
+    if (isSwipeLocked || Math.abs(swipeProgress) === 0) return;
+    
+    // Check if we've scrolled enough to change videos
+    const threshold = containerHeight * 0.15; // 15% of screen height threshold
+    
+    if (swipeProgress > threshold && currentVideoIndex > 0) {
+      // Scrolled up enough to go to previous video
+      setIsSwipeLocked(true);
+      setCurrentVideoIndex(currentVideoIndex - 1);
+      
+      // Reset after animation
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 400);
+    } else if (swipeProgress < -threshold && currentVideoIndex < VIDEOS.length - 1) {
+      // Scrolled down enough to go to next video
+      setIsSwipeLocked(true);
+      setCurrentVideoIndex(currentVideoIndex + 1);
+      
+      // Reset after animation
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 400);
+    } else {
+      // Not scrolled enough, animate back to current video
+      setIsSwipeLocked(true);
+      
+      // Use setTimeout to ensure we don't set swipeProgress too rapidly
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 300);
+    }
+  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
+  
+  // Reset progress when touch ends with improved deceleration
+  const handleTouchEnd = useCallback(() => {
+    handleWheelEnd();
+  }, [handleWheelEnd]);
+  
   // Set up client-side detection
   useEffect(() => {
     setIsClient(true);
