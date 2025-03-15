@@ -150,6 +150,22 @@ export default function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     
+    // Setup wheel end detection
+    const handleWheelEndEvent = () => {
+      if (isTrackpadScrolling) {
+        handleWheelEnd();
+      }
+    };
+    
+    // Listen for the end of scrolling
+    window.addEventListener('wheel', () => {
+      if (wheelTimeout.current) {
+        clearTimeout(wheelTimeout.current);
+      }
+      
+      wheelTimeout.current = setTimeout(handleWheelEndEvent, 150);
+    }, { passive: false });
+    
     // Cleanup
     return () => {
       window.removeEventListener('resize', updateHeight);
@@ -158,7 +174,7 @@ export default function FeedList(): JSX.Element {
         clearTimeout(wheelTimeout.current);
       }
     };
-  }, [currentVideoIndex, isMuted]);
+  }, [currentVideoIndex, isMuted, isTrackpadScrolling, handleWheelEnd]);
   
   // Handle video playback when current index changes
   useEffect(() => {
@@ -307,42 +323,29 @@ export default function FeedList(): JSX.Element {
       return;
     }
     
-    // For trackpad or continuous scrolling, update progress
+    // For trackpad or continuous scrolling, update progress in a natural direction
     // Apply a multiplier for sensitivity adjustment
-    const progressDelta = delta * 0.5;
+    // Note: we're negating the delta so scrolling down/up moves the content in the expected direction
+    const progressDelta = -delta * 0.5;
     
     // Update progress for visual feedback
     let newProgress = swipeProgress + progressDelta;
     
     // Apply resistance at the ends
-    if ((currentVideoIndex === 0 && newProgress < 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
+    if ((currentVideoIndex === 0 && newProgress > 0) || 
+        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
       newProgress = newProgress * 0.3; // Resistance factor
     }
     
+    // Clamp the progress to reasonable limits
+    const maxProgress = containerHeight * 0.4; // Allow scrolling up to 40% of the screen
+    newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
+    
     setSwipeProgress(newProgress);
     
-    // Check if we've crossed the threshold to change videos
-    const threshold = isTrackpadScrolling ? 70 : 50; // Higher threshold for trackpad
-    
-    if (Math.abs(newProgress) > threshold) {
-      setIsSwipeLocked(true);
-      
-      if (newProgress > 0 && currentVideoIndex < VIDEOS.length - 1) {
-        // Go to next video
-        setCurrentVideoIndex(currentVideoIndex + 1);
-      } else if (newProgress < 0 && currentVideoIndex > 0) {
-        // Go to previous video
-        setCurrentVideoIndex(currentVideoIndex - 1);
-      }
-      
-      // Reset after animation
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 400); // Animation duration
-    }
-  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length, detectTrackpad, isTrackpadScrolling]);
+    // We don't trigger video changes during wheel events for trackpad scrolling
+    // This will only happen on wheel end/release
+  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length, detectTrackpad, isTrackpadScrolling, containerHeight]);
   
   // Handle touch events for mobile with improved inertia
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -354,41 +357,60 @@ export default function FeedList(): JSX.Element {
     if (isSwipeLocked) return;
     
     const currentY = e.touches[0].clientY;
-    const diff = touchMoveY.current - currentY;
+    const diff = touchStartY.current - currentY;
     touchMoveY.current = currentY;
     
-    // Similar logic to wheel handler but with different sensitivity
-    const delta = diff * 0.8; // Mobile sensitivity is higher
-    let newProgress = swipeProgress + delta;
+    // For touch, we use the difference from the start position for more natural feel
+    // This creates a direct 1:1 mapping between finger position and content position
+    const swipeDistance = diff * 1.2; // Adjust sensitivity
     
-    // Apply same resistance logic as wheel handler
-    if ((currentVideoIndex === 0 && newProgress < 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
+    // Calculate progress as a percentage of the container height for consistency
+    let newProgress = -(swipeDistance / containerHeight) * 100;
+    
+    // Apply resistance at the ends (reversed from scroll since directions are natural)
+    if ((currentVideoIndex === 0 && newProgress > 0) || 
+        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
       newProgress = newProgress * 0.3;
     }
     
+    // Clamp to reasonable limits
+    const maxProgress = containerHeight * 0.4;
+    newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
+    
     setSwipeProgress(newProgress);
     
-    if (Math.abs(newProgress) > 50) {
+    // We don't change videos during touch, only on touch end
+  }, [isSwipeLocked, currentVideoIndex, VIDEOS.length, containerHeight]);
+  
+  // Handle wheel end event for trackpad scrolling
+  const handleWheelEnd = useCallback(() => {
+    if (isSwipeLocked || Math.abs(swipeProgress) === 0) return;
+    
+    // Check if we've scrolled enough to change videos
+    const threshold = containerHeight * 0.15; // 15% of screen height threshold
+    
+    if (swipeProgress > threshold && currentVideoIndex > 0) {
+      // Scrolled up enough to go to previous video
       setIsSwipeLocked(true);
+      setCurrentVideoIndex(currentVideoIndex - 1);
       
-      if (newProgress > 0 && currentVideoIndex < VIDEOS.length - 1) {
-        setCurrentVideoIndex(currentVideoIndex + 1);
-      } else if (newProgress < 0 && currentVideoIndex > 0) {
-        setCurrentVideoIndex(currentVideoIndex - 1);
-      }
-      
+      // Reset after animation
       setTimeout(() => {
         setSwipeProgress(0);
         setIsSwipeLocked(false);
       }, 400);
-    }
-  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length]);
-  
-  // Reset progress when touch ends with improved deceleration
-  const handleTouchEnd = useCallback(() => {
-    if (!isSwipeLocked && Math.abs(swipeProgress) > 0) {
-      // Apply a natural deceleration effect
+    } else if (swipeProgress < -threshold && currentVideoIndex < VIDEOS.length - 1) {
+      // Scrolled down enough to go to next video
+      setIsSwipeLocked(true);
+      setCurrentVideoIndex(currentVideoIndex + 1);
+      
+      // Reset after animation
+      setTimeout(() => {
+        setSwipeProgress(0);
+        setIsSwipeLocked(false);
+      }, 400);
+    } else {
+      // Not scrolled enough, animate back to current video
       const decelerateToZero = () => {
         setSwipeProgress((prev) => {
           // Calculate new progress with deceleration
@@ -408,7 +430,12 @@ export default function FeedList(): JSX.Element {
       // Start deceleration animation
       requestAnimationFrame(decelerateToZero);
     }
-  }, [isSwipeLocked, swipeProgress]);
+  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
+  
+  // Reset progress when touch ends with improved deceleration
+  const handleTouchEnd = useCallback(() => {
+    handleWheelEnd();
+  }, [handleWheelEnd]);
 
   // Custom transition settings based on interaction type
   const getTransitionSettings = useCallback(() => {
@@ -463,7 +490,7 @@ export default function FeedList(): JSX.Element {
         className="absolute w-full"
         style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
-          y: -currentVideoIndex * containerHeight + swipeProgress 
+          y: -currentVideoIndex * containerHeight - swipeProgress 
         }}
         transition={getTransitionSettings()}
       >
