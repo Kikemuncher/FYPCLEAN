@@ -19,6 +19,24 @@ interface VideoState {
   incrementView: (videoId: string) => void;
 }
 
+// Try loading Firebase
+let firebaseEnabled = false;
+try {
+  // Simple check if Firebase might be available - this is just for detection
+  const isFirebaseAvailable = typeof window !== 'undefined' && 
+    window.location.hostname !== 'localhost' && 
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  
+  if (isFirebaseAvailable) {
+    firebaseEnabled = true;
+    console.log('Firebase mode enabled');
+  } else {
+    console.log('Sample video mode enabled');
+  }
+} catch (error) {
+  console.error('Error checking Firebase availability:', error);
+}
+
 // Enhanced sample videos that are guaranteed to work
 const sampleVideos: VideoData[] = [
   {
@@ -33,8 +51,6 @@ const sampleVideos: VideoData[] = [
     views: 123000,
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-mother-with-her-little-daughter-decorating-a-christmas-tree-39745-large.mp4',
     userAvatar: 'https://randomuser.me/api/portraits/women/44.jpg',
-    hashtags: ['holidays', 'christmas', 'family'],
-    createdAt: Date.now() - 86400000 * 2 // 2 days ago
   },
   {
     id: 'sample-2',
@@ -48,8 +64,6 @@ const sampleVideos: VideoData[] = [
     views: 87600,
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-mother-with-her-little-daughter-eating-a-marshmallow-in-nature-39764-large.mp4',
     userAvatar: 'https://randomuser.me/api/portraits/women/65.jpg',
-    hashtags: ['outdoors', 'camping', 'family'],
-    createdAt: Date.now() - 86400000 * 1 // 1 day ago
   },
   {
     id: 'sample-3',
@@ -63,8 +77,6 @@ const sampleVideos: VideoData[] = [
     views: 234000,
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
     userAvatar: 'https://randomuser.me/api/portraits/women/22.jpg',
-    hashtags: ['aesthetic', 'nightlife', 'neon'],
-    createdAt: Date.now() - 86400000 * 3 // 3 days ago
   },
   {
     id: 'sample-4',
@@ -78,8 +90,6 @@ const sampleVideos: VideoData[] = [
     views: 98700,
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-taking-photos-from-different-angles-of-a-model-34421-large.mp4',
     userAvatar: 'https://randomuser.me/api/portraits/men/32.jpg',
-    hashtags: ['fashion', 'photoshoot', 'bts'],
-    createdAt: Date.now() - 86400000 * 4 // 4 days ago
   },
   {
     id: 'sample-5',
@@ -93,8 +103,6 @@ const sampleVideos: VideoData[] = [
     views: 345000,
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-womans-feet-splashing-in-the-pool-1261-large.mp4',
     userAvatar: 'https://randomuser.me/api/portraits/women/29.jpg',
-    hashtags: ['summer', 'poolside', 'relax'],
-    createdAt: Date.now() - 86400000 * 5 // 5 days ago
   }
 ];
 
@@ -112,8 +120,6 @@ const moreVideoSets: VideoData[] = [
     views: 178000,
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-city-traffic-in-a-street-with-pink-lighting-34562-large.mp4',
     userAvatar: 'https://randomuser.me/api/portraits/men/76.jpg',
-    hashtags: ['citylife', 'urban', 'nightcity'],
-    createdAt: Date.now() - 86400000 * 6 // 6 days ago
   },
   {
     id: 'more-2',
@@ -127,8 +133,6 @@ const moreVideoSets: VideoData[] = [
     views: 89400,
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-pouring-coffee-in-a-cup-seen-up-close-18250-large.mp4',
     userAvatar: 'https://randomuser.me/api/portraits/women/52.jpg',
-    hashtags: ['coffee', 'morning', 'routine'],
-    createdAt: Date.now() - 86400000 * 7 // 7 days ago
   },
   {
     id: 'more-3',
@@ -142,9 +146,37 @@ const moreVideoSets: VideoData[] = [
     views: 567000,
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-woman-exercising-with-battle-ropes-40168-large.mp4',
     userAvatar: 'https://randomuser.me/api/portraits/women/36.jpg',
-    hashtags: ['fitness', 'workout', 'motivation'],
-    createdAt: Date.now() - 86400000 * 8 // 8 days ago
   },
+];
+
+// Add more fallback videos if needed
+const fallbackVideos: VideoData[] = [
+  {
+    id: 'fallback-1',
+    username: 'travel_addict',
+    caption: 'Beach sunset vibes 🌅 #travel #beach #sunset',
+    song: 'Tropical Dreams - Beach Sounds',
+    likes: 123400,
+    comments: 4300,
+    saves: 18700,
+    shares: 8900,
+    views: 893000,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-woman-silhouette-sunrise-watching-the-beach-1209-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/17.jpg',
+  },
+  {
+    id: 'fallback-2',
+    username: 'food_lover',
+    caption: 'Making fresh pasta at home 🍝 #cooking #homemade #pasta',
+    song: 'Italian Cooking - Kitchen Vibes',
+    likes: 67800,
+    comments: 2190,
+    saves: 9230,
+    shares: 3120,
+    views: 412000,
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-making-handmade-pasta-on-a-wooden-counter-9124-large.mp4',
+    userAvatar: 'https://randomuser.me/api/portraits/women/89.jpg',
+  }
 ];
 
 export const useVideoStore = create<VideoState>((set, get) => ({
@@ -155,125 +187,10 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   lastVisible: null,
   error: null,
   
-  setCurrentVideoIndex: (index) => set({ currentVideoIndex: index }),
-  
-  // Initial fetch
-  fetchVideos: async () => {
-    set({ loading: true, error: null });
-    
-    try {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      set({ 
-        videos: sampleVideos,
-        loading: false,
-        hasMore: true,
-        lastVisible: { id: sampleVideos[sampleVideos.length - 1].id }
-      });
-    } catch (error) {
-      console.error("Error fetching videos:", error);
-      set({ 
-        loading: false, 
-        error: "Failed to load videos. Please try again." 
-      });
-    }
-  },
-  
-  // Fetch more videos for infinite scroll
-  fetchMoreVideos: async () => {
-    const { loading, hasMore } = get();
-    
-    if (loading || !hasMore) return;
-    
-    set({ loading: true, error: null });
-    
-    try {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 1200));
-      
-      const { videos } = get();
-      
-      // Get a slice of additional videos
-      const additionalVideos = moreVideoSets.map((video, index) => ({
-        ...video,
-        id: `more-${Date.now()}-${index}`,
-      }));
-      
-      set({ 
-        videos: [...videos, ...additionalVideos],
-        loading: false,
-        hasMore: videos.length < 15, // Limit for demo purposes
-        lastVisible: additionalVideos.length > 0 
-          ? { id: additionalVideos[additionalVideos.length - 1].id }
-          : get().lastVisible
-      });
-    } catch (error) {
-      console.error("Error fetching more videos:", error);
-      set({ 
-        loading: false, 
-        error: "Failed to load more videos. Please try again."
-      });
-    }
-  },
-  
-  // Like video
-  likeVideo: (videoId) => {
+  setCurrentVideoIndex: (index) => {
+    // Guard against out-of-bounds indices
     const { videos } = get();
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, likes: video.likes + 1 } 
-        : video
-    );
+    if (videos.length === 0) return;
     
-    set({ videos: updatedVideos });
-  },
-  
-  // Unlike video
-  unlikeVideo: (videoId) => {
-    const { videos } = get();
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, likes: Math.max(0, video.likes - 1) } 
-        : video
-    );
-    
-    set({ videos: updatedVideos });
-  },
-  
-  // Share video
-  shareVideo: (videoId) => {
-    const { videos } = get();
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, shares: video.shares + 1 } 
-        : video
-    );
-    
-    set({ videos: updatedVideos });
-  },
-  
-  // Save video
-  saveVideo: (videoId) => {
-    const { videos } = get();
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, saves: video.saves + 1 } 
-        : video
-    );
-    
-    set({ videos: updatedVideos });
-  },
-  
-  // Increment view count
-  incrementView: (videoId) => {
-    const { videos } = get();
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, views: video.views + 1 } 
-        : video
-    );
-    
-    set({ videos: updatedVideos });
-  }
-}));
+    const safeIndex = Math.min(Math.max(0, index), videos.length - 1);
+    set({ current
