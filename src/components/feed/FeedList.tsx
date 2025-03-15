@@ -92,11 +92,17 @@ export default function FeedList(): JSX.Element {
   // Scroll-related state
   const [swipeProgress, setSwipeProgress] = useState<number>(0);
   const [isSwipeLocked, setIsSwipeLocked] = useState<boolean>(false);
+  const [isTrackpadScrolling, setIsTrackpadScrolling] = useState<boolean>(false);
   
   // Touch refs
   const touchStartY = useRef<number>(0);
   const touchMoveY = useRef<number>(0);
   const lastTap = useRef<number>(0);
+  
+  // Wheel event tracking
+  const wheelEvents = useRef<number[]>([]);
+  const lastWheelTime = useRef<number>(0);
+  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
   
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
@@ -148,6 +154,9 @@ export default function FeedList(): JSX.Element {
     return () => {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
+      if (wheelTimeout.current) {
+        clearTimeout(wheelTimeout.current);
+      }
     };
   }, [currentVideoIndex, isMuted]);
   
@@ -232,17 +241,78 @@ export default function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // Handle wheel event for scrolling
+  // Detect trackpad vs mouse wheel
+  const detectTrackpad = useCallback((e: WheelEvent) => {
+    // Most trackpads send wheel events with smaller deltas and pixelated values
+    // While mouse wheels typically have larger deltas and are more discrete
+    const now = Date.now();
+    wheelEvents.current.push(Math.abs(e.deltaY));
+    
+    // Keep only recent events for analysis
+    const recentEvents = wheelEvents.current.slice(-5);
+    wheelEvents.current = recentEvents;
+    
+    // If we have enough events to analyze
+    if (recentEvents.length >= 3) {
+      // Calculate average delta
+      const avgDelta = recentEvents.reduce((sum, delta) => sum + delta, 0) / recentEvents.length;
+      
+      // Check time between events
+      const timeDiff = now - lastWheelTime.current;
+      
+      // Trackpads typically send many small events in quick succession
+      const isLikelyTrackpad = 
+        (avgDelta < 10 || recentEvents.some(delta => delta < 5)) && 
+        timeDiff < 100; // Events are close together
+      
+      setIsTrackpadScrolling(isLikelyTrackpad);
+    }
+    
+    lastWheelTime.current = now;
+    
+    // Reset trackpad detection after a period of inactivity
+    if (wheelTimeout.current) {
+      clearTimeout(wheelTimeout.current);
+    }
+    
+    wheelTimeout.current = setTimeout(() => {
+      wheelEvents.current = [];
+      setIsTrackpadScrolling(false);
+    }, 500);
+  }, []);
+  
+  // Handle wheel event for scrolling with improved detection
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
+    // Pass to detector
+    detectTrackpad(e.nativeEvent);
+    
     if (isSwipeLocked) return;
     
-    // Apply a multiplier for more sensitive scrolling
-    const delta = e.deltaY * 0.5; // Adjust this value to control sensitivity
+    const delta = e.deltaY;
+    
+    // Determine if this is likely a discrete mouse wheel "click"
+    const isDiscreteWheel = Math.abs(delta) > 30 && !isTrackpadScrolling;
+    
+    // For discrete mouse wheel, move directly to next/prev video
+    if (isDiscreteWheel) {
+      if (delta > 0 && currentVideoIndex < VIDEOS.length - 1) {
+        setCurrentVideoIndex(currentVideoIndex + 1);
+        setSwipeProgress(0);
+      } else if (delta < 0 && currentVideoIndex > 0) {
+        setCurrentVideoIndex(currentVideoIndex - 1);
+        setSwipeProgress(0);
+      }
+      return;
+    }
+    
+    // For trackpad or continuous scrolling, update progress
+    // Apply a multiplier for sensitivity adjustment
+    const progressDelta = delta * 0.5;
     
     // Update progress for visual feedback
-    let newProgress = swipeProgress + delta;
+    let newProgress = swipeProgress + progressDelta;
     
     // Apply resistance at the ends
     if ((currentVideoIndex === 0 && newProgress < 0) || 
@@ -253,7 +323,9 @@ export default function FeedList(): JSX.Element {
     setSwipeProgress(newProgress);
     
     // Check if we've crossed the threshold to change videos
-    if (Math.abs(newProgress) > 50) { // Threshold for triggering navigation
+    const threshold = isTrackpadScrolling ? 70 : 50; // Higher threshold for trackpad
+    
+    if (Math.abs(newProgress) > threshold) {
       setIsSwipeLocked(true);
       
       if (newProgress > 0 && currentVideoIndex < VIDEOS.length - 1) {
@@ -270,9 +342,9 @@ export default function FeedList(): JSX.Element {
         setIsSwipeLocked(false);
       }, 400); // Animation duration
     }
-  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length]);
+  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length, detectTrackpad, isTrackpadScrolling]);
   
-  // Handle touch events for mobile
+  // Handle touch events for mobile with improved inertia
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     touchStartY.current = e.touches[0].clientY;
     touchMoveY.current = e.touches[0].clientY;
@@ -313,12 +385,59 @@ export default function FeedList(): JSX.Element {
     }
   }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length]);
   
-  // Reset progress when touch ends
+  // Reset progress when touch ends with improved deceleration
   const handleTouchEnd = useCallback(() => {
-    if (!isSwipeLocked) {
-      setSwipeProgress(0);
+    if (!isSwipeLocked && Math.abs(swipeProgress) > 0) {
+      // Apply a natural deceleration effect
+      const decelerateToZero = () => {
+        setSwipeProgress((prev) => {
+          // Calculate new progress with deceleration
+          const newProgress = prev * 0.8;
+          
+          // Stop when close to zero to avoid endless tiny updates
+          if (Math.abs(newProgress) < 0.5) {
+            return 0;
+          }
+          
+          // Apply deceleration again on next frame
+          requestAnimationFrame(decelerateToZero);
+          return newProgress;
+        });
+      };
+      
+      // Start deceleration animation
+      requestAnimationFrame(decelerateToZero);
     }
-  }, [isSwipeLocked]);
+  }, [isSwipeLocked, swipeProgress]);
+
+  // Custom transition settings based on interaction type
+  const getTransitionSettings = useCallback(() => {
+    if (isSwipeLocked) {
+      // Full animation when snapping to a video
+      return {
+        type: "spring",
+        stiffness: 300,
+        damping: 30,
+        duration: 0.5
+      };
+    } else if (Math.abs(swipeProgress) > 0) {
+      // Responsive movement during active scrolling
+      return {
+        type: "spring",
+        stiffness: 1000,
+        damping: 90,
+        duration: 0.1
+      };
+    } else {
+      // Default state
+      return {
+        type: "spring",
+        stiffness: 300,
+        damping: 30,
+        duration: 0.2
+      };
+    }
+  }, [isSwipeLocked, swipeProgress]);
   
   // Loading state
   if (!isClient) {
@@ -346,14 +465,7 @@ export default function FeedList(): JSX.Element {
         animate={{ 
           y: -currentVideoIndex * containerHeight + swipeProgress 
         }}
-        transition={{ 
-          y: {
-            type: "spring",
-            stiffness: 300, // Controls "springiness"
-            damping: 30,    // Controls bounce reduction
-            duration: isSwipeLocked ? 0.5 : 0.2 // Faster during manual scrolling
-          }
-        }}
+        transition={getTransitionSettings()}
       >
         {VIDEOS.map((videoItem, index) => {
           // Only render videos that are close to the current one for performance
@@ -448,6 +560,21 @@ export default function FeedList(): JSX.Element {
           );
         })}
       </motion.div>
+      
+      {/* Scroll indicator based on progress */}
+      {swipeProgress !== 0 && (
+        <div className="fixed right-2 top-1/2 transform -translate-y-1/2 bg-white/20 rounded-full h-24 w-1 overflow-hidden">
+          <div 
+            className="bg-white w-full"
+            style={{ 
+              height: `${Math.min(100, Math.abs(swipeProgress * 100 / 70))}%`,
+              position: 'absolute',
+              bottom: swipeProgress > 0 ? 0 : 'auto',
+              top: swipeProgress < 0 ? 0 : 'auto'
+            }}
+          />
+        </div>
+      )}
       
       {/* Sound toggle button */}
       <button 
