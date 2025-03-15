@@ -1,4 +1,21 @@
-"use client";
+// Use a timeout to check for scrolling inactivity
+  useEffect(() => {
+    if (Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
+      const checkInactivityInterval = setInterval(() => {
+        // If it's been more than 150ms since the last wheel event and we have scroll progress
+        if (Date.now() - lastWheelMovement.current > 150 && Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
+          handleScrollEnd();
+        }
+      }, 100);
+      
+      return () => clearInterval(checkInactivityInterval);
+    }
+  }, [swipeProgress, isSwipeLocked, handleScrollEnd]);    // Setup wheel end detection function
+    const handleWheelEndEvent = () => {
+      if (isTrackpadScrolling && !isSwipeLocked && Math.abs(swipeProgress) > 0) {
+        handleScrollEnd();
+      }
+    };"use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
@@ -192,17 +209,16 @@ export default function FeedList(): JSX.Element {
   const handleScrollEnd = useCallback(() => {
     if (isSwipeLocked) return;
     
-    // If there's meaningful progress
-    if (Math.abs(swipeProgress) > 0) {
+    // If there's any scroll progress at all, make a decision
+    if (swipeProgress !== 0) {
       setIsSwipeLocked(true);
       
-      // Calculate absolute progress as percentage of container height
-      // This tells us how far we've scrolled relative to screen height
-      const progressRatio = Math.abs(swipeProgress / (containerHeight / 2));
+      // Calculate how far we've scrolled relative to a threshold
+      // Use a more sensitive threshold since we ALWAYS want to snap
+      const threshold = containerHeight * 0.15; // 15% of screen height threshold
       
-      // If we've scrolled more than 25% of half the screen height, change videos
-      // This is equivalent to having scrolled 12.5% of the full screen height
-      if (progressRatio > 0.25) {
+      if (Math.abs(swipeProgress) > threshold) {
+        // We've scrolled enough to trigger a video change
         if (swipeProgress < 0 && currentVideoIndex < VIDEOS.length - 1) {
           // Progress is negative (scrolling down) - go to next video
           setCurrentVideoIndex(currentVideoIndex + 1);
@@ -212,17 +228,26 @@ export default function FeedList(): JSX.Element {
         }
       }
       
-      // Always reset to a clean state after deciding
+      // ALWAYS reset progress to 0 to avoid stuck state
+      // Do this immediately for a more responsive feel
+      setSwipeProgress(0);
+      
+      // Unlock after animation completes
       setTimeout(() => {
-        setSwipeProgress(0);
         setIsSwipeLocked(false);
       }, 400);
     }
   }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
   
+  // For trackpad movement detection
+  const lastWheelMovement = useRef<number>(Date.now());
+  
   // Handle wheel event for scrolling with improved detection
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
+    
+    // Record this wheel movement time
+    lastWheelMovement.current = Date.now();
     
     // Pass to detector
     detectTrackpad(e.nativeEvent);
@@ -399,28 +424,46 @@ export default function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     
-    // Setup wheel end detection with a shorter timeout for better responsiveness
-    const handleWheelEndEvent = () => {
-      if (isTrackpadScrolling && !isSwipeLocked) {
-        handleScrollEnd();
-      }
-    };
+    // We force ending wheel events when no scroll has happened for a brief period
+    // But ALSO when the user is actively scrolling but pauses briefly
+    let activeScrollTimeout: NodeJS.Timeout | null = null;
     
     // Listen for the end of scrolling with more frequent checks
-    window.addEventListener('wheel', () => {
+    const wheelHandler = () => {
+      // Cancel previous timeouts
       if (wheelTimeout.current) {
         clearTimeout(wheelTimeout.current);
       }
+      if (activeScrollTimeout) {
+        clearTimeout(activeScrollTimeout);
+      }
       
-      wheelTimeout.current = setTimeout(handleWheelEndEvent, 70); // Shorter timeout (was 90ms)
-    }, { passive: false });
+      // If we have any progress at all, set a timeout to check if scrolling has paused
+      if (Math.abs(swipeProgress) > 0) {
+        activeScrollTimeout = setTimeout(() => {
+          // If we still have progress and we're not in a locked state, snap to a video
+          if (Math.abs(swipeProgress) > 0 && !isSwipeLocked) {
+            handleScrollEnd();
+          }
+        }, 120); // Short pause in scrolling will trigger snapping
+      }
+      
+      // Set normal end detection timeout (when scrolling fully stops)
+      wheelTimeout.current = setTimeout(handleWheelEndEvent, 60);
+    };
+    
+    window.addEventListener('wheel', wheelHandler, { passive: false });
     
     // Cleanup
     return () => {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('wheel', wheelHandler);
       if (wheelTimeout.current) {
         clearTimeout(wheelTimeout.current);
+      }
+      if (activeScrollTimeout) {
+        clearTimeout(activeScrollTimeout);
       }
     };
   }, [currentVideoIndex, isMuted, isTrackpadScrolling, handleScrollEnd]);
