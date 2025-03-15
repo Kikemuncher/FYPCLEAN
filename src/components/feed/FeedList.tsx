@@ -22,10 +22,13 @@ export default function FeedList() {
   const [isDragging, setIsDragging] = useState(false);
   const [windowHeight, setWindowHeight] = useState(0);
   const [videoRefs, setVideoRefs] = useState<{[key: string]: HTMLVideoElement | null}>({});
-  
-  // Set up window height
+  const [isClient, setIsClient] = useState(false);
+
+  // Only run client-side code after mount
   useEffect(() => {
+    setIsClient(true);
     setWindowHeight(window.innerHeight);
+    
     const handleResize = () => setWindowHeight(window.innerHeight);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -38,6 +41,8 @@ export default function FeedList() {
 
   // Handle playing the current video
   useEffect(() => {
+    if (!isClient) return;
+    
     // Pause all videos
     Object.values(videoRefs).forEach(video => {
       if (video) {
@@ -49,12 +54,19 @@ export default function FeedList() {
     // Play the current video
     const currentVideo = videoRefs[`video-${currentVideoIndex}`];
     if (currentVideo) {
-      const playPromise = currentVideo.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {});
+      try {
+        const playPromise = currentVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            // Auto-play was prevented, add a play button or user interaction
+            console.log("Autoplay prevented");
+          });
+        }
+      } catch (err) {
+        console.error("Error playing video:", err);
       }
     }
-  }, [currentVideoIndex, videoRefs]);
+  }, [currentVideoIndex, videoRefs, isClient]);
 
   // Load more videos when needed
   const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
@@ -126,6 +138,17 @@ export default function FeedList() {
     }
     return -currentVideoIndex * windowHeight;
   };
+  
+  // If not client-side yet, show loading
+  if (!isClient) {
+    return (
+      <div className="fixed inset-0 bg-black flex items-center justify-center">
+        <div className="h-14 w-14">
+          <div className="animate-spin rounded-full h-14 w-14 border-2 border-t-white border-r-white border-b-transparent border-l-transparent"></div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div 
