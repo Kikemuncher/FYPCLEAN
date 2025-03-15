@@ -121,7 +121,7 @@ export default function FeedList(): JSX.Element {
       
       // Calculate how far we've scrolled relative to a threshold
       // Use a more sensitive threshold since we ALWAYS want to snap
-      const threshold = containerHeight * 0.15; // 15% of screen height threshold
+      const threshold = containerHeight * 0.12; // Reduced from 0.15 to 0.12 (makes it easier to trigger)
       
       if (Math.abs(swipeProgress) > threshold) {
         // We've scrolled enough to trigger a video change
@@ -272,8 +272,8 @@ export default function FeedList(): JSX.Element {
     }
     
     // For trackpad or continuous scrolling, update progress in a natural direction
-    // Apply a multiplier for sensitivity adjustment - FLIPPED SIGN to fix direction
-    const progressDelta = -delta * 0.5;
+    // Apply a multiplier for sensitivity adjustment - Increased by 20%
+    const progressDelta = -delta * 0.6; // Was 0.5, increased to 0.6 for 20% more sensitivity
     
     // Update progress for visual feedback
     let newProgress = swipeProgress + progressDelta;
@@ -309,7 +309,7 @@ export default function FeedList(): JSX.Element {
     
     // For touch, we use the difference from the start position for more natural feel
     // This creates a direct 1:1 mapping between finger position and content position
-    const swipeDistance = diff * 1.2; // Adjust sensitivity
+    const swipeDistance = diff * 1.44; // Increased from 1.2 to 1.44 (20% more sensitivity)
     
     // Calculate progress - FLIPPED SIGN for consistent direction
     let newProgress = -(swipeDistance / containerHeight) * 100;
@@ -523,9 +523,9 @@ export default function FeedList(): JSX.Element {
   }
   
   return (
-    <div 
+          <div 
       ref={containerRef}
-      className="h-screen w-full overflow-hidden bg-black relative"
+      className="h-screen w-full overflow-hidden bg-black relative px-1"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -534,7 +534,7 @@ export default function FeedList(): JSX.Element {
     >
       {/* Main feed container with smooth transitions */}
       <motion.div 
-        className="absolute w-full"
+        className="absolute w-full px-2"
         style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
           y: -currentVideoIndex * containerHeight + swipeProgress 
@@ -550,17 +550,18 @@ export default function FeedList(): JSX.Element {
               key={videoItem.id} 
               className="absolute w-full"
               style={{ 
-                height: containerHeight, 
+                height: containerHeight,
                 top: index * containerHeight,
+                paddingBottom: "16px", // Add spacing between videos
               }}
             >
               {isVisible && (
-                <div className="relative w-full h-full overflow-hidden">
+                <div className="relative w-full h-full overflow-hidden px-2 py-4">
                   {/* Video element */}
                   <video
                     ref={(el) => setVideoRef(videoItem.id, el)}
                     src={videoItem.url}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover rounded-2xl"
                     loop
                     playsInline
                     muted={isMuted}
@@ -569,7 +570,7 @@ export default function FeedList(): JSX.Element {
                   />
                   
                   {/* Video info overlay */}
-                  <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+                  <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent rounded-b-2xl">
                     <div className="flex items-center mb-2">
                       <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
                         <img 
