@@ -200,11 +200,11 @@ export default function FeedList(): JSX.Element {
       const progressPercent = Math.abs(swipeProgress) / containerHeight;
       const threshold = 0.1; // 10% threshold for changing videos
       
-      if (swipeProgress > 0 && progressPercent > threshold && currentVideoIndex < VIDEOS.length - 1) {
-        // Progress is positive (scrolling down) - go to next video
+      if (swipeProgress < 0 && progressPercent > threshold && currentVideoIndex < VIDEOS.length - 1) {
+        // Progress is negative (scrolling down) - go to next video
         setCurrentVideoIndex(currentVideoIndex + 1);
-      } else if (swipeProgress < 0 && progressPercent > threshold && currentVideoIndex > 0) {
-        // Progress is negative (scrolling up) - go to previous video
+      } else if (swipeProgress > 0 && progressPercent > threshold && currentVideoIndex > 0) {
+        // Progress is positive (scrolling up) - go to previous video
         setCurrentVideoIndex(currentVideoIndex - 1);
       }
       
@@ -233,7 +233,7 @@ export default function FeedList(): JSX.Element {
     // For discrete mouse wheel, move directly to next/prev video
     if (isDiscreteWheel) {
       if (delta > 0 && currentVideoIndex < VIDEOS.length - 1) {
-        // Scrolling down - next video
+        // Scrolling down - next video (delta > 0 means scrolling down)
         setIsSwipeLocked(true);
         setCurrentVideoIndex(currentVideoIndex + 1);
         setSwipeProgress(0);
@@ -241,7 +241,7 @@ export default function FeedList(): JSX.Element {
           setIsSwipeLocked(false);
         }, 300);
       } else if (delta < 0 && currentVideoIndex > 0) {
-        // Scrolling up - previous video
+        // Scrolling up - previous video (delta < 0 means scrolling up)
         setIsSwipeLocked(true);
         setCurrentVideoIndex(currentVideoIndex - 1);
         setSwipeProgress(0);
@@ -253,15 +253,15 @@ export default function FeedList(): JSX.Element {
     }
     
     // For trackpad or continuous scrolling, update progress in a natural direction
-    // Apply a multiplier for sensitivity adjustment
-    const progressDelta = delta * 0.5;
+    // Apply a multiplier for sensitivity adjustment - FLIPPED SIGN to fix direction
+    const progressDelta = -delta * 0.5;
     
     // Update progress for visual feedback
     let newProgress = swipeProgress + progressDelta;
     
     // Apply resistance at the ends
-    if ((currentVideoIndex === 0 && newProgress < 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
+    if ((currentVideoIndex === 0 && newProgress > 0) || 
+        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
       newProgress = newProgress * 0.3; // Resistance factor
     }
     
@@ -292,12 +292,12 @@ export default function FeedList(): JSX.Element {
     // This creates a direct 1:1 mapping between finger position and content position
     const swipeDistance = diff * 1.2; // Adjust sensitivity
     
-    // Calculate progress as a percentage of the container height for consistency
-    let newProgress = (swipeDistance / containerHeight) * 100;
+    // Calculate progress - FLIPPED SIGN for consistent direction
+    let newProgress = -(swipeDistance / containerHeight) * 100;
     
     // Apply resistance at the ends
-    if ((currentVideoIndex === 0 && newProgress < 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
+    if ((currentVideoIndex === 0 && newProgress > 0) || 
+        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
       newProgress = newProgress * 0.3;
     }
     
@@ -592,8 +592,8 @@ export default function FeedList(): JSX.Element {
             style={{ 
               height: `${Math.min(100, Math.abs(swipeProgress * 100 / 70))}%`,
               position: 'absolute',
-              bottom: swipeProgress < 0 ? 0 : 'auto',
-              top: swipeProgress > 0 ? 0 : 'auto'
+              bottom: swipeProgress > 0 ? 0 : 'auto',
+              top: swipeProgress < 0 ? 0 : 'auto'
             }}
           />
         </div>
