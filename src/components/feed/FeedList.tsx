@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useVideoStore } from "@/store/videoStore";
 import { motion } from "framer-motion";
+import { VideoData } from "@/types/video";
 
 export default function FeedList() {
   // Store state
@@ -14,10 +15,10 @@ export default function FeedList() {
   const [containerHeight, setContainerHeight] = useState(0);
   const [swipeProgress, setSwipeProgress] = useState(0);
   const [isSwipeLocked, setIsSwipeLocked] = useState(false);
-  const [likedVideos, setLikedVideos] = useState({});
+  const [likedVideos, setLikedVideos] = useState<Record<string, boolean>>({});
   
-  const videoRefs = useRef({});
-  const containerRef = useRef(null);
+  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const containerRef = useRef<HTMLDivElement | null>(null);
   
   // Initialize
   useEffect(() => {
@@ -33,7 +34,7 @@ export default function FeedList() {
     window.addEventListener('resize', updateHeight);
     
     // Add keyboard navigation
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp' || e.key === 'k') {
         if (currentVideoIndex > 0) {
           setCurrentVideoIndex(currentVideoIndex - 1);
@@ -91,7 +92,7 @@ export default function FeedList() {
   };
   
   // Format numbers for display
-  const formatCount = (count) => {
+  const formatCount = (count: number): string => {
     if (count >= 1000000) {
       return (count / 1000000).toFixed(1) + 'M';
     } else if (count >= 1000) {
@@ -101,7 +102,7 @@ export default function FeedList() {
   };
   
   // Handle wheel event for scrolling
-  const handleWheel = (e) => {
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
     if (isSwipeLocked) return;
@@ -144,12 +145,12 @@ export default function FeedList() {
   const touchStartY = useRef(0);
   const touchMoveY = useRef(0);
   
-  const handleTouchStart = (e) => {
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     touchStartY.current = e.touches[0].clientY;
     touchMoveY.current = e.touches[0].clientY;
   };
   
-  const handleTouchMove = (e) => {
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (isSwipeLocked) return;
     
     const currentY = e.touches[0].clientY;
@@ -214,7 +215,7 @@ export default function FeedList() {
   };
   
   // Handle toggling like directly (not via double tap)
-  const toggleLike = (videoId) => {
+  const toggleLike = (videoId: string) => {
     setLikedVideos(prev => ({
       ...prev,
       [videoId]: !prev[videoId]
@@ -324,7 +325,7 @@ export default function FeedList() {
                   <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5">
                     <button 
                       className="flex flex-col items-center"
-                      onClick={(e) => {
+                      onClick={(e: React.MouseEvent) => {
                         e.stopPropagation();
                         toggleLike(video.id);
                       }}
@@ -378,7 +379,7 @@ export default function FeedList() {
       
       {/* Sound toggle button */}
       <button 
-        onClick={(e) => {
+        onClick={(e: React.MouseEvent) => {
           e.stopPropagation();
           toggleMute();
         }}
