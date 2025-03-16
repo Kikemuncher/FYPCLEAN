@@ -73,7 +73,7 @@ const formatCount = (count: number): string => {
   return count.toString();
 };
 
-export default function FeedList(): JSX.Element {
+function FeedList(): JSX.Element {
   // Client-side rendering detection
   const [isClient, setIsClient] = useState<boolean>(false);
   
@@ -89,108 +89,42 @@ export default function FeedList(): JSX.Element {
   // Window height for proper sizing
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // Scroll-related state
-  const [swipeProgress, setSwipeProgress] = useState<number>(0);
-  const [isSwipeLocked, setIsSwipeLocked] = useState<boolean>(false);
+  // Simplest approach: just a locked flag
+  const [isLocked, setIsLocked] = useState<boolean>(false);
   
-  // Touch refs
+  // Touch tracking
   const touchStartY = useRef<number>(0);
-  const touchMoveY = useRef<number>(0);
   const lastTap = useRef<number>(0);
   
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // Set up client-side detection
-  useEffect(() => {
-    setIsClient(true);
+  // Go to next video
+  const goToNextVideo = useCallback(() => {
+    if (isLocked || currentVideoIndex >= VIDEOS.length - 1) return;
     
-    // Set window height
-    const updateHeight = (): void => {
-      setContainerHeight(window.innerHeight);
-    };
+    setIsLocked(true);
+    setCurrentVideoIndex(prev => prev + 1);
     
-    // Initialize height
-    updateHeight();
-    
-    // Listen for resize
-    window.addEventListener('resize', updateHeight);
-    
-    // Add keyboard navigation
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' || e.key === 'k') {
-        if (currentVideoIndex > 0) {
-          setCurrentVideoIndex(currentVideoIndex - 1);
-        }
-      } else if (e.key === 'ArrowDown' || e.key === 'j') {
-        if (currentVideoIndex < VIDEOS.length - 1) {
-          setCurrentVideoIndex(currentVideoIndex + 1);
-        }
-      } else if (e.key === 'm') {
-        setIsMuted(!isMuted);
-      } else if (e.key === ' ' || e.key === 'p') {
-        // Toggle play/pause
-        const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
-        if (currentVideo) {
-          if (currentVideo.paused) {
-            currentVideo.play().catch(e => console.error("Play failed:", e));
-          } else {
-            currentVideo.pause();
-          }
-        }
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    
-    // Cleanup
-    return () => {
-      window.removeEventListener('resize', updateHeight);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [currentVideoIndex, isMuted]);
+    // Unlock after a short delay
+    setTimeout(() => {
+      setIsLocked(false);
+    }, 300);
+  }, [currentVideoIndex, isLocked, VIDEOS.length]);
   
-  // Handle video playback when current index changes
-  useEffect(() => {
-    if (!isClient) return;
-
-    // Pause all videos
-    Object.values(videoRefs.current).forEach(videoRef => {
-      if (videoRef && !videoRef.paused) {
-        try {
-          videoRef.pause();
-        } catch (error) {
-          console.error("Error pausing video:", error);
-        }
-      }
-    });
-
-    // Get current video
-    const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
-    if (currentVideo) {
-      // Reset to beginning
-      currentVideo.currentTime = 0;
-      
-      // Attempt to play with error handling
-      const playPromise = currentVideo.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.log("Auto-play prevented, waiting for user interaction");
-          
-          // Add a one-time click event listener to play the video
-          const playOnInteraction = () => {
-            currentVideo.play().catch(e => console.error("Play still failed:", e));
-            document.removeEventListener('click', playOnInteraction);
-            document.removeEventListener('touchstart', playOnInteraction);
-          };
-          
-          document.addEventListener('click', playOnInteraction, { once: true });
-          document.addEventListener('touchstart', playOnInteraction, { once: true });
-        });
-      }
-    }
-  }, [currentVideoIndex, isClient]);
+  // Go to previous video
+  const goToPrevVideo = useCallback(() => {
+    if (isLocked || currentVideoIndex <= 0) return;
+    
+    setIsLocked(true);
+    setCurrentVideoIndex(prev => prev - 1);
+    
+    // Unlock after a short delay
+    setTimeout(() => {
+      setIsLocked(false);
+    }, 300);
+  }, [currentVideoIndex, isLocked]);
   
   // Set video ref
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
@@ -232,95 +166,124 @@ export default function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // Handle wheel event for scrolling
+  // Direct response to wheel events - respond to single clicks
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    if (isSwipeLocked) return;
+    if (isLocked) return;
     
-    // Apply a multiplier for more sensitive scrolling
-    const delta = e.deltaY * 0.5; // Adjust this value to control sensitivity
+    // Make an immediate decision based on wheel direction
+    // This allows for single mousewheel click response
+    const delta = e.deltaY;
     
-    // Update progress for visual feedback
-    let newProgress = swipeProgress + delta;
-    
-    // Apply resistance at the ends
-    if ((currentVideoIndex === 0 && newProgress < 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
-      newProgress = newProgress * 0.3; // Resistance factor
-    }
-    
-    setSwipeProgress(newProgress);
-    
-    // Check if we've crossed the threshold to change videos
-    if (Math.abs(newProgress) > 50) { // Threshold for triggering navigation
-      setIsSwipeLocked(true);
-      
-      if (newProgress > 0 && currentVideoIndex < VIDEOS.length - 1) {
-        // Go to next video
-        setCurrentVideoIndex(currentVideoIndex + 1);
-      } else if (newProgress < 0 && currentVideoIndex > 0) {
-        // Go to previous video
-        setCurrentVideoIndex(currentVideoIndex - 1);
+    // If delta is significant enough to be an intentional scroll
+    if (Math.abs(delta) > 15) {
+      if (delta > 0) {
+        goToNextVideo();
+      } else {
+        goToPrevVideo();
       }
-      
-      // Reset after animation - FASTER RESET TIME
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 200); // Animation duration reduced from 400ms to 200ms
     }
-  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length]);
+  }, [isLocked, goToNextVideo, goToPrevVideo]);
   
-  // Handle touch events for mobile
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isSwipeLocked) return;
-    
-    const currentY = e.touches[0].clientY;
-    const diff = touchMoveY.current - currentY;
-    touchMoveY.current = currentY;
-    
-    // Similar logic to wheel handler but with different sensitivity
-    const delta = diff * 0.8; // Mobile sensitivity is higher
-    let newProgress = swipeProgress + delta;
-    
-    // Apply same resistance logic as wheel handler
-    if ((currentVideoIndex === 0 && newProgress < 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress > 0)) {
-      newProgress = newProgress * 0.3;
-    }
-    
-    setSwipeProgress(newProgress);
-    
-    if (Math.abs(newProgress) > 50) {
-      setIsSwipeLocked(true);
-      
-      if (newProgress > 0 && currentVideoIndex < VIDEOS.length - 1) {
-        setCurrentVideoIndex(currentVideoIndex + 1);
-      } else if (newProgress < 0 && currentVideoIndex > 0) {
-        setCurrentVideoIndex(currentVideoIndex - 1);
-      }
-      
-      // FASTER RESET TIME
-      setTimeout(() => {
-        setSwipeProgress(0);
-        setIsSwipeLocked(false);
-      }, 200); // Reduced from 400ms to 200ms
-    }
-  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length]);
-  
-  // Handle touch start
+  // Ultra-simple touch handlers
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (isLocked) return;
     touchStartY.current = e.touches[0].clientY;
-    touchMoveY.current = e.touches[0].clientY;
-  }, []);
+  }, [isLocked]);
   
-  // Reset progress when touch ends
-  const handleTouchEnd = useCallback(() => {
-    if (!isSwipeLocked) {
-      setSwipeProgress(0);
+  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (isLocked) return;
+    
+    // Calculate the distance moved
+    const touchEndY = e.changedTouches[0].clientY;
+    const distance = touchStartY.current - touchEndY;
+    
+    // Simple decision based on distance
+    if (Math.abs(distance) > 50) { // Small threshold for easy triggering
+      if (distance > 0) {
+        goToNextVideo();
+      } else {
+        goToPrevVideo();
+      }
     }
-  }, [isSwipeLocked]);
+  }, [isLocked, goToNextVideo, goToPrevVideo]);
+  
+  // Setup window events
+  useEffect(() => {
+    setIsClient(true);
+    
+    // Set window height
+    const updateHeight = (): void => {
+      setContainerHeight(window.innerHeight);
+    };
+    
+    // Initialize height
+    updateHeight();
+    
+    // Listen for resize
+    window.addEventListener('resize', updateHeight);
+    
+    // Add keyboard navigation
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp') {
+        goToPrevVideo();
+      } else if (e.key === 'ArrowDown') {
+        goToNextVideo();
+      } else if (e.key === 'm') {
+        setIsMuted(!isMuted);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [goToNextVideo, goToPrevVideo, isMuted]);
+  
+  // Handle video playback when current index changes
+  useEffect(() => {
+    if (!isClient) return;
+    
+    // Pause all videos
+    Object.values(videoRefs.current).forEach(videoRef => {
+      if (videoRef && !videoRef.paused) {
+        try {
+          videoRef.pause();
+        } catch (error) {
+          console.error("Error pausing video:", error);
+        }
+      }
+    });
+    
+    // Get current video
+    const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
+    if (currentVideo) {
+      // Reset to beginning
+      currentVideo.currentTime = 0;
+      
+      // Attempt to play with error handling
+      const playPromise = currentVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log("Auto-play prevented, waiting for user interaction");
+          
+          // Add a one-time click event listener to play the video
+          const playOnInteraction = () => {
+            currentVideo.play().catch(e => console.error("Play still failed:", e));
+            document.removeEventListener('click', playOnInteraction);
+            document.removeEventListener('touchstart', playOnInteraction);
+          };
+          
+          document.addEventListener('click', playOnInteraction, { once: true });
+          document.addEventListener('touchstart', playOnInteraction, { once: true });
+        });
+      }
+    }
+  }, [currentVideoIndex, isClient]);
   
   // Loading state
   if (!isClient) {
@@ -334,27 +297,24 @@ export default function FeedList(): JSX.Element {
   return (
     <div 
       ref={containerRef}
-      className="h-screen w-full overflow-hidden bg-black relative"
+      className="h-screen w-full overflow-hidden bg-black relative px-1"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onClick={handleDoubleTap}
     >
       {/* Main feed container with smooth transitions */}
       <motion.div 
-        className="absolute w-full"
+        className="absolute w-full px-2"
         style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
-          y: -currentVideoIndex * containerHeight + swipeProgress 
+          y: -currentVideoIndex * containerHeight 
         }}
-        transition={{ 
-          y: {
-            type: "spring",
-            stiffness: 400, // Increased from 300 for faster snapping
-            damping: 40,    // Increased from 30 for less bouncing
-            duration: isSwipeLocked ? 0.25 : 0.1 // Faster during both modes
-          }
+        transition={{
+          type: "spring",
+          stiffness: 300,
+          damping: 30,
+          duration: 0.3
         }}
       >
         {VIDEOS.map((videoItem, index) => {
@@ -366,83 +326,94 @@ export default function FeedList(): JSX.Element {
               key={videoItem.id} 
               className="absolute w-full"
               style={{ 
-                height: containerHeight, 
+                height: containerHeight,
                 top: index * containerHeight,
+                paddingBottom: "16px", // Add spacing between videos
               }}
             >
               {isVisible && (
-                <div className="relative w-full h-full overflow-hidden">
-                  {/* Video element */}
-                  <video
-                    ref={(el) => setVideoRef(videoItem.id, el)}
-                    src={videoItem.url}
-                    className="w-full h-full object-cover"
-                    loop
-                    playsInline
-                    muted={isMuted}
-                    preload="auto"
-                    controls={false}
-                  />
-                  
-                  {/* Video info overlay */}
-                  <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-                    <div className="flex items-center mb-2">
-                      <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
-                        <img 
-                          src={`https://randomuser.me/api/portraits/men/${index + 1}.jpg`}
-                          alt={videoItem.username} 
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.onerror = null;
-                            target.src = 'https://placehold.co/100/gray/white?text=User';
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <p className="font-bold text-white flex items-center">
-                          @{videoItem.username}
-                          <span className="inline-flex ml-2 items-center justify-center rounded-full bg-tiktok-pink/30 px-2 py-0.5 text-xs text-white">
-                            Follow
-                          </span>
-                        </p>
-                        <p className="text-white text-xs opacity-80">{videoItem.song}</p>
-                      </div>
-                    </div>
-                    <p className="text-white text-sm mb-4 max-w-[80%]">{videoItem.caption}</p>
-                  </div>
-                  
-                  {/* Side actions */}
-                  <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5">
-                    <button 
-                      className="flex flex-col items-center"
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        toggleLike(videoItem.id);
-                      }}
-                    >
-                      <div className="rounded-full bg-black/20 p-2">
-                        <svg 
-                          className={`h-8 w-8 ${likedVideos[videoItem.id] ? 'text-red-500' : 'text-white'}`} 
-                          fill={likedVideos[videoItem.id] ? "currentColor" : "none"} 
-                          viewBox="0 0 24 24" 
-                          stroke="currentColor"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                        </svg>
-                      </div>
-                      <span className="text-white text-xs mt-1">{formatCount(videoItem.likes)}</span>
-                    </button>
+                <div className="relative w-full h-full overflow-hidden px-2 py-2 flex justify-center">
+                  {/* Video container with 9:16 aspect ratio */}
+                  <div 
+                    className="relative video-container rounded-2xl overflow-hidden"
+                    style={{ 
+                      width: "100%", 
+                      maxWidth: `${containerHeight * 9 / 16}px`, // Proper 9:16 aspect ratio
+                      height: "100%"
+                    }}
+                  >
+                    {/* Video element */}
+                    <video
+                      ref={(el) => setVideoRef(videoItem.id, el)}
+                      src={videoItem.url}
+                      className="absolute top-0 left-0 w-full h-full object-cover"
+                      loop
+                      playsInline
+                      muted={isMuted}
+                      preload="auto"
+                      controls={false}
+                    />
                     
-                    <button className="flex flex-col items-center">
-                      <div className="rounded-full bg-black/20 p-2">
-                        <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
+                    {/* Video info overlay */}
+                    <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent" style={{ zIndex: 10 }}>
+                      <div className="flex items-center mb-2">
+                        <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
+                          <img 
+                            src={`https://randomuser.me/api/portraits/men/${index + 1}.jpg`}
+                            alt={videoItem.username} 
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.onerror = null;
+                              target.src = 'https://placehold.co/100/gray/white?text=User';
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <p className="font-bold text-white flex items-center">
+                            @{videoItem.username}
+                            <span className="inline-flex ml-2 items-center justify-center rounded-full bg-tiktok-pink/30 px-2 py-0.5 text-xs text-white">
+                              Follow
+                            </span>
+                          </p>
+                          <p className="text-white text-xs opacity-80">{videoItem.song}</p>
+                        </div>
                       </div>
-                      <span className="text-white text-xs mt-1">{formatCount(videoItem.comments)}</span>
-                    </button>
+                      <p className="text-white text-sm mb-4 max-w-[80%]">{videoItem.caption}</p>
+                    </div>
+                    
+                    {/* Side actions */}
+                    <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5" style={{ zIndex: 20 }}>
+                      <button 
+                        className="flex flex-col items-center"
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          toggleLike(videoItem.id);
+                        }}
+                      >
+                        <div className="rounded-full bg-black/20 p-2">
+                          <svg 
+                            className={`h-8 w-8 ${likedVideos[videoItem.id] ? 'text-red-500' : 'text-white'}`} 
+                            fill={likedVideos[videoItem.id] ? "currentColor" : "none"} 
+                            viewBox="0 0 24 24" 
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
+                        </div>
+                        <span className="text-white text-xs mt-1">{formatCount(videoItem.likes)}</span>
+                      </button>
+                      
+                      <button className="flex flex-col items-center">
+                        <div className="rounded-full bg-black/20 p-2">
+                          <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                        </div>
+                        <span className="text-white text-xs mt-1">{formatCount(videoItem.comments)}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -488,3 +459,5 @@ export default function FeedList(): JSX.Element {
     </div>
   );
 }
+
+export default FeedList;
