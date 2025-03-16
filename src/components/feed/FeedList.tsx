@@ -73,7 +73,6 @@ const formatCount = (count: number): string => {
   return count.toString();
 };
 
-// Define the FeedList component 
 function FeedList(): JSX.Element {
   // Client-side rendering detection
   const [isClient, setIsClient] = useState<boolean>(false);
@@ -90,50 +89,42 @@ function FeedList(): JSX.Element {
   // Window height for proper sizing
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // Scroll-related state - keeping original implementation
-  const [swipeProgress, setSwipeProgress] = useState<number>(0);
-  const [isSwipeLocked, setIsSwipeLocked] = useState<boolean>(false);
+  // Simplest approach: just a locked flag
+  const [isLocked, setIsLocked] = useState<boolean>(false);
   
-  // Touch refs
+  // Touch tracking
   const touchStartY = useRef<number>(0);
-  const touchMoveY = useRef<number>(0);
   const lastTap = useRef<number>(0);
   
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // ORIGINAL: Handle scroll end
-  const handleScrollEnd = useCallback(() => {
-    if (isSwipeLocked) return;
+  // Go to next video
+  const goToNextVideo = useCallback(() => {
+    if (isLocked || currentVideoIndex >= VIDEOS.length - 1) return;
     
-    // If there's any scroll progress at all, make a decision
-    if (swipeProgress !== 0) {
-      setIsSwipeLocked(true);
-      
-      // Calculate how far we've scrolled relative to a threshold
-      const threshold = containerHeight * 0.15; // 15% of the screen height
-      
-      if (Math.abs(swipeProgress) > threshold) {
-        // We've scrolled enough to trigger a video change
-        if (swipeProgress < 0 && currentVideoIndex < VIDEOS.length - 1) {
-          // Progress is negative (scrolling down) - go to next video
-          setCurrentVideoIndex(currentVideoIndex + 1);
-        } else if (swipeProgress > 0 && currentVideoIndex > 0) {
-          // Progress is positive (scrolling up) - go to previous video
-          setCurrentVideoIndex(currentVideoIndex - 1);
-        }
-      }
-      
-      // Always reset progress to 0 to avoid stuck state
-      setSwipeProgress(0);
-      
-      // Unlock after animation completes
-      setTimeout(() => {
-        setIsSwipeLocked(false);
-      }, 400);
-    }
-  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
+    setIsLocked(true);
+    setCurrentVideoIndex(prev => prev + 1);
+    
+    // Unlock after a short delay
+    setTimeout(() => {
+      setIsLocked(false);
+    }, 300);
+  }, [currentVideoIndex, isLocked, VIDEOS.length]);
+  
+  // Go to previous video
+  const goToPrevVideo = useCallback(() => {
+    if (isLocked || currentVideoIndex <= 0) return;
+    
+    setIsLocked(true);
+    setCurrentVideoIndex(prev => prev - 1);
+    
+    // Unlock after a short delay
+    setTimeout(() => {
+      setIsLocked(false);
+    }, 300);
+  }, [currentVideoIndex, isLocked]);
   
   // Set video ref
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
@@ -175,96 +166,50 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // ORIGINAL: Handle wheel scrolling for tactile feel
+  // Direct response to wheel events - respond to single clicks
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    if (isSwipeLocked) return;
+    if (isLocked) return;
     
-    // Get the Delta Y value from the wheel event
-    const deltaY = e.deltaY;
+    // Make an immediate decision based on wheel direction
+    // This allows for single mousewheel click response
+    const delta = e.deltaY;
     
-    // Apply a sensitivity multiplier for smoother control
-    const progressDelta = deltaY * 0.6;
-    
-    // Update progress based on wheel direction
-    // Negative deltaY = scroll up, Positive deltaY = scroll down
-    // For natural feel: scroll up = progress increases, scroll down = progress decreases
-    let newProgress = swipeProgress - progressDelta;
-    
-    // Apply resistance at the edges
-    if ((currentVideoIndex === 0 && newProgress > 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
-      newProgress = newProgress * 0.3; // Resistance factor
+    // If delta is significant enough to be an intentional scroll
+    if (Math.abs(delta) > 15) {
+      if (delta > 0) {
+        goToNextVideo();
+      } else {
+        goToPrevVideo();
+      }
     }
-    
-    // Clamp progress to reasonable limits
-    const maxProgress = containerHeight * 0.4; // 40% of screen height
-    newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
-    
-    setSwipeProgress(newProgress);
-  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length, containerHeight]);
+  }, [isLocked, goToNextVideo, goToPrevVideo]);
   
-  // ORIGINAL: Handle touch events
+  // Simple touch handlers
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (isLocked) return;
     touchStartY.current = e.touches[0].clientY;
-    touchMoveY.current = e.touches[0].clientY;
-  }, []);
+  }, [isLocked]);
   
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isSwipeLocked) return;
+  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (isLocked) return;
     
-    const currentY = e.touches[0].clientY;
-    const diff = currentY - touchStartY.current;
-    touchMoveY.current = currentY;
+    // Calculate the distance moved
+    const touchEndY = e.changedTouches[0].clientY;
+    const distance = touchStartY.current - touchEndY;
     
-    // For touch, we directly map finger position to content position
-    const swipeDistance = diff * 1.44; // Sensitivity multiplier
-    
-    // Calculate progress
-    let newProgress = swipeDistance;
-    
-    // Apply resistance at the edges
-    if ((currentVideoIndex === 0 && newProgress > 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
-      newProgress = newProgress * 0.3;
+    // Simple decision based on distance
+    if (Math.abs(distance) > 50) { // Small threshold for easy triggering
+      if (distance > 0) {
+        goToNextVideo();
+      } else {
+        goToPrevVideo();
+      }
     }
-    
-    // Clamp to reasonable limits
-    const maxProgress = containerHeight * 0.4;
-    newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
-    
-    setSwipeProgress(newProgress);
-  }, [isSwipeLocked, currentVideoIndex, VIDEOS.length, containerHeight]);
+  }, [isLocked, goToNextVideo, goToPrevVideo]);
   
-  // Reset progress when touch ends
-  const handleTouchEnd = useCallback(() => {
-    handleScrollEnd();
-  }, [handleScrollEnd]);
-  
-  // ORIGINAL: Animation settings
-  const getTransitionSettings = useCallback(() => {
-    if (isSwipeLocked) {
-      // Animation when snapping to a video
-      return {
-        type: "spring",
-        stiffness: 500,
-        damping: 50,
-        duration: 0.4,
-        restDelta: 0.001
-      };
-    } else {
-      // Responsive movement during active scrolling
-      return {
-        type: "spring",
-        stiffness: 1200,
-        damping: 120,
-        duration: 0.1
-      };
-    }
-  }, [isSwipeLocked]);
-  
-  // ORIGINAL: Setup window events
+  // Setup window events
   useEffect(() => {
     setIsClient(true);
     
@@ -282,21 +227,9 @@ function FeedList(): JSX.Element {
     // Add keyboard navigation
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp') {
-        if (currentVideoIndex > 0) {
-          setIsSwipeLocked(true);
-          setCurrentVideoIndex(currentVideoIndex - 1);
-          setTimeout(() => {
-            setIsSwipeLocked(false);
-          }, 400);
-        }
+        goToPrevVideo();
       } else if (e.key === 'ArrowDown') {
-        if (currentVideoIndex < VIDEOS.length - 1) {
-          setIsSwipeLocked(true);
-          setCurrentVideoIndex(currentVideoIndex + 1);
-          setTimeout(() => {
-            setIsSwipeLocked(false);
-          }, 400);
-        }
+        goToNextVideo();
       } else if (e.key === 'm') {
         setIsMuted(!isMuted);
       }
@@ -304,31 +237,12 @@ function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     
-    // ORIGINAL: Debounced wheel end detection
-    let wheelTimeout: NodeJS.Timeout | null = null;
-    
-    const wheelHandler = () => {
-      if (wheelTimeout) {
-        clearTimeout(wheelTimeout);
-      }
-      
-      wheelTimeout = setTimeout(() => {
-        handleScrollEnd();
-      }, 150); // Debounce time: 150ms
-    };
-    
-    window.addEventListener('wheel', wheelHandler);
-    
     // Cleanup
     return () => {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('wheel', wheelHandler);
-      if (wheelTimeout) {
-        clearTimeout(wheelTimeout);
-      }
     };
-  }, [currentVideoIndex, isMuted, handleScrollEnd, VIDEOS.length]);
+  }, [goToNextVideo, goToPrevVideo, isMuted]);
   
   // Handle video playback when current index changes
   useEffect(() => {
@@ -386,7 +300,6 @@ function FeedList(): JSX.Element {
       className="h-screen w-full overflow-hidden bg-black relative px-1"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onClick={handleDoubleTap}
     >
@@ -395,9 +308,14 @@ function FeedList(): JSX.Element {
         className="absolute w-full px-2"
         style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
-          y: -currentVideoIndex * containerHeight + swipeProgress 
+          y: -currentVideoIndex * containerHeight 
         }}
-        transition={getTransitionSettings()}
+        transition={{
+          type: "spring",
+          stiffness: 300,
+          damping: 30,
+          duration: 0.3
+        }}
       >
         {VIDEOS.map((videoItem, index) => {
           // Only render videos that are close to the current one for performance
@@ -503,21 +421,6 @@ function FeedList(): JSX.Element {
           );
         })}
       </motion.div>
-      
-      {/* Scroll indicator based on progress */}
-      {swipeProgress !== 0 && (
-        <div className="fixed right-2 top-1/2 transform -translate-y-1/2 bg-white/20 rounded-full h-24 w-1 overflow-hidden">
-          <div 
-            className="bg-white w-full"
-            style={{ 
-              height: `${Math.min(100, Math.abs(swipeProgress * 100 / 70))}%`,
-              position: 'absolute',
-              bottom: swipeProgress > 0 ? 0 : 'auto',
-              top: swipeProgress < 0 ? 0 : 'auto'
-            }}
-          />
-        </div>
-      )}
       
       {/* Sound toggle button */}
       <button 
