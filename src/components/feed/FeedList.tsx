@@ -89,12 +89,8 @@ function FeedList(): JSX.Element {
   // Window height for proper sizing
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // Simplest approach: just a locked flag and no progress tracking
+  // Simplest approach: just a locked flag
   const [isLocked, setIsLocked] = useState<boolean>(false);
-  
-  // Simple wheel state tracking
-  const wheelDistance = useRef<number>(0);
-  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
   
   // Touch tracking
   const touchStartY = useRef<number>(0);
@@ -170,34 +166,24 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // Ultra-simple wheel handler: just accumulate distance and make decision on timeout
+  // FIXED: Direct response to wheel events - respond to single clicks
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
     if (isLocked) return;
     
-    // Accumulate wheel distance
-    wheelDistance.current += e.deltaY;
+    // Make an immediate decision based on wheel direction
+    // This allows for single mousewheel click response
+    const delta = e.deltaY;
     
-    // Clear existing timeout
-    if (wheelTimeout.current) {
-      clearTimeout(wheelTimeout.current);
-    }
-    
-    // Set a very short timeout to decide after scrolling stops
-    wheelTimeout.current = setTimeout(() => {
-      // Simple decision based on accumulated distance
-      if (Math.abs(wheelDistance.current) > 100) { // Small threshold for easy triggering
-        if (wheelDistance.current > 0) {
-          goToNextVideo();
-        } else {
-          goToPrevVideo();
-        }
+    // If delta is significant enough to be an intentional scroll
+    if (Math.abs(delta) > 15) {
+      if (delta > 0) {
+        goToNextVideo();
+      } else {
+        goToPrevVideo();
       }
-      
-      // Reset wheel distance
-      wheelDistance.current = 0;
-    }, 100);
+    }
   }, [isLocked, goToNextVideo, goToPrevVideo]);
   
   // Ultra-simple touch handlers
@@ -255,9 +241,6 @@ function FeedList(): JSX.Element {
     return () => {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
-      }
     };
   }, [goToNextVideo, goToPrevVideo, isMuted]);
   
@@ -463,31 +446,6 @@ function FeedList(): JSX.Element {
       <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
         <span className="text-white text-sm">{currentVideoIndex + 1} / {VIDEOS.length}</span>
       </div>
-      
-      {/* Navigation buttons for clearer UX */}
-      <button
-        onClick={goToPrevVideo}
-        disabled={isLocked || currentVideoIndex <= 0}
-        className={`absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/30 p-2 rounded-full z-30 ${
-          isLocked || currentVideoIndex <= 0 ? 'opacity-30' : 'opacity-70 hover:opacity-100'
-        }`}
-      >
-        <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-      </button>
-      
-      <button
-        onClick={goToNextVideo}
-        disabled={isLocked || currentVideoIndex >= VIDEOS.length - 1}
-        className={`absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/30 p-2 rounded-full z-30 ${
-          isLocked || currentVideoIndex >= VIDEOS.length - 1 ? 'opacity-30' : 'opacity-70 hover:opacity-100'
-        }`}
-      >
-        <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </button>
       
       {/* Scroll guide indicator */}
       {VIDEOS.length > 1 && currentVideoIndex === 0 && (
