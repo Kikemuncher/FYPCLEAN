@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
+import React, { useEffect, useState, useRef } from "react";
 
 // Define video interface
 interface Video {
@@ -86,284 +85,188 @@ function FeedList(): JSX.Element {
   // Video playing state
   const [isMuted, setIsMuted] = useState<boolean>(false);
   
-  // Window height for proper sizing
+  // Container height
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // Direct tactile control over offset position (for mousepad/touchpad)
+  // For tactile scrolling
   const [offset, setOffset] = useState<number>(0);
+  const [isScrolling, setIsScrolling] = useState<boolean>(false);
   
-  // Navigation locking
-  const [isNavigating, setIsNavigating] = useState<boolean>(false);
-  
-  // Track gesture states
-  const touchStartY = useRef<number>(0);
+  // Last tap for double tap detection
   const lastTap = useRef<number>(0);
-  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
-  const wheelAccumulator = useRef<number>(0);
   
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
-  const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // Navigate to next/prev video
-  const navigateToVideo = useCallback((direction: 'next' | 'prev') => {
-    if (isNavigating) return;
-    
-    setIsNavigating(true);
-    
-    if (direction === 'next' && currentVideoIndex < VIDEOS.length - 1) {
-      setCurrentVideoIndex(prevIndex => prevIndex + 1);
-    } else if (direction === 'prev' && currentVideoIndex > 0) {
-      setCurrentVideoIndex(prevIndex => prevIndex - 1);
-    }
-    
-    // Reset offset
-    setOffset(0);
-    
-    // Unlock after animation completes
-    setTimeout(() => {
-      setIsNavigating(false);
-    }, 300);
-  }, [currentVideoIndex, isNavigating]);
+  // Touch tracking
+  const touchStartY = useRef<number | null>(null);
   
-  // Determine if we should snap or navigate based on offset amount
-  const handleOffsetEnd = useCallback(() => {
-    if (isNavigating) return;
-    
-    const snapThreshold = containerHeight * 0.5; // 50% threshold
-    
-    if (Math.abs(offset) > snapThreshold) {
-      // Navigate based on direction
-      if (offset < 0 && currentVideoIndex < VIDEOS.length - 1) {
-        navigateToVideo('next');
-      } else if (offset > 0 && currentVideoIndex > 0) {
-        navigateToVideo('prev');
-      } else {
-        // Reset offset if we're at the edge
-        setOffset(0);
-      }
-    } else {
-      // Not enough to navigate - snap back
-      setOffset(0);
-    }
-  }, [offset, currentVideoIndex, containerHeight, isNavigating, navigateToVideo, VIDEOS.length]);
+  // Wheel handling
+  const wheelLock = useRef<boolean>(false);
+  const wheelTimer = useRef<NodeJS.Timeout | null>(null);
   
-  // Set video ref
-  const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
-    if (id) {
-      videoRefs.current[id] = el;
-    }
+  // Toggle mute
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
+  };
+  
+  // Set up container height
+  useEffect(() => {
+    setIsClient(true);
+    setContainerHeight(window.innerHeight);
+    
+    const updateHeight = () => {
+      setContainerHeight(window.innerHeight);
+    };
+    
+    window.addEventListener('resize', updateHeight);
+    return () => window.removeEventListener('resize', updateHeight);
   }, []);
   
-  // Toggle mute function
-  const toggleMute = useCallback(() => {
-    setIsMuted(prev => !prev);
-  }, []);
-  
-  // Double tap to like
-  const handleDoubleTap = useCallback(() => {
-    const currentTime = new Date().getTime();
-    const tapLength = currentTime - lastTap.current;
-    
-    if (tapLength < 300 && tapLength > 0) {
-      // Double tap detected
-      const currentVideoId = VIDEOS[currentVideoIndex]?.id;
-      if (currentVideoId) {
-        // Update like status
-        setLikedVideos(prev => ({
-          ...prev,
-          [currentVideoId]: true
-        }));
-      }
-    }
-    
-    lastTap.current = currentTime;
-  }, [currentVideoIndex]);
-  
-  // Toggle like directly
-  const toggleLike = useCallback((videoId: string) => {
+  // Handle likes
+  const toggleLike = (videoId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     setLikedVideos(prev => ({
       ...prev,
       [videoId]: !prev[videoId]
     }));
-  }, []);
+  };
   
-  // Handle wheel events for both mouse and trackpad
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    
-    if (isNavigating) return;
-    
-    // Check for mousepad/trackpad vs. regular mouse wheel
-    // Most mousepad/trackpad events have deltaMode === 0 (pixels)
-    const isTrackpad = e.deltaMode === 0;
-    
-    if (isTrackpad) {
-      // MOUSEPAD/TRACKPAD HANDLING - Smooth tactile control
-      const deltaY = e.deltaY;
-      
-      // Update offset based on deltaY
-      // (negative offset = move down, positive offset = move up)
-      setOffset(current => {
-        // Determine new offset with resistance at edges
-        let newOffset = current - deltaY;
-        
-        // Apply resistance at the edges
-        if ((currentVideoIndex === 0 && newOffset > 0) || 
-            (currentVideoIndex === VIDEOS.length - 1 && newOffset < 0)) {
-          newOffset = current - (deltaY * 0.2); // Strong resistance
-        }
-        
-        // Limit maximum offset
-        const maxOffset = containerHeight * 0.8;
-        return Math.max(Math.min(newOffset, maxOffset), -maxOffset);
-      });
-      
-      // Clear existing timeout
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
-      }
-      
-      // Set timeout to detect when scrolling stops
-      wheelTimeout.current = setTimeout(() => {
-        wheelTimeout.current = null;
-        handleOffsetEnd();
-      }, 150);
-    } else {
-      // MOUSE WHEEL HANDLING - Discrete step navigation
-      
-      // Accumulate deltaY for discrete steps
-      wheelAccumulator.current += e.deltaY;
-      
-      // Define threshold for a "click"
-      const wheelClickThreshold = 100;
-      
-      // Check if we've accumulated enough for a "click"
-      if (Math.abs(wheelAccumulator.current) >= wheelClickThreshold) {
-        const direction = wheelAccumulator.current > 0 ? 'next' : 'prev';
-        navigateToVideo(direction);
-        
-        // Reset accumulator
-        wheelAccumulator.current = 0;
-      }
-    }
-  }, [
-    isNavigating,
-    currentVideoIndex,
-    VIDEOS.length,
-    containerHeight,
-    handleOffsetEnd,
-    navigateToVideo
-  ]);
-  
-  // Handle touch events for mobile
-  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isNavigating) return;
-    touchStartY.current = e.touches[0].clientY;
-  }, [isNavigating]);
-  
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isNavigating) return;
-    
-    const touchY = e.touches[0].clientY;
-    const diff = touchY - touchStartY.current;
-    
-    // Update offset based on touch movement
-    setOffset(current => {
-      // Apply resistance at the edges
-      if ((currentVideoIndex === 0 && diff > 0) || 
-          (currentVideoIndex === VIDEOS.length - 1 && diff < 0)) {
-        return diff * 0.3; // Strong resistance
-      }
-      return diff;
-    });
-  }, [isNavigating, currentVideoIndex, VIDEOS.length]);
-  
-  const handleTouchEnd = useCallback(() => {
-    if (isNavigating) return;
-    handleOffsetEnd();
-  }, [isNavigating, handleOffsetEnd]);
-  
-  // Setup window events
-  useEffect(() => {
-    setIsClient(true);
-    
-    // Set window height
-    const updateHeight = (): void => {
-      setContainerHeight(window.innerHeight);
-    };
-    
-    // Initialize height
-    updateHeight();
-    
-    // Listen for resize
-    window.addEventListener('resize', updateHeight);
-    
-    // Add keyboard navigation
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isNavigating) return;
-      
-      if (e.key === 'ArrowUp') {
-        navigateToVideo('prev');
-      } else if (e.key === 'ArrowDown') {
-        navigateToVideo('next');
-      } else if (e.key === 'm') {
-        setIsMuted(!isMuted);
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    
-    // Cleanup
-    return () => {
-      window.removeEventListener('resize', updateHeight);
-      window.removeEventListener('keydown', handleKeyDown);
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
-      }
-    };
-  }, [currentVideoIndex, isNavigating, isMuted, navigateToVideo]);
-  
-  // Handle video playback when current index changes
+  // Handle video playback
   useEffect(() => {
     if (!isClient) return;
     
-    // Pause all videos
+    // Pause all videos first
     Object.values(videoRefs.current).forEach(videoRef => {
       if (videoRef && !videoRef.paused) {
-        try {
-          videoRef.pause();
-        } catch (error) {
-          console.error("Error pausing video:", error);
-        }
+        videoRef.pause();
       }
     });
     
-    // Get current video
+    // Play current video
     const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
     if (currentVideo) {
-      // Reset to beginning
       currentVideo.currentTime = 0;
-      
-      // Attempt to play with error handling
       const playPromise = currentVideo.play();
+      
       if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.log("Auto-play prevented, waiting for user interaction");
-          
-          // Add a one-time click event listener to play the video
-          const playOnInteraction = () => {
-            currentVideo.play().catch(e => console.error("Play still failed:", e));
-            document.removeEventListener('click', playOnInteraction);
-            document.removeEventListener('touchstart', playOnInteraction);
-          };
-          
-          document.addEventListener('click', playOnInteraction, { once: true });
-          document.addEventListener('touchstart', playOnInteraction, { once: true });
+        playPromise.catch(() => {
+          console.log("Autoplay prevented, waiting for user interaction");
         });
       }
     }
   }, [currentVideoIndex, isClient]);
+  
+  // Go to next video if possible
+  const goToNextVideo = () => {
+    if (currentVideoIndex < VIDEOS.length - 1) {
+      setCurrentVideoIndex(currentVideoIndex + 1);
+      setOffset(0);
+    }
+  };
+  
+  // Go to previous video if possible
+  const goToPrevVideo = () => {
+    if (currentVideoIndex > 0) {
+      setCurrentVideoIndex(currentVideoIndex - 1);
+      setOffset(0);
+    }
+  };
+  
+  // Handle wheel events (mouse wheel and touchpad)
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    
+    // Don't process new events while locked
+    if (wheelLock.current) return;
+    
+    // For mouse wheel - simple next/prev navigation
+    if (Math.abs(e.deltaY) >= 50) {
+      // Lock wheel events briefly to prevent rapid scrolling
+      wheelLock.current = true;
+      
+      if (e.deltaY > 0) {
+        goToNextVideo();
+      } else {
+        goToPrevVideo();
+      }
+      
+      // Release lock after animation finishes
+      setTimeout(() => {
+        wheelLock.current = false;
+      }, 300);
+    }
+    
+    // For touchpad/trackpad, we could implement smooth scrolling here
+    // but for simplicity, we're using the same approach for both
+  };
+  
+  // Double tap to like
+  const handleDoubleTap = () => {
+    const now = new Date().getTime();
+    const timeSince = now - lastTap.current;
+    
+    if (timeSince < 300 && timeSince > 0) {
+      const currentVideo = VIDEOS[currentVideoIndex];
+      if (currentVideo) {
+        setLikedVideos(prev => ({
+          ...prev,
+          [currentVideo.id]: true
+        }));
+      }
+    }
+    
+    lastTap.current = now;
+  };
+  
+  // Touch handlers for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+  
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    
+    const touchY = e.touches[0].clientY;
+    const diff = touchY - touchStartY.current;
+    
+    setOffset(diff);
+    setIsScrolling(true);
+  };
+  
+  const handleTouchEnd = () => {
+    if (touchStartY.current === null) return;
+    
+    // If we've moved more than 100px, navigate
+    if (Math.abs(offset) > 100) {
+      if (offset > 0) {
+        goToPrevVideo();
+      } else {
+        goToNextVideo();
+      }
+    }
+    
+    // Reset states
+    touchStartY.current = null;
+    setOffset(0);
+    setIsScrolling(false);
+  };
+  
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        goToNextVideo();
+      } else if (e.key === 'ArrowUp') {
+        goToPrevVideo();
+      } else if (e.key === 'm') {
+        toggleMute();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentVideoIndex]);
   
   // Loading state
   if (!isClient) {
@@ -376,7 +279,6 @@ function FeedList(): JSX.Element {
   
   return (
     <div 
-      ref={containerRef}
       className="h-screen w-full overflow-hidden bg-black relative"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
@@ -384,43 +286,42 @@ function FeedList(): JSX.Element {
       onTouchEnd={handleTouchEnd}
       onClick={handleDoubleTap}
     >
-      {/* Feed container */}
+      {/* Videos container */}
       <div 
-        className="absolute w-full"
+        className="absolute w-full transition-transform duration-300 ease-out"
         style={{ 
           height: containerHeight * VIDEOS.length,
           transform: `translateY(${-currentVideoIndex * containerHeight + offset}px)`,
-          transition: isNavigating ? 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' : 'none'
         }}
       >
-        {VIDEOS.map((videoItem, index) => {
-          // Only render videos that are close to the current one for performance
+        {VIDEOS.map((video, index) => {
+          // Only render videos that are close to current
           const isVisible = Math.abs(index - currentVideoIndex) <= 1;
           
           return (
             <div 
-              key={videoItem.id} 
-              className="absolute w-full"
+              key={video.id} 
+              className="absolute w-full px-2"
               style={{ 
                 height: containerHeight,
-                top: index * containerHeight
+                top: index * containerHeight,
               }}
             >
               {isVisible && (
-                <div className="relative w-full h-full overflow-hidden flex justify-center">
+                <div className="relative w-full h-full flex justify-center">
                   {/* Video container with 9:16 aspect ratio */}
                   <div 
                     className="relative video-container rounded-xl overflow-hidden"
                     style={{ 
                       width: "100%", 
-                      maxWidth: `${containerHeight * 9 / 16}px`, // Proper 9:16 aspect ratio
+                      maxWidth: `${containerHeight * 9 / 16}px`,
                       height: "100%"
                     }}
                   >
                     {/* Video element */}
                     <video
-                      ref={(el) => setVideoRef(videoItem.id, el)}
-                      src={videoItem.url}
+                      ref={(el) => { if (el) videoRefs.current[video.id] = el; }}
+                      src={video.url}
                       className="absolute top-0 left-0 w-full h-full object-cover"
                       loop
                       playsInline
@@ -430,12 +331,12 @@ function FeedList(): JSX.Element {
                     />
                     
                     {/* Video info overlay */}
-                    <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent" style={{ zIndex: 10 }}>
+                    <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
                       <div className="flex items-center mb-2">
                         <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
                           <img 
                             src={`https://randomuser.me/api/portraits/men/${index + 1}.jpg`}
-                            alt={videoItem.username} 
+                            alt={video.username} 
                             className="w-full h-full object-cover"
                             loading="lazy"
                             onError={(e) => {
@@ -447,37 +348,34 @@ function FeedList(): JSX.Element {
                         </div>
                         <div>
                           <p className="font-bold text-white flex items-center">
-                            @{videoItem.username}
+                            @{video.username}
                             <span className="inline-flex ml-2 items-center justify-center rounded-full bg-tiktok-pink/30 px-2 py-0.5 text-xs text-white">
                               Follow
                             </span>
                           </p>
-                          <p className="text-white text-xs opacity-80">{videoItem.song}</p>
+                          <p className="text-white text-xs opacity-80">{video.song}</p>
                         </div>
                       </div>
-                      <p className="text-white text-sm mb-4 max-w-[80%]">{videoItem.caption}</p>
+                      <p className="text-white text-sm mb-4 max-w-[80%]">{video.caption}</p>
                     </div>
                     
                     {/* Side actions */}
-                    <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5" style={{ zIndex: 20 }}>
+                    <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5">
                       <button 
                         className="flex flex-col items-center"
-                        onClick={(e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          toggleLike(videoItem.id);
-                        }}
+                        onClick={(e) => toggleLike(video.id, e)}
                       >
                         <div className="rounded-full bg-black/20 p-2">
                           <svg 
-                            className={`h-8 w-8 ${likedVideos[videoItem.id] ? 'text-red-500' : 'text-white'}`} 
-                            fill={likedVideos[videoItem.id] ? "currentColor" : "none"} 
+                            className={`h-8 w-8 ${likedVideos[video.id] ? 'text-red-500' : 'text-white'}`} 
+                            fill={likedVideos[video.id] ? "currentColor" : "none"} 
                             viewBox="0 0 24 24" 
                             stroke="currentColor"
                           >
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                           </svg>
                         </div>
-                        <span className="text-white text-xs mt-1">{formatCount(videoItem.likes)}</span>
+                        <span className="text-white text-xs mt-1">{formatCount(video.likes)}</span>
                       </button>
                       
                       <button className="flex flex-col items-center">
@@ -486,7 +384,7 @@ function FeedList(): JSX.Element {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                           </svg>
                         </div>
-                        <span className="text-white text-xs mt-1">{formatCount(videoItem.comments)}</span>
+                        <span className="text-white text-xs mt-1">{formatCount(video.comments)}</span>
                       </button>
                     </div>
                   </div>
@@ -499,7 +397,7 @@ function FeedList(): JSX.Element {
       
       {/* Sound toggle button */}
       <button 
-        onClick={(e: React.MouseEvent) => {
+        onClick={(e) => {
           e.stopPropagation();
           toggleMute();
         }}
