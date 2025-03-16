@@ -89,42 +89,65 @@ function FeedList(): JSX.Element {
   // Window height for proper sizing
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // Simplest approach: just a locked flag
-  const [isLocked, setIsLocked] = useState<boolean>(false);
+  // Drag position
+  const [dragY, setDragY] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isAnimating, setIsAnimating] = useState<boolean>(false);
   
-  // Touch tracking
+  // Refs
+  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
   const touchStartY = useRef<number>(0);
   const lastTap = useRef<number>(0);
-  
+  const isMouseWheel = useRef<boolean>(false);
+  const lastScrollTime = useRef<number>(Date.now());
+
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // Go to next video
-  const goToNextVideo = useCallback(() => {
-    if (isLocked || currentVideoIndex >= VIDEOS.length - 1) return;
+  // CRITICAL FUNCTION: Makes decision about what video to snap to
+  const snapToNearestVideo = useCallback(() => {
+    if (isAnimating) return;
     
-    setIsLocked(true);
-    setCurrentVideoIndex(prev => prev + 1);
+    setIsAnimating(true);
     
-    // Unlock after a short delay
+    // Calculate how far we've dragged relative to video height
+    const dragRatio = dragY / containerHeight;
+    
+    // Determine what video to snap to
+    let targetIndex = currentVideoIndex;
+    
+    // If we've dragged more than 40% of the way to the next/prev video
+    if (Math.abs(dragRatio) > 0.4) {
+      if (dragRatio > 0 && currentVideoIndex > 0) {
+        // Dragged up - go to previous video
+        targetIndex = currentVideoIndex - 1;
+      } else if (dragRatio < 0 && currentVideoIndex < VIDEOS.length - 1) {
+        // Dragged down - go to next video
+        targetIndex = currentVideoIndex + 1;
+      }
+    }
+    
+    // Set the new index and reset drag
+    setCurrentVideoIndex(targetIndex);
+    setDragY(0);
+    
+    // Reset after animation duration
     setTimeout(() => {
-      setIsLocked(false);
-    }, 300);
-  }, [currentVideoIndex, isLocked, VIDEOS.length]);
+      setIsAnimating(false);
+    }, 350);
+  }, [currentVideoIndex, containerHeight, dragY, isAnimating, VIDEOS.length]);
   
-  // Go to previous video
-  const goToPrevVideo = useCallback(() => {
-    if (isLocked || currentVideoIndex <= 0) return;
+  // Detect actual mousewheel vs trackpad
+  const detectInputType = useCallback((e: WheelEvent) => {
+    // True mousewheel events are almost always divisible by 100 or 120
+    const isDivisibleBy100or120 = (Math.abs(e.deltaY) % 100 === 0) || (Math.abs(e.deltaY) % 120 === 0);
     
-    setIsLocked(true);
-    setCurrentVideoIndex(prev => prev - 1);
+    // Mousewheel events typically have deltaMode of 0 (pixel) and significantly larger deltas
+    isMouseWheel.current = isDivisibleBy100or120 && Math.abs(e.deltaY) >= 100;
     
-    // Unlock after a short delay
-    setTimeout(() => {
-      setIsLocked(false);
-    }, 300);
-  }, [currentVideoIndex, isLocked]);
+    return isMouseWheel.current;
+  }, []);
   
   // Set video ref
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
@@ -166,48 +189,143 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // FIXED: Direct response to wheel events - respond to single clicks
+  // TACTILE SCROLLING: Moves videos with the mousepad
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    if (isLocked) return;
+    if (isAnimating) return;
     
-    // Make an immediate decision based on wheel direction
-    // This allows for single mousewheel click response
-    const delta = e.deltaY;
+    // Record time of this scroll event
+    lastScrollTime.current = Date.now();
     
-    // If delta is significant enough to be an intentional scroll
-    if (Math.abs(delta) > 15) {
-      if (delta > 0) {
-        goToNextVideo();
-      } else {
-        goToPrevVideo();
+    // Check if this is a mouse wheel or trackpad
+    const isWheel = detectInputType(e.nativeEvent);
+    
+    // Handle differently based on input type
+    if (isWheel) {
+      // For mouse wheel, immediately snap to next/prev video
+      if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
+        setIsAnimating(true);
+        setCurrentVideoIndex(currentVideoIndex + 1);
+        setDragY(0);
+        setTimeout(() => setIsAnimating(false), 350);
+      } else if (e.deltaY < 0 && currentVideoIndex > 0) {
+        setIsAnimating(true);
+        setCurrentVideoIndex(currentVideoIndex - 1);
+        setDragY(0);
+        setTimeout(() => setIsAnimating(false), 350);
       }
+    } else {
+      // For trackpad, move continuously with finger
+      setIsDragging(true);
+      
+      // Calculate new drag position - more sensitive
+      setDragY(prevDragY => {
+        // Get new drag position - scrolling up is negative deltaY but should increase dragY
+        let newDragY = prevDragY - e.deltaY * 2.0; // High sensitivity multiplier
+        
+        // Apply resistance at the edges
+        if ((currentVideoIndex === 0 && newDragY > 0) || 
+            (currentVideoIndex === VIDEOS.length - 1 && newDragY < 0)) {
+          newDragY = newDragY * 0.3; // Strong resistance at edges
+        }
+        
+        // Limit maximum drag distance
+        const maxDrag = containerHeight * 0.8; // Allow dragging up to 80% of screen height
+        return Math.max(Math.min(newDragY, maxDrag), -maxDrag);
+      });
+      
+      // Clear existing timeout
+      if (scrollTimeout.current) {
+        clearTimeout(scrollTimeout.current);
+      }
+      
+      // Set new timeout to detect when scrolling stops
+      scrollTimeout.current = setTimeout(() => {
+        // Check if scrolling has actually stopped
+        const timeSinceLastScroll = Date.now() - lastScrollTime.current;
+        
+        if (timeSinceLastScroll >= 80 && isDragging) {
+          setIsDragging(false);
+          snapToNearestVideo();
+        }
+      }, 80); // Short timeout for responsive feel
     }
-  }, [isLocked, goToNextVideo, goToPrevVideo]);
+  }, [
+    currentVideoIndex, 
+    isAnimating, 
+    VIDEOS.length, 
+    containerHeight, 
+    isDragging, 
+    detectInputType, 
+    snapToNearestVideo
+  ]);
   
-  // Ultra-simple touch handlers
+  // Handle touch events
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isLocked) return;
+    if (isAnimating) return;
+    
     touchStartY.current = e.touches[0].clientY;
-  }, [isLocked]);
+    setIsDragging(true);
+  }, [isAnimating]);
   
-  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isLocked) return;
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (isAnimating) return;
     
     // Calculate the distance moved
-    const touchEndY = e.changedTouches[0].clientY;
-    const distance = touchStartY.current - touchEndY;
+    const touchY = e.touches[0].clientY;
+    const diff = touchY - touchStartY.current;
     
-    // Simple decision based on distance
-    if (Math.abs(distance) > 50) { // Small threshold for easy triggering
-      if (distance > 0) {
-        goToNextVideo();
-      } else {
-        goToPrevVideo();
+    // Update drag position with higher sensitivity for touch
+    setDragY(prevDragY => {
+      // Calculate new position
+      let newDragY = diff * 1.5;
+      
+      // Apply resistance at the edges
+      if ((currentVideoIndex === 0 && newDragY > 0) || 
+          (currentVideoIndex === VIDEOS.length - 1 && newDragY < 0)) {
+        newDragY = newDragY * 0.3;
       }
+      
+      // Limit maximum drag distance
+      const maxDrag = containerHeight * 0.8;
+      return Math.max(Math.min(newDragY, maxDrag), -maxDrag);
+    });
+  }, [isAnimating, currentVideoIndex, VIDEOS.length, containerHeight]);
+  
+  const handleTouchEnd = useCallback(() => {
+    if (!isDragging || isAnimating) return;
+    
+    setIsDragging(false);
+    snapToNearestVideo();
+  }, [isDragging, isAnimating, snapToNearestVideo]);
+  
+  // Get transition settings based on state
+  const getTransitionSettings = useCallback(() => {
+    if (isAnimating) {
+      // Smooth snap animation
+      return {
+        type: "spring",
+        stiffness: 300,
+        damping: 40,
+        restDelta: 0.001
+      };
+    } else if (isDragging) {
+      // Immediate response during dragging - no physics
+      return {
+        type: "just",
+        duration: 0.0,
+        ease: "linear"
+      };
+    } else {
+      // Default transition
+      return {
+        type: "spring",
+        stiffness: 300,
+        damping: 40
+      };
     }
-  }, [isLocked, goToNextVideo, goToPrevVideo]);
+  }, [isAnimating, isDragging]);
   
   // Setup window events
   useEffect(() => {
@@ -227,9 +345,19 @@ function FeedList(): JSX.Element {
     // Add keyboard navigation
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp') {
-        goToPrevVideo();
+        if (currentVideoIndex > 0 && !isAnimating) {
+          setIsAnimating(true);
+          setCurrentVideoIndex(currentVideoIndex - 1);
+          setDragY(0);
+          setTimeout(() => setIsAnimating(false), 350);
+        }
       } else if (e.key === 'ArrowDown') {
-        goToNextVideo();
+        if (currentVideoIndex < VIDEOS.length - 1 && !isAnimating) {
+          setIsAnimating(true);
+          setCurrentVideoIndex(currentVideoIndex + 1);
+          setDragY(0);
+          setTimeout(() => setIsAnimating(false), 350);
+        }
       } else if (e.key === 'm') {
         setIsMuted(!isMuted);
       }
@@ -237,12 +365,27 @@ function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     
+    // Global check to ensure we don't get stuck
+    const checkInterval = setInterval(() => {
+      if (isDragging) {
+        const timeSinceLastScroll = Date.now() - lastScrollTime.current;
+        if (timeSinceLastScroll > 150) {
+          setIsDragging(false);
+          snapToNearestVideo();
+        }
+      }
+    }, 200);
+    
     // Cleanup
     return () => {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
+      clearInterval(checkInterval);
+      if (scrollTimeout.current) {
+        clearTimeout(scrollTimeout.current);
+      }
     };
-  }, [goToNextVideo, goToPrevVideo, isMuted]);
+  }, [currentVideoIndex, isAnimating, isMuted, isDragging, VIDEOS.length, snapToNearestVideo]);
   
   // Handle video playback when current index changes
   useEffect(() => {
@@ -300,6 +443,7 @@ function FeedList(): JSX.Element {
       className="h-screen w-full overflow-hidden bg-black relative px-1"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onClick={handleDoubleTap}
     >
@@ -308,14 +452,9 @@ function FeedList(): JSX.Element {
         className="absolute w-full px-2"
         style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
-          y: -currentVideoIndex * containerHeight 
+          y: -currentVideoIndex * containerHeight + dragY 
         }}
-        transition={{
-          type: "spring",
-          stiffness: 300,
-          damping: 30,
-          duration: 0.3
-        }}
+        transition={getTransitionSettings()}
       >
         {VIDEOS.map((videoItem, index) => {
           // Only render videos that are close to the current one for performance
