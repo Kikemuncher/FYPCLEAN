@@ -89,39 +89,46 @@ function FeedList(): JSX.Element {
   // Window height for proper sizing
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // Simplified scroll handling - we'll use direct positioning instead of progress tracking
-  const [offset, setOffset] = useState<number>(0);
-  const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  // Simplest approach: just a locked flag and no progress tracking
+  const [isLocked, setIsLocked] = useState<boolean>(false);
   
-  // Touch refs
+  // Simple wheel state tracking
+  const wheelDistance = useRef<number>(0);
+  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
+  
+  // Touch tracking
   const touchStartY = useRef<number>(0);
-  const touchMoveY = useRef<number>(0);
   const lastTap = useRef<number>(0);
   
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // Simplified wheel handler
-  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
-  const isWheeling = useRef<boolean>(false);
-  
-  // Next/Previous video navigation
+  // Go to next video
   const goToNextVideo = useCallback(() => {
-    if (isAnimating || currentVideoIndex >= VIDEOS.length - 1) return;
-    setIsAnimating(true);
-    setCurrentVideoIndex(currentVideoIndex + 1);
-    setOffset(0);
-    setTimeout(() => setIsAnimating(false), 500);
-  }, [currentVideoIndex, isAnimating, VIDEOS.length]);
+    if (isLocked || currentVideoIndex >= VIDEOS.length - 1) return;
+    
+    setIsLocked(true);
+    setCurrentVideoIndex(prev => prev + 1);
+    
+    // Unlock after a short delay
+    setTimeout(() => {
+      setIsLocked(false);
+    }, 300);
+  }, [currentVideoIndex, isLocked, VIDEOS.length]);
   
+  // Go to previous video
   const goToPrevVideo = useCallback(() => {
-    if (isAnimating || currentVideoIndex <= 0) return;
-    setIsAnimating(true);
-    setCurrentVideoIndex(currentVideoIndex - 1);
-    setOffset(0);
-    setTimeout(() => setIsAnimating(false), 500);
-  }, [currentVideoIndex, isAnimating]);
+    if (isLocked || currentVideoIndex <= 0) return;
+    
+    setIsLocked(true);
+    setCurrentVideoIndex(prev => prev - 1);
+    
+    // Unlock after a short delay
+    setTimeout(() => {
+      setIsLocked(false);
+    }, 300);
+  }, [currentVideoIndex, isLocked]);
   
   // Set video ref
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
@@ -163,118 +170,58 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // SIMPLEST APPROACH - No complex accumulation, just direct movement and snapping
+  // Ultra-simple wheel handler: just accumulate distance and make decision on timeout
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    if (isAnimating) return;
+    if (isLocked) return;
     
-    // Mark that we're actively wheeling
-    isWheeling.current = true;
+    // Accumulate wheel distance
+    wheelDistance.current += e.deltaY;
     
     // Clear existing timeout
     if (wheelTimeout.current) {
       clearTimeout(wheelTimeout.current);
     }
     
-    // Get delta and apply sensitivity
-    const delta = e.deltaY * 1.0;
-    
-    // Update offset directly
-    setOffset(currentOffset => {
-      // Calculate new offset
-      let newOffset = currentOffset - delta;
-      
-      // Apply edge resistance
-      if ((currentVideoIndex === 0 && newOffset > 0) || 
-          (currentVideoIndex === VIDEOS.length - 1 && newOffset < 0)) {
-        newOffset = newOffset * 0.3;
-      }
-      
-      // Clamp to reasonable limits
-      const maxOffset = containerHeight * 0.7; // Allow movement up to 70% of screen
-      return Math.max(Math.min(newOffset, maxOffset), -maxOffset);
-    });
-    
-    // Set timeout for detecting when wheeling stops
+    // Set a very short timeout to decide after scrolling stops
     wheelTimeout.current = setTimeout(() => {
-      isWheeling.current = false;
-      
-      // Check if we should navigate based on current offset
-      const currentOffset = offset;
-      
-      if (Math.abs(currentOffset) > containerHeight * 0.3) { // 30% threshold
-        if (currentOffset < 0) {
-          // Navigate to next video
+      // Simple decision based on accumulated distance
+      if (Math.abs(wheelDistance.current) > 100) { // Small threshold for easy triggering
+        if (wheelDistance.current > 0) {
           goToNextVideo();
         } else {
-          // Navigate to previous video
           goToPrevVideo();
         }
-      } else {
-        // Not enough movement - snap back to current
-        setOffset(0);
       }
-    }, 120); // Slightly longer timeout but still fast
-  }, [offset, isAnimating, currentVideoIndex, VIDEOS.length, containerHeight, goToNextVideo, goToPrevVideo]);
+      
+      // Reset wheel distance
+      wheelDistance.current = 0;
+    }, 100);
+  }, [isLocked, goToNextVideo, goToPrevVideo]);
   
-  // Handle touch events
+  // Ultra-simple touch handlers
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isAnimating) return;
+    if (isLocked) return;
     touchStartY.current = e.touches[0].clientY;
-    touchMoveY.current = e.touches[0].clientY;
-  }, [isAnimating]);
+  }, [isLocked]);
   
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isAnimating) return;
+  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (isLocked) return;
     
-    const currentY = e.touches[0].clientY;
-    const diff = currentY - touchStartY.current;
-    touchMoveY.current = currentY;
+    // Calculate the distance moved
+    const touchEndY = e.changedTouches[0].clientY;
+    const distance = touchStartY.current - touchEndY;
     
-    // Update offset directly
-    setOffset(currentOffset => {
-      // Calculate new offset - use direct mapping
-      let newOffset = diff * 1.5;
-      
-      // Apply edge resistance
-      if ((currentVideoIndex === 0 && newOffset > 0) || 
-          (currentVideoIndex === VIDEOS.length - 1 && newOffset < 0)) {
-        newOffset = newOffset * 0.3;
-      }
-      
-      // Clamp to reasonable limits
-      const maxOffset = containerHeight * 0.7;
-      return Math.max(Math.min(newOffset, maxOffset), -maxOffset);
-    });
-  }, [isAnimating, currentVideoIndex, VIDEOS.length, containerHeight]);
-  
-  const handleTouchEnd = useCallback(() => {
-    if (isAnimating) return;
-    
-    // Check if we should navigate based on current offset
-    if (Math.abs(offset) > containerHeight * 0.3) { // 30% threshold
-      if (offset < 0) {
-        // Navigate to next video
+    // Simple decision based on distance
+    if (Math.abs(distance) > 50) { // Small threshold for easy triggering
+      if (distance > 0) {
         goToNextVideo();
       } else {
-        // Navigate to previous video
         goToPrevVideo();
       }
-    } else {
-      // Not enough movement - snap back to current
-      setOffset(0);
     }
-  }, [offset, containerHeight, goToNextVideo, goToPrevVideo, isAnimating]);
-  
-  // Simple spring settings
-  const getTransitionSettings = useCallback(() => {
-    return {
-      type: "spring",
-      stiffness: 400,
-      damping: 50
-    };
-  }, []);
+  }, [isLocked, goToNextVideo, goToPrevVideo]);
   
   // Setup window events
   useEffect(() => {
@@ -370,7 +317,6 @@ function FeedList(): JSX.Element {
       className="h-screen w-full overflow-hidden bg-black relative px-1"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onClick={handleDoubleTap}
     >
@@ -379,9 +325,14 @@ function FeedList(): JSX.Element {
         className="absolute w-full px-2"
         style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
-          y: -currentVideoIndex * containerHeight + offset
+          y: -currentVideoIndex * containerHeight 
         }}
-        transition={getTransitionSettings()}
+        transition={{
+          type: "spring",
+          stiffness: 300,
+          damping: 30,
+          duration: 0.3
+        }}
       >
         {VIDEOS.map((videoItem, index) => {
           // Only render videos that are close to the current one for performance
@@ -512,6 +463,31 @@ function FeedList(): JSX.Element {
       <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
         <span className="text-white text-sm">{currentVideoIndex + 1} / {VIDEOS.length}</span>
       </div>
+      
+      {/* Navigation buttons for clearer UX */}
+      <button
+        onClick={goToPrevVideo}
+        disabled={isLocked || currentVideoIndex <= 0}
+        className={`absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/30 p-2 rounded-full z-30 ${
+          isLocked || currentVideoIndex <= 0 ? 'opacity-30' : 'opacity-70 hover:opacity-100'
+        }`}
+      >
+        <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      
+      <button
+        onClick={goToNextVideo}
+        disabled={isLocked || currentVideoIndex >= VIDEOS.length - 1}
+        className={`absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/30 p-2 rounded-full z-30 ${
+          isLocked || currentVideoIndex >= VIDEOS.length - 1 ? 'opacity-30' : 'opacity-70 hover:opacity-100'
+        }`}
+      >
+        <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
       
       {/* Scroll guide indicator */}
       {VIDEOS.length > 1 && currentVideoIndex === 0 && (
