@@ -180,30 +180,18 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // IMPROVED: Wheel event handling with better detection of mouse wheel vs trackpad
+  // FIXED: Wheel event handling that prioritizes tactile control for trackpad
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
     if (isAnimating) return;
     
-    const now = Date.now();
-    const timeDelta = now - lastWheelEvent.current;
-    lastWheelEvent.current = now;
+    // For regular mouse wheel (non-trackpad), look for specific characteristics
+    // Mouse wheels typically have deltaMode of 1 (lines) or 3 (pages)
+    const isStrictMouseWheel = e.deltaMode !== 0;
     
-    // Detect if it's a discrete mouse wheel or continuous trackpad
-    // Mouse wheels typically have larger deltaY and deltaMode of 1 or 3
-    // Also, mouse wheel events come with bigger time gaps
-    const isMouseWheel = (
-      Math.abs(e.deltaY) > 100 || 
-      e.deltaMode !== 0 || 
-      timeDelta > 100
-    );
-    
-    // Store for later reference
-    isMouseWheelRef.current = isMouseWheel;
-    
-    // Immediate navigation for mouse wheel
-    if (isMouseWheel) {
+    // Immediate navigation ONLY for strict mouse wheel events
+    if (isStrictMouseWheel) {
       if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
         setIsAnimating(true);
         setCurrentVideoIndex(prev => prev + 1);
@@ -218,11 +206,13 @@ function FeedList(): JSX.Element {
       return;
     }
     
-    // For trackpad: direct tactile control
+    // For all other wheel events (most likely trackpad), use tactile control
     // DeltaY is negative when scrolling up, positive when scrolling down
     // For natural feel, we reverse this (negative offset = down, positive = up)
     const delta = -e.deltaY;
-    const sensitivity = 2.5; // Balanced sensitivity
+    
+    // Lower sensitivity for better control
+    const sensitivity = 1.2;
     
     // Update offset directly - this creates the tactile feel
     setOffset(currentOffset => {
@@ -249,7 +239,7 @@ function FeedList(): JSX.Element {
     wheelTimer.current = setTimeout(() => {
       handleScrollEnd();
       wheelTimer.current = null;
-    }, 150);
+    }, 200); // Slightly longer timeout for better trackpad experience
   }, [
     isAnimating,
     currentVideoIndex, 
@@ -413,10 +403,14 @@ function FeedList(): JSX.Element {
       {/* Main feed container with direct control */}
       <motion.div 
         className="absolute w-full px-2"
-        style={{ height: containerHeight * VIDEOS.length }}
-        animate={{ 
-          y: -currentVideoIndex * containerHeight + offset
+        style={{ 
+          height: containerHeight * VIDEOS.length,
+          // Apply transform directly through style for more responsive feel
+          transform: `translateY(${-currentVideoIndex * containerHeight + offset}px)`
         }}
+        animate={isAnimating ? { 
+          y: -currentVideoIndex * containerHeight // Only animate when transitioning
+        } : {}}
         transition={isAnimating ? {
           // For navigation animations - quick and smooth
           type: "spring",
@@ -424,10 +418,8 @@ function FeedList(): JSX.Element {
           damping: 30,
           duration: 0.3
         } : {
-          // For direct tactile control - immediate response
-          type: "tween", 
-          duration: 0,
-          ease: "linear"
+          // No transition during tactile control for true 1:1 movement
+          duration: 0
         }}
       >
         {VIDEOS.map((videoItem, index) => {
