@@ -92,26 +92,27 @@ function FeedList(): JSX.Element {
   // Direct tactile control over offset position
   const [offset, setOffset] = useState<number>(0);
   
-  // Locking to prevent multiple navigation events
-  const [isNavigating, setIsNavigating] = useState<boolean>(false);
+  // Animation control
+  const [isAnimating, setIsAnimating] = useState<boolean>(false);
   
   // Wheel and touch tracking
-  const wheelAccumulator = useRef<number>(0);
-  const scrollEndTimeout = useRef<NodeJS.Timeout | null>(null);
+  const wheelTimer = useRef<any>(null);
   const touchStartY = useRef<number>(0);
   const lastTap = useRef<number>(0);
+  const lastWheelEvent = useRef<number>(0);
+  const isMouseWheelRef = useRef<boolean>(false);
   
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
-  
-  // Handle navigation after scrolling stops
+
+  // Handle when scrolling stops
   const handleScrollEnd = useCallback(() => {
-    if (isNavigating) return;
+    if (isAnimating) return;
     
-    // Decision about whether to navigate or snap back
-    if (Math.abs(offset) > containerHeight * 0.35) { // 35% threshold
-      setIsNavigating(true);
+    // Decision about whether to navigate or snap back - uses 50% threshold
+    if (Math.abs(offset) > containerHeight * 0.5) {
+      setIsAnimating(true);
       
       // Direction determines which way to navigate
       if (offset < 0 && currentVideoIndex < VIDEOS.length - 1) {
@@ -127,15 +128,17 @@ function FeedList(): JSX.Element {
       
       // Unlock after animation
       setTimeout(() => {
-        setIsNavigating(false);
-        wheelAccumulator.current = 0;
-      }, 450);
+        setIsAnimating(false);
+      }, 300);
     } else {
       // Not enough to navigate - snap back to current
+      setIsAnimating(true);
       setOffset(0);
-      wheelAccumulator.current = 0;
+      setTimeout(() => {
+        setIsAnimating(false);
+      }, 300);
     }
-  }, [offset, isNavigating, currentVideoIndex, VIDEOS.length, containerHeight]);
+  }, [offset, isAnimating, currentVideoIndex, VIDEOS.length, containerHeight]);
   
   // Set video ref
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
@@ -177,70 +180,78 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // KEY FUNCTION: Direct mousepad control
+  // IMPROVED: Wheel event handling with better detection of mouse wheel vs trackpad
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    if (isNavigating) return;
+    if (isAnimating) return;
     
-    // Check if wheel event is from a mousepad
-    const isMousePad = Math.abs(e.deltaY) < 100 && e.deltaMode === 0;
+    const now = Date.now();
+    const timeDelta = now - lastWheelEvent.current;
+    lastWheelEvent.current = now;
     
-    // If it's a regular mouse wheel, handle as discrete navigation
-    if (!isMousePad) {
+    // Detect if it's a discrete mouse wheel or continuous trackpad
+    // Mouse wheels typically have larger deltaY and deltaMode of 1 or 3
+    // Also, mouse wheel events come with bigger time gaps
+    const isMouseWheel = (
+      Math.abs(e.deltaY) > 100 || 
+      e.deltaMode !== 0 || 
+      timeDelta > 100
+    );
+    
+    // Store for later reference
+    isMouseWheelRef.current = isMouseWheel;
+    
+    // Immediate navigation for mouse wheel
+    if (isMouseWheel) {
       if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
-        setIsNavigating(true);
+        setIsAnimating(true);
         setCurrentVideoIndex(prev => prev + 1);
         setOffset(0);
-        setTimeout(() => setIsNavigating(false), 450);
+        setTimeout(() => setIsAnimating(false), 300);
       } else if (e.deltaY < 0 && currentVideoIndex > 0) {
-        setIsNavigating(true);
+        setIsAnimating(true);
         setCurrentVideoIndex(prev => prev - 1);
         setOffset(0);
-        setTimeout(() => setIsNavigating(false), 450);
+        setTimeout(() => setIsAnimating(false), 300);
       }
       return;
     }
     
-    // DIRECT TACTILE CONTROL - update offset as you scroll
+    // For trackpad: direct tactile control
     // DeltaY is negative when scrolling up, positive when scrolling down
     // For natural feel, we reverse this (negative offset = down, positive = up)
     const delta = -e.deltaY;
+    const sensitivity = 2.5; // Balanced sensitivity
     
-    // High sensitivity multiplier for responsive feel
-    const sensitivity = 4.0;
-    const movementDelta = delta * sensitivity;
-    
-    // Update the wheel accumulator to track total movement
-    wheelAccumulator.current += movementDelta;
-    
-    // Update offset directly based on wheel movement
+    // Update offset directly - this creates the tactile feel
     setOffset(currentOffset => {
-      // Calculate new position
-      let newOffset = currentOffset + movementDelta;
+      // Calculate new position with sensitivity applied
+      let newOffset = currentOffset + (delta * sensitivity);
       
-      // Apply edge resistance
+      // Apply resistance at the edges
       if ((currentVideoIndex === 0 && newOffset > 0) || 
           (currentVideoIndex === VIDEOS.length - 1 && newOffset < 0)) {
-        newOffset = currentOffset + (movementDelta * 0.25); // Strong resistance at edges
+        newOffset = currentOffset + (delta * sensitivity * 0.2); // Strong resistance
       }
       
-      // Limit maximum offset
-      const maxOffset = containerHeight * 0.6; // Allow up to 60% of screen height
+      // Limit maximum offset for stability
+      const maxOffset = containerHeight * 0.8;
       return Math.max(Math.min(newOffset, maxOffset), -maxOffset);
     });
     
-    // Clear existing timeout for debouncing
-    if (scrollEndTimeout.current) {
-      clearTimeout(scrollEndTimeout.current);
+    // Clear existing debounce timer
+    if (wheelTimer.current) {
+      clearTimeout(wheelTimer.current);
     }
     
-    // Set timeout to detect when scrolling stops
-    scrollEndTimeout.current = setTimeout(() => {
+    // Set timer to detect when scrolling stops
+    wheelTimer.current = setTimeout(() => {
       handleScrollEnd();
-    }, 100); // Short timeout for responsive snap
+      wheelTimer.current = null;
+    }, 150);
   }, [
-    isNavigating, 
+    isAnimating,
     currentVideoIndex, 
     VIDEOS.length, 
     containerHeight, 
@@ -249,39 +260,37 @@ function FeedList(): JSX.Element {
   
   // Handle touch events for touch screens
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isNavigating) return;
-    
+    if (isAnimating) return;
     touchStartY.current = e.touches[0].clientY;
-  }, [isNavigating]);
+  }, [isAnimating]);
   
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isNavigating) return;
+    if (isAnimating) return;
     
     const touchY = e.touches[0].clientY;
     const diff = touchY - touchStartY.current;
     
     // Direct mapping for natural feel
     setOffset(currentOffset => {
-      // Calculate new position
-      let newOffset = diff * 1.5; // Sensitivity for touch
+      // Natural feel - move with finger
+      let newOffset = diff;
       
-      // Apply edge resistance
+      // Edge resistance
       if ((currentVideoIndex === 0 && newOffset > 0) || 
           (currentVideoIndex === VIDEOS.length - 1 && newOffset < 0)) {
-        newOffset = newOffset * 0.25; // Strong resistance at edges
+        newOffset = diff * 0.2; // Strong resistance at edges
       }
       
-      // Limit maximum offset
-      const maxOffset = containerHeight * 0.6;
+      // Safety limits
+      const maxOffset = containerHeight * 0.8;
       return Math.max(Math.min(newOffset, maxOffset), -maxOffset);
     });
-  }, [isNavigating, currentVideoIndex, VIDEOS.length, containerHeight]);
+  }, [isAnimating, currentVideoIndex, VIDEOS.length, containerHeight]);
   
   const handleTouchEnd = useCallback(() => {
-    if (isNavigating) return;
-    
+    if (isAnimating) return;
     handleScrollEnd();
-  }, [isNavigating, handleScrollEnd]);
+  }, [isAnimating, handleScrollEnd]);
   
   // Setup window events
   useEffect(() => {
@@ -300,21 +309,21 @@ function FeedList(): JSX.Element {
     
     // Add keyboard navigation
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isNavigating) return;
+      if (isAnimating) return;
       
       if (e.key === 'ArrowUp') {
         if (currentVideoIndex > 0) {
-          setIsNavigating(true);
+          setIsAnimating(true);
           setCurrentVideoIndex(prev => prev - 1);
           setOffset(0);
-          setTimeout(() => setIsNavigating(false), 450);
+          setTimeout(() => setIsAnimating(false), 300);
         }
       } else if (e.key === 'ArrowDown') {
         if (currentVideoIndex < VIDEOS.length - 1) {
-          setIsNavigating(true);
+          setIsAnimating(true);
           setCurrentVideoIndex(prev => prev + 1);
           setOffset(0);
-          setTimeout(() => setIsNavigating(false), 450);
+          setTimeout(() => setIsAnimating(false), 300);
         }
       } else if (e.key === 'm') {
         setIsMuted(!isMuted);
@@ -325,7 +334,7 @@ function FeedList(): JSX.Element {
     
     // Safety measure - if somehow we get stuck, force snap back
     const safetyInterval = setInterval(() => {
-      if (!isNavigating && Math.abs(offset) > 0 && scrollEndTimeout.current === null) {
+      if (!isAnimating && Math.abs(offset) > 0 && wheelTimer.current === null) {
         setOffset(0);
       }
     }, 1000);
@@ -335,11 +344,11 @@ function FeedList(): JSX.Element {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
       clearInterval(safetyInterval);
-      if (scrollEndTimeout.current) {
-        clearTimeout(scrollEndTimeout.current);
+      if (wheelTimer.current) {
+        clearTimeout(wheelTimer.current);
       }
     };
-  }, [currentVideoIndex, isNavigating, isMuted, offset, VIDEOS.length]);
+  }, [currentVideoIndex, isAnimating, isMuted, offset, VIDEOS.length]);
   
   // Handle video playback when current index changes
   useEffect(() => {
@@ -408,16 +417,17 @@ function FeedList(): JSX.Element {
         animate={{ 
           y: -currentVideoIndex * containerHeight + offset
         }}
-        transition={isNavigating ? {
+        transition={isAnimating ? {
+          // For navigation animations - quick and smooth
           type: "spring",
-          stiffness: 400,
-          damping: 40,
-          duration: 0.45
+          stiffness: 300,
+          damping: 30,
+          duration: 0.3
         } : {
-          // VERY IMPORTANT: Use "just" type transition for direct control
-          // This makes the movement 1:1 with the mousepad with no physics
-          type: "just",
-          duration: 0
+          // For direct tactile control - immediate response
+          type: "tween", 
+          duration: 0,
+          ease: "linear"
         }}
       >
         {VIDEOS.map((videoItem, index) => {
@@ -436,7 +446,7 @@ function FeedList(): JSX.Element {
             >
               {isVisible && (
                 <div className="relative w-full h-full overflow-hidden px-2 py-2 flex justify-center">
-                  {/* Video container with 9:16 aspect ratio */}
+                  {/* Video container with strict 9:16 aspect ratio */}
                   <div 
                     className="relative video-container rounded-2xl overflow-hidden"
                     style={{ 
