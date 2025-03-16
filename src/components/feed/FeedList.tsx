@@ -93,107 +93,45 @@ function FeedList(): JSX.Element {
   // Scroll-related state
   const [swipeProgress, setSwipeProgress] = useState<number>(0);
   const [isSwipeLocked, setIsSwipeLocked] = useState<boolean>(false);
-  const [isTrackpadScrolling, setIsTrackpadScrolling] = useState<boolean>(false);
   
   // Touch refs
   const touchStartY = useRef<number>(0);
   const touchMoveY = useRef<number>(0);
   const lastTap = useRef<number>(0);
   
-  // Wheel event tracking
-  const wheelEvents = useRef<number[]>([]);
-  const lastWheelTime = useRef<number>(0);
-  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
-  
-  // For trackpad movement detection
-  const lastWheelMovement = useRef<number>(Date.now());
-  
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // Handle wheel end event for trackpad scrolling
+  // IMPROVED: handleScrollEnd with 50% snap threshold
   const handleScrollEnd = useCallback(() => {
     if (isSwipeLocked) return;
     
-    // If there's any scroll progress at all, make a decision
-    if (swipeProgress !== 0) {
-      setIsSwipeLocked(true);
-      
-      // Calculate how far we've scrolled relative to a threshold
-      // Use a more sensitive threshold since we ALWAYS want to snap
-      const threshold = containerHeight * 0.12; // Reduced from 0.15 to 0.12 (makes it easier to trigger)
-      
-      if (Math.abs(swipeProgress) > threshold) {
-        // We've scrolled enough to trigger a video change
-        if (swipeProgress < 0 && currentVideoIndex < VIDEOS.length - 1) {
-          // Progress is negative (scrolling down) - go to next video
-          setCurrentVideoIndex(currentVideoIndex + 1);
-        } else if (swipeProgress > 0 && currentVideoIndex > 0) {
-          // Progress is positive (scrolling up) - go to previous video
-          setCurrentVideoIndex(currentVideoIndex - 1);
-        }
+    // Always make a decision when scrolling ends, even for small movements
+    setIsSwipeLocked(true);
+    
+    // Calculate what percentage of the next/previous video is in view
+    const percentInView = Math.abs(swipeProgress) / containerHeight;
+    
+    // If more than 50% of the next/previous video is in view, go to that video
+    if (percentInView > 0.5) {
+      if (swipeProgress < 0 && currentVideoIndex < VIDEOS.length - 1) {
+        // More than 50% of the next video is in view - go to next
+        setCurrentVideoIndex(currentVideoIndex + 1);
+      } else if (swipeProgress > 0 && currentVideoIndex > 0) {
+        // More than 50% of the previous video is in view - go to previous
+        setCurrentVideoIndex(currentVideoIndex - 1);
       }
-      
-      // ALWAYS reset progress to 0 to avoid stuck state
-      // Do this immediately for a more responsive feel
-      setSwipeProgress(0);
-      
-      // Unlock after animation completes - REDUCED from 400ms to 200ms
-      setTimeout(() => {
-        setIsSwipeLocked(false);
-      }, 200);
     }
+    
+    // Always reset progress to 0
+    setSwipeProgress(0);
+    
+    // Unlock after animation completes
+    setTimeout(() => {
+      setIsSwipeLocked(false);
+    }, 400);
   }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
-
-  // Setup wheel end detection function
-  const handleWheelEndEvent = useCallback(() => {
-    // Only trigger when scrolling has completely stopped (mousepad released)
-    if (isTrackpadScrolling && !isSwipeLocked && Math.abs(swipeProgress) > 0) {
-      // Since the user has fully stopped scrolling, now we decide what to do
-      handleScrollEnd();
-    }
-  }, [isTrackpadScrolling, isSwipeLocked, swipeProgress, handleScrollEnd]);
-  
-  // Detect trackpad vs mouse wheel
-  const detectTrackpad = useCallback((e: WheelEvent) => {
-    // Most trackpads send wheel events with smaller deltas and pixelated values
-    // While mouse wheels typically have larger deltas and are more discrete
-    const now = Date.now();
-    wheelEvents.current.push(Math.abs(e.deltaY));
-    
-    // Keep only recent events for analysis
-    const recentEvents = wheelEvents.current.slice(-5);
-    wheelEvents.current = recentEvents;
-    
-    // If we have enough events to analyze
-    if (recentEvents.length >= 3) {
-      // Calculate average delta
-      const avgDelta = recentEvents.reduce((sum, delta) => sum + delta, 0) / recentEvents.length;
-      
-      // Check time between events
-      const timeDiff = now - lastWheelTime.current;
-      
-      // Trackpads typically send many small events in quick succession
-      const isLikelyTrackpad = 
-        (avgDelta < 10 || recentEvents.some(delta => delta < 5)) && 
-        timeDiff < 100; // Events are close together
-      
-      setIsTrackpadScrolling(isLikelyTrackpad);
-    }
-    
-    lastWheelTime.current = now;
-    
-    // Reset trackpad detection after a period of inactivity
-    if (wheelTimeout.current) {
-      clearTimeout(wheelTimeout.current);
-    }
-    
-    wheelTimeout.current = setTimeout(() => {
-      wheelEvents.current = [];
-      setIsTrackpadScrolling(false);
-    }, 500);
-  }, []);
   
   // Set video ref
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
@@ -235,69 +173,35 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // Handle wheel event for scrolling with improved detection
+  // IMPROVED: More sensitive handleWheel for better scrolling
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Record this wheel movement time
-    lastWheelMovement.current = Date.now();
-    
-    // Pass to detector
-    detectTrackpad(e.nativeEvent);
-    
     if (isSwipeLocked) return;
     
-    const delta = e.deltaY;
+    // Get the Delta Y value from the wheel event
+    const deltaY = e.deltaY;
     
-    // Determine if this is likely a discrete mouse wheel "click"
-    const isDiscreteWheel = Math.abs(delta) > 30 && !isTrackpadScrolling;
+    // Apply a higher sensitivity multiplier for more responsive movement
+    const progressDelta = deltaY * 1.2; // Doubled from 0.6 to 1.2
     
-    // For discrete mouse wheel, move directly to next/prev video
-    if (isDiscreteWheel) {
-      if (delta > 0 && currentVideoIndex < VIDEOS.length - 1) {
-        // Scrolling down - next video (delta > 0 means scrolling down)
-        setIsSwipeLocked(true);
-        setCurrentVideoIndex(currentVideoIndex + 1);
-        setSwipeProgress(0);
-        setTimeout(() => {
-          setIsSwipeLocked(false);
-        }, 300);
-      } else if (delta < 0 && currentVideoIndex > 0) {
-        // Scrolling up - previous video (delta < 0 means scrolling up)
-        setIsSwipeLocked(true);
-        setCurrentVideoIndex(currentVideoIndex - 1);
-        setSwipeProgress(0);
-        setTimeout(() => {
-          setIsSwipeLocked(false);
-        }, 300);
-      }
-      return;
-    }
+    // Update progress based on wheel direction
+    let newProgress = swipeProgress - progressDelta;
     
-    // For trackpad or continuous scrolling, update progress in a natural direction
-    // Apply a multiplier for sensitivity adjustment - Significantly increased for more responsiveness
-    const progressDelta = -delta * 0.9; // Was 0.6, increased to 0.9 for higher sensitivity
-    
-    // Update progress for visual feedback
-    let newProgress = swipeProgress + progressDelta;
-    
-    // Apply resistance at the ends
+    // Apply resistance at the edges
     if ((currentVideoIndex === 0 && newProgress > 0) || 
         (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
       newProgress = newProgress * 0.3; // Resistance factor
     }
     
-    // Clamp the progress to reasonable limits - reduced maximum for more control
-    const maxProgress = containerHeight * 0.3; // Allow scrolling up to 30% of the screen (was 40%)
+    // Allow up to 80% of the screen height for more range
+    const maxProgress = containerHeight * 0.8; // Increased from 0.4 to 0.8
     newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
     
     setSwipeProgress(newProgress);
-    
-    // IMPORTANT: We never change videos during wheel events, only on release
-    // This will only happen on wheel end/release via handleScrollEnd
-  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length, detectTrackpad, isTrackpadScrolling, containerHeight]);
+  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length, containerHeight]);
   
-  // Handle touch events for mobile with improved inertia
+  // Handle touch events for mobile
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     touchStartY.current = e.touches[0].clientY;
     touchMoveY.current = e.touches[0].clientY;
@@ -307,67 +211,56 @@ function FeedList(): JSX.Element {
     if (isSwipeLocked) return;
     
     const currentY = e.touches[0].clientY;
-    const diff = touchStartY.current - currentY;
+    const diff = currentY - touchStartY.current;
     touchMoveY.current = currentY;
     
-    // For touch, we use the difference from the start position for more natural feel
-    // This creates a direct 1:1 mapping between finger position and content position
-    const swipeDistance = diff * 2.0; // Significantly increased from 1.44 for much higher sensitivity
+    // For touch, we directly map finger position to content position
+    const swipeDistance = diff * 1.44; // Sensitivity multiplier
     
-    // Calculate progress - FLIPPED SIGN for consistent direction
-    let newProgress = -(swipeDistance / containerHeight) * 100;
+    // Calculate progress
+    let newProgress = swipeDistance;
     
-    // Apply resistance at the ends
+    // Apply resistance at the edges
     if ((currentVideoIndex === 0 && newProgress > 0) || 
         (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
       newProgress = newProgress * 0.3;
     }
     
-    // Clamp to reasonable limits
-    const maxProgress = containerHeight * 0.3;
+    // Allow larger range for touch too
+    const maxProgress = containerHeight * 0.8; // Increased from 0.4 to 0.8
     newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
     
     setSwipeProgress(newProgress);
-    
-    // We don't change videos during touch, only on touch end
   }, [isSwipeLocked, currentVideoIndex, VIDEOS.length, containerHeight]);
   
-  // Reset progress when touch ends with improved deceleration
+  // Reset progress when touch ends
   const handleTouchEnd = useCallback(() => {
     handleScrollEnd();
   }, [handleScrollEnd]);
   
-  // Custom transition settings based on interaction type
+  // Animation settings
   const getTransitionSettings = useCallback(() => {
     if (isSwipeLocked) {
-      // Full animation when snapping to a video - much faster with higher stiffness
+      // Animation when snapping to a video
       return {
         type: "spring",
-        stiffness: 700,  // Increased from 500 to 700 for faster snapping
-        damping: 80,     // Increased from 50 to 80 for less bounce
-        duration: 0.2,   // Reduced from 0.4 to 0.2 for faster transitions
-        restDelta: 0.0001
+        stiffness: 500,
+        damping: 50,
+        duration: 0.4,
+        restDelta: 0.001
       };
-    } else if (Math.abs(swipeProgress) > 0) {
+    } else {
       // Responsive movement during active scrolling
       return {
         type: "spring",
-        stiffness: 1500, // Increased from 1200 for even more responsive feel
-        damping: 100,    // Reduced from 120 to 100 for slightly more fluid movement
-        duration: 0.05   // Reduced from 0.1 to 0.05 for faster response
-      };
-    } else {
-      // Default state
-      return {
-        type: "spring",
-        stiffness: 700,  // Matched to the locked state
-        damping: 80,     // Matched to the locked state
-        duration: 0.2    // Matched to the locked state
+        stiffness: 1200,
+        damping: 120,
+        duration: 0.1
       };
     }
-  }, [isSwipeLocked, swipeProgress]);
+  }, [isSwipeLocked]);
   
-  // Set up client-side detection
+  // Setup window events
   useEffect(() => {
     setIsClient(true);
     
@@ -384,78 +277,61 @@ function FeedList(): JSX.Element {
     
     // Add keyboard navigation
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' || e.key === 'k') {
+      if (e.key === 'ArrowUp') {
         if (currentVideoIndex > 0) {
           setIsSwipeLocked(true);
           setCurrentVideoIndex(currentVideoIndex - 1);
           setTimeout(() => {
             setIsSwipeLocked(false);
-          }, 300);
+          }, 400);
         }
-      } else if (e.key === 'ArrowDown' || e.key === 'j') {
+      } else if (e.key === 'ArrowDown') {
         if (currentVideoIndex < VIDEOS.length - 1) {
           setIsSwipeLocked(true);
           setCurrentVideoIndex(currentVideoIndex + 1);
           setTimeout(() => {
             setIsSwipeLocked(false);
-          }, 300);
+          }, 400);
         }
       } else if (e.key === 'm') {
         setIsMuted(!isMuted);
-      } else if (e.key === ' ' || e.key === 'p') {
-        // Toggle play/pause
-        const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
-        if (currentVideo) {
-          if (currentVideo.paused) {
-            currentVideo.play().catch(e => console.error("Play failed:", e));
-          } else {
-            currentVideo.pause();
-          }
-        }
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     
-    // We force ending wheel events when no scroll has happened for a brief period
-    // But ONLY when the user stops scrolling completely (on mousepad release)
-    let activeScrollTimeout: NodeJS.Timeout | null = null;
+    // IMPROVED: Faster wheel end detection
+    let wheelTimeout: NodeJS.Timeout | null = null;
     
-    // Listen for the end of scrolling with more frequent checks
     const wheelHandler = () => {
-      // Cancel previous timeouts
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
-      }
-      if (activeScrollTimeout) {
-        clearTimeout(activeScrollTimeout);
+      if (wheelTimeout) {
+        clearTimeout(wheelTimeout);
       }
       
-      // Set normal end detection timeout (when scrolling fully stops)
-      // This only triggers when the user RELEASES the mousepad or stops scrolling
-      wheelTimeout.current = setTimeout(handleWheelEndEvent, 40);
+      // Shorter timeout for more responsive behavior
+      wheelTimeout = setTimeout(() => {
+        // Always trigger the scroll end handler when scrolling stops
+        handleScrollEnd();
+      }, 100); // Reduced from 150ms for quicker response
     };
     
-    window.addEventListener('wheel', wheelHandler, { passive: false });
+    window.addEventListener('wheel', wheelHandler);
     
     // Cleanup
     return () => {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('wheel', wheelHandler);
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
-      }
-      if (activeScrollTimeout) {
-        clearTimeout(activeScrollTimeout);
+      if (wheelTimeout) {
+        clearTimeout(wheelTimeout);
       }
     };
-  }, [currentVideoIndex, isMuted, isTrackpadScrolling, handleScrollEnd, swipeProgress, isSwipeLocked, handleWheelEndEvent]);
+  }, [currentVideoIndex, isMuted, handleScrollEnd, VIDEOS.length]);
   
   // Handle video playback when current index changes
   useEffect(() => {
     if (!isClient) return;
-
+    
     // Pause all videos
     Object.values(videoRefs.current).forEach(videoRef => {
       if (videoRef && !videoRef.paused) {
@@ -466,7 +342,7 @@ function FeedList(): JSX.Element {
         }
       }
     });
-
+    
     // Get current video
     const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
     if (currentVideo) {
