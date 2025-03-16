@@ -73,7 +73,6 @@ const formatCount = (count: number): string => {
   return count.toString();
 };
 
-// Define the FeedList component 
 function FeedList(): JSX.Element {
   // Client-side rendering detection
   const [isClient, setIsClient] = useState<boolean>(false);
@@ -90,57 +89,39 @@ function FeedList(): JSX.Element {
   // Window height for proper sizing
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // Scroll-related state
-  const [swipeProgress, setSwipeProgress] = useState<number>(0);
-  const [isSwipeLocked, setIsSwipeLocked] = useState<boolean>(false);
-  const [isScrolling, setIsScrolling] = useState<boolean>(false);
+  // Simplified scroll handling - we'll use direct positioning instead of progress tracking
+  const [offset, setOffset] = useState<number>(0);
+  const [isAnimating, setIsAnimating] = useState<boolean>(false);
   
   // Touch refs
   const touchStartY = useRef<number>(0);
   const touchMoveY = useRef<number>(0);
   const lastTap = useRef<number>(0);
   
-  // Tracking refs for wheel events
-  const lastWheelTime = useRef<number>(Date.now());
-  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
-  
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // FIXED: handleScrollEnd that works consistently
-  const handleScrollEnd = useCallback(() => {
-    // Don't do anything if already locked in a transition
-    if (isSwipeLocked) return;
-    
-    setIsSwipeLocked(true);
-    
-    // Log for debugging
-    console.log("Scroll ended, progress:", swipeProgress);
-    
-    // Calculate what percentage of the next/previous video is in view
-    const percentInView = Math.abs(swipeProgress) / containerHeight;
-    
-    // If more than 50% of the next/previous video is in view, go to that video
-    if (percentInView > 0.5) {
-      if (swipeProgress < 0 && currentVideoIndex < VIDEOS.length - 1) {
-        // More than 50% of the next video is in view - go to next
-        setCurrentVideoIndex(currentVideoIndex + 1);
-      } else if (swipeProgress > 0 && currentVideoIndex > 0) {
-        // More than 50% of the previous video is in view - go to previous
-        setCurrentVideoIndex(currentVideoIndex - 1);
-      }
-    }
-    
-    // Always reset progress to 0
-    setSwipeProgress(0);
-    
-    // Wait for the animation to complete before unlocking
-    setTimeout(() => {
-      setIsSwipeLocked(false);
-      setIsScrolling(false); // Make sure scrolling state is reset
-    }, 400);
-  }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
+  // Simplified wheel handler
+  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
+  const isWheeling = useRef<boolean>(false);
+  
+  // Next/Previous video navigation
+  const goToNextVideo = useCallback(() => {
+    if (isAnimating || currentVideoIndex >= VIDEOS.length - 1) return;
+    setIsAnimating(true);
+    setCurrentVideoIndex(currentVideoIndex + 1);
+    setOffset(0);
+    setTimeout(() => setIsAnimating(false), 500);
+  }, [currentVideoIndex, isAnimating, VIDEOS.length]);
+  
+  const goToPrevVideo = useCallback(() => {
+    if (isAnimating || currentVideoIndex <= 0) return;
+    setIsAnimating(true);
+    setCurrentVideoIndex(currentVideoIndex - 1);
+    setOffset(0);
+    setTimeout(() => setIsAnimating(false), 500);
+  }, [currentVideoIndex, isAnimating]);
   
   // Set video ref
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
@@ -182,121 +163,118 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // FIXED: handleWheel function that tracks when scrolling started
+  // SIMPLEST APPROACH - No complex accumulation, just direct movement and snapping
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    if (isSwipeLocked) return;
+    if (isAnimating) return;
     
-    // Update last wheel time for later checking
-    lastWheelTime.current = Date.now();
+    // Mark that we're actively wheeling
+    isWheeling.current = true;
     
-    // Mark that we're actively scrolling
-    setIsScrolling(true);
-    
-    // Get the Delta Y value from the wheel event
-    const deltaY = e.deltaY;
-    
-    // Apply a higher sensitivity multiplier for more responsive movement
-    const progressDelta = deltaY * 1.2;
-    
-    // Update progress based on wheel direction
-    let newProgress = swipeProgress - progressDelta;
-    
-    // Apply resistance at the edges
-    if ((currentVideoIndex === 0 && newProgress > 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
-      newProgress = newProgress * 0.3; // Resistance factor
-    }
-    
-    // Allow up to 80% of the screen height for more range
-    const maxProgress = containerHeight * 0.8;
-    newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
-    
-    setSwipeProgress(newProgress);
-    
-    // Clear any existing wheel timeout
+    // Clear existing timeout
     if (wheelTimeout.current) {
       clearTimeout(wheelTimeout.current);
     }
     
-    // Set a new timeout to detect when scrolling has stopped
-    wheelTimeout.current = setTimeout(() => {
-      // Check if it's been long enough since the last wheel event
-      const timeSinceLastWheel = Date.now() - lastWheelTime.current;
-      if (timeSinceLastWheel >= 100 && isScrolling) {
-        handleScrollEnd();
+    // Get delta and apply sensitivity
+    const delta = e.deltaY * 1.0;
+    
+    // Update offset directly
+    setOffset(currentOffset => {
+      // Calculate new offset
+      let newOffset = currentOffset - delta;
+      
+      // Apply edge resistance
+      if ((currentVideoIndex === 0 && newOffset > 0) || 
+          (currentVideoIndex === VIDEOS.length - 1 && newOffset < 0)) {
+        newOffset = newOffset * 0.3;
       }
-    }, 100);
-  }, [
-    swipeProgress, 
-    isSwipeLocked, 
-    currentVideoIndex, 
-    VIDEOS.length, 
-    containerHeight, 
-    isScrolling, 
-    handleScrollEnd
-  ]);
+      
+      // Clamp to reasonable limits
+      const maxOffset = containerHeight * 0.7; // Allow movement up to 70% of screen
+      return Math.max(Math.min(newOffset, maxOffset), -maxOffset);
+    });
+    
+    // Set timeout for detecting when wheeling stops
+    wheelTimeout.current = setTimeout(() => {
+      isWheeling.current = false;
+      
+      // Check if we should navigate based on current offset
+      const currentOffset = offset;
+      
+      if (Math.abs(currentOffset) > containerHeight * 0.3) { // 30% threshold
+        if (currentOffset < 0) {
+          // Navigate to next video
+          goToNextVideo();
+        } else {
+          // Navigate to previous video
+          goToPrevVideo();
+        }
+      } else {
+        // Not enough movement - snap back to current
+        setOffset(0);
+      }
+    }, 120); // Slightly longer timeout but still fast
+  }, [offset, isAnimating, currentVideoIndex, VIDEOS.length, containerHeight, goToNextVideo, goToPrevVideo]);
   
-  // Handle touch events for mobile
+  // Handle touch events
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (isAnimating) return;
     touchStartY.current = e.touches[0].clientY;
     touchMoveY.current = e.touches[0].clientY;
-    setIsScrolling(true);
-  }, []);
+  }, [isAnimating]);
   
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isSwipeLocked) return;
+    if (isAnimating) return;
     
     const currentY = e.touches[0].clientY;
     const diff = currentY - touchStartY.current;
     touchMoveY.current = currentY;
     
-    // For touch, we directly map finger position to content position
-    const swipeDistance = diff * 1.44; // Sensitivity multiplier
-    
-    // Calculate progress
-    let newProgress = swipeDistance;
-    
-    // Apply resistance at the edges
-    if ((currentVideoIndex === 0 && newProgress > 0) || 
-        (currentVideoIndex === VIDEOS.length - 1 && newProgress < 0)) {
-      newProgress = newProgress * 0.3;
-    }
-    
-    // Allow larger range for touch too
-    const maxProgress = containerHeight * 0.8;
-    newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
-    
-    setSwipeProgress(newProgress);
-  }, [isSwipeLocked, currentVideoIndex, VIDEOS.length, containerHeight]);
+    // Update offset directly
+    setOffset(currentOffset => {
+      // Calculate new offset - use direct mapping
+      let newOffset = diff * 1.5;
+      
+      // Apply edge resistance
+      if ((currentVideoIndex === 0 && newOffset > 0) || 
+          (currentVideoIndex === VIDEOS.length - 1 && newOffset < 0)) {
+        newOffset = newOffset * 0.3;
+      }
+      
+      // Clamp to reasonable limits
+      const maxOffset = containerHeight * 0.7;
+      return Math.max(Math.min(newOffset, maxOffset), -maxOffset);
+    });
+  }, [isAnimating, currentVideoIndex, VIDEOS.length, containerHeight]);
   
-  // Reset progress when touch ends
   const handleTouchEnd = useCallback(() => {
-    handleScrollEnd();
-  }, [handleScrollEnd]);
-  
-  // Animation settings
-  const getTransitionSettings = useCallback(() => {
-    if (isSwipeLocked) {
-      // Animation when snapping to a video
-      return {
-        type: "spring",
-        stiffness: 500,
-        damping: 50,
-        duration: 0.4,
-        restDelta: 0.001
-      };
+    if (isAnimating) return;
+    
+    // Check if we should navigate based on current offset
+    if (Math.abs(offset) > containerHeight * 0.3) { // 30% threshold
+      if (offset < 0) {
+        // Navigate to next video
+        goToNextVideo();
+      } else {
+        // Navigate to previous video
+        goToPrevVideo();
+      }
     } else {
-      // Responsive movement during active scrolling
-      return {
-        type: "spring",
-        stiffness: 1200,
-        damping: 120,
-        duration: 0.1
-      };
+      // Not enough movement - snap back to current
+      setOffset(0);
     }
-  }, [isSwipeLocked]);
+  }, [offset, containerHeight, goToNextVideo, goToPrevVideo, isAnimating]);
+  
+  // Simple spring settings
+  const getTransitionSettings = useCallback(() => {
+    return {
+      type: "spring",
+      stiffness: 400,
+      damping: 50
+    };
+  }, []);
   
   // Setup window events
   useEffect(() => {
@@ -316,21 +294,9 @@ function FeedList(): JSX.Element {
     // Add keyboard navigation
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp') {
-        if (currentVideoIndex > 0) {
-          setIsSwipeLocked(true);
-          setCurrentVideoIndex(currentVideoIndex - 1);
-          setTimeout(() => {
-            setIsSwipeLocked(false);
-          }, 400);
-        }
+        goToPrevVideo();
       } else if (e.key === 'ArrowDown') {
-        if (currentVideoIndex < VIDEOS.length - 1) {
-          setIsSwipeLocked(true);
-          setCurrentVideoIndex(currentVideoIndex + 1);
-          setTimeout(() => {
-            setIsSwipeLocked(false);
-          }, 400);
-        }
+        goToNextVideo();
       } else if (e.key === 'm') {
         setIsMuted(!isMuted);
       }
@@ -338,37 +304,15 @@ function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     
-    // FIXED: Set up a global check for scroll inactivity
-    const wheelEndInterval = setInterval(() => {
-      if (isScrolling && !isSwipeLocked) {
-        const timeSinceLastWheel = Date.now() - lastWheelTime.current;
-        if (timeSinceLastWheel >= 150) {
-          handleScrollEnd();
-        }
-      }
-    }, 200);
-    
-    const wheelHandler = (e: WheelEvent) => {
-      // Update time of last wheel event
-      lastWheelTime.current = Date.now();
-      
-      // This just tracks the last wheel event time
-      // The actual scrolling logic is handled in the component's handleWheel
-    };
-    
-    window.addEventListener('wheel', wheelHandler, { passive: false });
-    
     // Cleanup
     return () => {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('wheel', wheelHandler);
-      clearInterval(wheelEndInterval);
       if (wheelTimeout.current) {
         clearTimeout(wheelTimeout.current);
       }
     };
-  }, [currentVideoIndex, isMuted, handleScrollEnd, isScrolling, isSwipeLocked, VIDEOS.length]);
+  }, [goToNextVideo, goToPrevVideo, isMuted]);
   
   // Handle video playback when current index changes
   useEffect(() => {
@@ -435,7 +379,7 @@ function FeedList(): JSX.Element {
         className="absolute w-full px-2"
         style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
-          y: -currentVideoIndex * containerHeight + swipeProgress 
+          y: -currentVideoIndex * containerHeight + offset
         }}
         transition={getTransitionSettings()}
       >
@@ -544,21 +488,6 @@ function FeedList(): JSX.Element {
         })}
       </motion.div>
       
-      {/* Scroll indicator based on progress */}
-      {swipeProgress !== 0 && (
-        <div className="fixed right-2 top-1/2 transform -translate-y-1/2 bg-white/20 rounded-full h-24 w-1 overflow-hidden">
-          <div 
-            className="bg-white w-full"
-            style={{ 
-              height: `${Math.min(100, Math.abs(swipeProgress * 100 / 70))}%`,
-              position: 'absolute',
-              bottom: swipeProgress > 0 ? 0 : 'auto',
-              top: swipeProgress < 0 ? 0 : 'auto'
-            }}
-          />
-        </div>
-      )}
-      
       {/* Sound toggle button */}
       <button 
         onClick={(e: React.MouseEvent) => {
@@ -597,5 +526,4 @@ function FeedList(): JSX.Element {
   );
 }
 
-// Clear default export
 export default FeedList;
