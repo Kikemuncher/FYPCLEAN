@@ -89,10 +89,15 @@ function FeedList(): JSX.Element {
   // Window height for proper sizing
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // Simplest approach: just a locked flag
-  const [isLocked, setIsLocked] = useState<boolean>(false);
+  // Direct tactile control over offset position
+  const [offset, setOffset] = useState<number>(0);
   
-  // Touch tracking
+  // Locking to prevent multiple navigation events
+  const [isNavigating, setIsNavigating] = useState<boolean>(false);
+  
+  // Wheel and touch tracking
+  const wheelAccumulator = useRef<number>(0);
+  const scrollEndTimeout = useRef<NodeJS.Timeout | null>(null);
   const touchStartY = useRef<number>(0);
   const lastTap = useRef<number>(0);
   
@@ -100,31 +105,37 @@ function FeedList(): JSX.Element {
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // Go to next video
-  const goToNextVideo = useCallback(() => {
-    if (isLocked || currentVideoIndex >= VIDEOS.length - 1) return;
+  // Handle navigation after scrolling stops
+  const handleScrollEnd = useCallback(() => {
+    if (isNavigating) return;
     
-    setIsLocked(true);
-    setCurrentVideoIndex(prev => prev + 1);
-    
-    // Unlock after a short delay
-    setTimeout(() => {
-      setIsLocked(false);
-    }, 300);
-  }, [currentVideoIndex, isLocked, VIDEOS.length]);
-  
-  // Go to previous video
-  const goToPrevVideo = useCallback(() => {
-    if (isLocked || currentVideoIndex <= 0) return;
-    
-    setIsLocked(true);
-    setCurrentVideoIndex(prev => prev - 1);
-    
-    // Unlock after a short delay
-    setTimeout(() => {
-      setIsLocked(false);
-    }, 300);
-  }, [currentVideoIndex, isLocked]);
+    // Decision about whether to navigate or snap back
+    if (Math.abs(offset) > containerHeight * 0.35) { // 35% threshold
+      setIsNavigating(true);
+      
+      // Direction determines which way to navigate
+      if (offset < 0 && currentVideoIndex < VIDEOS.length - 1) {
+        // Scrolled down - go to next
+        setCurrentVideoIndex(prev => prev + 1);
+      } else if (offset > 0 && currentVideoIndex > 0) {
+        // Scrolled up - go to previous
+        setCurrentVideoIndex(prev => prev - 1);
+      }
+      
+      // Reset offset after navigation
+      setOffset(0);
+      
+      // Unlock after animation
+      setTimeout(() => {
+        setIsNavigating(false);
+        wheelAccumulator.current = 0;
+      }, 450);
+    } else {
+      // Not enough to navigate - snap back to current
+      setOffset(0);
+      wheelAccumulator.current = 0;
+    }
+  }, [offset, isNavigating, currentVideoIndex, VIDEOS.length, containerHeight]);
   
   // Set video ref
   const setVideoRef = useCallback((id: string, el: HTMLVideoElement | null) => {
@@ -166,48 +177,111 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // Direct response to wheel events - respond to single clicks
+  // KEY FUNCTION: Direct mousepad control
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    if (isLocked) return;
+    if (isNavigating) return;
     
-    // Make an immediate decision based on wheel direction
-    // This allows for single mousewheel click response
-    const delta = e.deltaY;
+    // Check if wheel event is from a mousepad
+    const isMousePad = Math.abs(e.deltaY) < 100 && e.deltaMode === 0;
     
-    // If delta is significant enough to be an intentional scroll
-    if (Math.abs(delta) > 15) {
-      if (delta > 0) {
-        goToNextVideo();
-      } else {
-        goToPrevVideo();
+    // If it's a regular mouse wheel, handle as discrete navigation
+    if (!isMousePad) {
+      if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
+        setIsNavigating(true);
+        setCurrentVideoIndex(prev => prev + 1);
+        setOffset(0);
+        setTimeout(() => setIsNavigating(false), 450);
+      } else if (e.deltaY < 0 && currentVideoIndex > 0) {
+        setIsNavigating(true);
+        setCurrentVideoIndex(prev => prev - 1);
+        setOffset(0);
+        setTimeout(() => setIsNavigating(false), 450);
       }
+      return;
     }
-  }, [isLocked, goToNextVideo, goToPrevVideo]);
+    
+    // DIRECT TACTILE CONTROL - update offset as you scroll
+    // DeltaY is negative when scrolling up, positive when scrolling down
+    // For natural feel, we reverse this (negative offset = down, positive = up)
+    const delta = -e.deltaY;
+    
+    // High sensitivity multiplier for responsive feel
+    const sensitivity = 4.0;
+    const movementDelta = delta * sensitivity;
+    
+    // Update the wheel accumulator to track total movement
+    wheelAccumulator.current += movementDelta;
+    
+    // Update offset directly based on wheel movement
+    setOffset(currentOffset => {
+      // Calculate new position
+      let newOffset = currentOffset + movementDelta;
+      
+      // Apply edge resistance
+      if ((currentVideoIndex === 0 && newOffset > 0) || 
+          (currentVideoIndex === VIDEOS.length - 1 && newOffset < 0)) {
+        newOffset = currentOffset + (movementDelta * 0.25); // Strong resistance at edges
+      }
+      
+      // Limit maximum offset
+      const maxOffset = containerHeight * 0.6; // Allow up to 60% of screen height
+      return Math.max(Math.min(newOffset, maxOffset), -maxOffset);
+    });
+    
+    // Clear existing timeout for debouncing
+    if (scrollEndTimeout.current) {
+      clearTimeout(scrollEndTimeout.current);
+    }
+    
+    // Set timeout to detect when scrolling stops
+    scrollEndTimeout.current = setTimeout(() => {
+      handleScrollEnd();
+    }, 100); // Short timeout for responsive snap
+  }, [
+    isNavigating, 
+    currentVideoIndex, 
+    VIDEOS.length, 
+    containerHeight, 
+    handleScrollEnd
+  ]);
   
-  // Simple touch handlers
+  // Handle touch events for touch screens
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isLocked) return;
+    if (isNavigating) return;
+    
     touchStartY.current = e.touches[0].clientY;
-  }, [isLocked]);
+  }, [isNavigating]);
   
-  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isLocked) return;
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (isNavigating) return;
     
-    // Calculate the distance moved
-    const touchEndY = e.changedTouches[0].clientY;
-    const distance = touchStartY.current - touchEndY;
+    const touchY = e.touches[0].clientY;
+    const diff = touchY - touchStartY.current;
     
-    // Simple decision based on distance
-    if (Math.abs(distance) > 50) { // Small threshold for easy triggering
-      if (distance > 0) {
-        goToNextVideo();
-      } else {
-        goToPrevVideo();
+    // Direct mapping for natural feel
+    setOffset(currentOffset => {
+      // Calculate new position
+      let newOffset = diff * 1.5; // Sensitivity for touch
+      
+      // Apply edge resistance
+      if ((currentVideoIndex === 0 && newOffset > 0) || 
+          (currentVideoIndex === VIDEOS.length - 1 && newOffset < 0)) {
+        newOffset = newOffset * 0.25; // Strong resistance at edges
       }
-    }
-  }, [isLocked, goToNextVideo, goToPrevVideo]);
+      
+      // Limit maximum offset
+      const maxOffset = containerHeight * 0.6;
+      return Math.max(Math.min(newOffset, maxOffset), -maxOffset);
+    });
+  }, [isNavigating, currentVideoIndex, VIDEOS.length, containerHeight]);
+  
+  const handleTouchEnd = useCallback(() => {
+    if (isNavigating) return;
+    
+    handleScrollEnd();
+  }, [isNavigating, handleScrollEnd]);
   
   // Setup window events
   useEffect(() => {
@@ -226,10 +300,22 @@ function FeedList(): JSX.Element {
     
     // Add keyboard navigation
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isNavigating) return;
+      
       if (e.key === 'ArrowUp') {
-        goToPrevVideo();
+        if (currentVideoIndex > 0) {
+          setIsNavigating(true);
+          setCurrentVideoIndex(prev => prev - 1);
+          setOffset(0);
+          setTimeout(() => setIsNavigating(false), 450);
+        }
       } else if (e.key === 'ArrowDown') {
-        goToNextVideo();
+        if (currentVideoIndex < VIDEOS.length - 1) {
+          setIsNavigating(true);
+          setCurrentVideoIndex(prev => prev + 1);
+          setOffset(0);
+          setTimeout(() => setIsNavigating(false), 450);
+        }
       } else if (e.key === 'm') {
         setIsMuted(!isMuted);
       }
@@ -237,12 +323,23 @@ function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     
+    // Safety measure - if somehow we get stuck, force snap back
+    const safetyInterval = setInterval(() => {
+      if (!isNavigating && Math.abs(offset) > 0 && scrollEndTimeout.current === null) {
+        setOffset(0);
+      }
+    }, 1000);
+    
     // Cleanup
     return () => {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
+      clearInterval(safetyInterval);
+      if (scrollEndTimeout.current) {
+        clearTimeout(scrollEndTimeout.current);
+      }
     };
-  }, [goToNextVideo, goToPrevVideo, isMuted]);
+  }, [currentVideoIndex, isNavigating, isMuted, offset, VIDEOS.length]);
   
   // Handle video playback when current index changes
   useEffect(() => {
@@ -300,21 +397,27 @@ function FeedList(): JSX.Element {
       className="h-screen w-full overflow-hidden bg-black relative px-1"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onClick={handleDoubleTap}
     >
-      {/* Main feed container with smooth transitions */}
+      {/* Main feed container with direct control */}
       <motion.div 
         className="absolute w-full px-2"
         style={{ height: containerHeight * VIDEOS.length }}
         animate={{ 
-          y: -currentVideoIndex * containerHeight 
+          y: -currentVideoIndex * containerHeight + offset
         }}
-        transition={{
+        transition={isNavigating ? {
           type: "spring",
-          stiffness: 300,
-          damping: 30,
-          duration: 0.3
+          stiffness: 400,
+          damping: 40,
+          duration: 0.45
+        } : {
+          // VERY IMPORTANT: Use "just" type transition for direct control
+          // This makes the movement 1:1 with the mousepad with no physics
+          type: "just",
+          duration: 0
         }}
       >
         {VIDEOS.map((videoItem, index) => {
