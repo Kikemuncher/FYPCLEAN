@@ -93,22 +93,30 @@ function FeedList(): JSX.Element {
   // Scroll-related state
   const [swipeProgress, setSwipeProgress] = useState<number>(0);
   const [isSwipeLocked, setIsSwipeLocked] = useState<boolean>(false);
+  const [isScrolling, setIsScrolling] = useState<boolean>(false);
   
   // Touch refs
   const touchStartY = useRef<number>(0);
   const touchMoveY = useRef<number>(0);
   const lastTap = useRef<number>(0);
   
+  // Tracking refs for wheel events
+  const lastWheelTime = useRef<number>(Date.now());
+  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
+  
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
   
-  // IMPROVED: handleScrollEnd with 50% snap threshold
+  // FIXED: handleScrollEnd that works consistently
   const handleScrollEnd = useCallback(() => {
+    // Don't do anything if already locked in a transition
     if (isSwipeLocked) return;
     
-    // Always make a decision when scrolling ends, even for small movements
     setIsSwipeLocked(true);
+    
+    // Log for debugging
+    console.log("Scroll ended, progress:", swipeProgress);
     
     // Calculate what percentage of the next/previous video is in view
     const percentInView = Math.abs(swipeProgress) / containerHeight;
@@ -127,9 +135,10 @@ function FeedList(): JSX.Element {
     // Always reset progress to 0
     setSwipeProgress(0);
     
-    // Unlock after animation completes
+    // Wait for the animation to complete before unlocking
     setTimeout(() => {
       setIsSwipeLocked(false);
+      setIsScrolling(false); // Make sure scrolling state is reset
     }, 400);
   }, [isSwipeLocked, swipeProgress, currentVideoIndex, VIDEOS.length, containerHeight]);
   
@@ -173,17 +182,23 @@ function FeedList(): JSX.Element {
     }));
   }, []);
   
-  // IMPROVED: More sensitive handleWheel for better scrolling
+  // FIXED: handleWheel function that tracks when scrolling started
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
     if (isSwipeLocked) return;
     
+    // Update last wheel time for later checking
+    lastWheelTime.current = Date.now();
+    
+    // Mark that we're actively scrolling
+    setIsScrolling(true);
+    
     // Get the Delta Y value from the wheel event
     const deltaY = e.deltaY;
     
     // Apply a higher sensitivity multiplier for more responsive movement
-    const progressDelta = deltaY * 1.2; // Doubled from 0.6 to 1.2
+    const progressDelta = deltaY * 1.2;
     
     // Update progress based on wheel direction
     let newProgress = swipeProgress - progressDelta;
@@ -195,16 +210,39 @@ function FeedList(): JSX.Element {
     }
     
     // Allow up to 80% of the screen height for more range
-    const maxProgress = containerHeight * 0.8; // Increased from 0.4 to 0.8
+    const maxProgress = containerHeight * 0.8;
     newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
     
     setSwipeProgress(newProgress);
-  }, [swipeProgress, isSwipeLocked, currentVideoIndex, VIDEOS.length, containerHeight]);
+    
+    // Clear any existing wheel timeout
+    if (wheelTimeout.current) {
+      clearTimeout(wheelTimeout.current);
+    }
+    
+    // Set a new timeout to detect when scrolling has stopped
+    wheelTimeout.current = setTimeout(() => {
+      // Check if it's been long enough since the last wheel event
+      const timeSinceLastWheel = Date.now() - lastWheelTime.current;
+      if (timeSinceLastWheel >= 100 && isScrolling) {
+        handleScrollEnd();
+      }
+    }, 100);
+  }, [
+    swipeProgress, 
+    isSwipeLocked, 
+    currentVideoIndex, 
+    VIDEOS.length, 
+    containerHeight, 
+    isScrolling, 
+    handleScrollEnd
+  ]);
   
   // Handle touch events for mobile
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     touchStartY.current = e.touches[0].clientY;
     touchMoveY.current = e.touches[0].clientY;
+    setIsScrolling(true);
   }, []);
   
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -227,7 +265,7 @@ function FeedList(): JSX.Element {
     }
     
     // Allow larger range for touch too
-    const maxProgress = containerHeight * 0.8; // Increased from 0.4 to 0.8
+    const maxProgress = containerHeight * 0.8;
     newProgress = Math.max(Math.min(newProgress, maxProgress), -maxProgress);
     
     setSwipeProgress(newProgress);
@@ -300,33 +338,37 @@ function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     
-    // IMPROVED: Faster wheel end detection
-    let wheelTimeout: NodeJS.Timeout | null = null;
-    
-    const wheelHandler = () => {
-      if (wheelTimeout) {
-        clearTimeout(wheelTimeout);
+    // FIXED: Set up a global check for scroll inactivity
+    const wheelEndInterval = setInterval(() => {
+      if (isScrolling && !isSwipeLocked) {
+        const timeSinceLastWheel = Date.now() - lastWheelTime.current;
+        if (timeSinceLastWheel >= 150) {
+          handleScrollEnd();
+        }
       }
+    }, 200);
+    
+    const wheelHandler = (e: WheelEvent) => {
+      // Update time of last wheel event
+      lastWheelTime.current = Date.now();
       
-      // Shorter timeout for more responsive behavior
-      wheelTimeout = setTimeout(() => {
-        // Always trigger the scroll end handler when scrolling stops
-        handleScrollEnd();
-      }, 100); // Reduced from 150ms for quicker response
+      // This just tracks the last wheel event time
+      // The actual scrolling logic is handled in the component's handleWheel
     };
     
-    window.addEventListener('wheel', wheelHandler);
+    window.addEventListener('wheel', wheelHandler, { passive: false });
     
     // Cleanup
     return () => {
       window.removeEventListener('resize', updateHeight);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('wheel', wheelHandler);
-      if (wheelTimeout) {
-        clearTimeout(wheelTimeout);
+      clearInterval(wheelEndInterval);
+      if (wheelTimeout.current) {
+        clearTimeout(wheelTimeout.current);
       }
     };
-  }, [currentVideoIndex, isMuted, handleScrollEnd, VIDEOS.length]);
+  }, [currentVideoIndex, isMuted, handleScrollEnd, isScrolling, isSwipeLocked, VIDEOS.length]);
   
   // Handle video playback when current index changes
   useEffect(() => {
