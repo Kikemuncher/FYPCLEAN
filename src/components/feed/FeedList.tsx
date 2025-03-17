@@ -104,6 +104,12 @@ function FeedList(): JSX.Element {
   const wheelAccumulator = useRef<number>(0);
   const wheelTimer = useRef<any>(null);
   
+  // Scroll state management
+  const isScrolling = useRef<boolean>(false);
+  const scrollEndTimer = useRef<any>(null);
+  const lastScrollPosition = useRef<number>(0);
+  const scrollVelocity = useRef<number>(0);
+  
   // Set up container height
   useEffect(() => {
     setContainerHeight(window.innerHeight);
@@ -117,6 +123,9 @@ function FeedList(): JSX.Element {
       window.removeEventListener('resize', updateHeight);
       if (wheelTimer.current) {
         clearTimeout(wheelTimer.current);
+      }
+      if (scrollEndTimer.current) {
+        clearTimeout(scrollEndTimer.current);
       }
     };
   }, []);
@@ -223,7 +232,7 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Wheel event handler
+  // Wheel event handler with improved sensitivity
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
@@ -238,7 +247,7 @@ function FeedList(): JSX.Element {
     // Check if we can scroll in this direction
     if (!canScrollInDirection(direction)) {
       // For trackpad, allow a small elastic pull but restrict the movement
-      const elasticFactor = 0.2; // Reduce movement to 20% for elastic effect
+      const elasticFactor = 0.15; // Reduce elastic factor for less stretchy feeling
       
       // Only update if the offset would be moving back toward center
       if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
@@ -250,8 +259,8 @@ function FeedList(): JSX.Element {
         let elasticDelta = e.deltaY * -elasticFactor;
         let newOffset = offset + elasticDelta;
         
-        // Prevent pulling too far (max 15% of container height)
-        const maxElasticPull = containerHeight * 0.15;
+        // Prevent pulling too far (max 12% of container height - reduced for less stretchy feeling)
+        const maxElasticPull = containerHeight * 0.12;
         if (direction === 'up') {
           newOffset = Math.max(newOffset, -maxElasticPull);
         } else {
@@ -269,14 +278,37 @@ function FeedList(): JSX.Element {
       return;
     }
     
-    // Detect if this is mouse wheel or trackpad
+    // Detect if this is mouse wheel or trackpad - look for small increments
     const isTrackpad = Math.abs(e.deltaY) < 40;
     
     if (isTrackpad) {
-      // For trackpad, apply sensitivity for direct manipulation
-      const sensitivity = 1.5; // Adjust for desired sensitivity
+      // Mark that we're actively scrolling
+      isScrolling.current = true;
       
-      // Update the offset with sensitivity
+      // Clear any previous scroll end timer
+      if (scrollEndTimer.current) {
+        clearTimeout(scrollEndTimer.current);
+      }
+      
+      // Calculate scroll velocity for adaptive sensitivity
+      const now = Date.now();
+      const timeDelta = now - (lastScrollPosition.current || now);
+      lastScrollPosition.current = now;
+      
+      // Update velocity (smooth with previous value)
+      scrollVelocity.current = 0.7 * scrollVelocity.current + 0.3 * Math.abs(e.deltaY) / Math.max(1, timeDelta);
+      
+      // Use lower sensitivity for slow, precise movements, higher for fast flicks
+      let sensitivity;
+      if (scrollVelocity.current < 0.2) {
+        sensitivity = 0.8; // Lower sensitivity for careful scrolling
+      } else if (scrollVelocity.current < 0.5) {
+        sensitivity = 1.2; // Medium sensitivity
+      } else {
+        sensitivity = 1.5; // Higher sensitivity for fast flicks
+      }
+      
+      // Update the offset with adaptive sensitivity
       let newOffset = offset + e.deltaY * -sensitivity;
       
       // Apply limits to prevent excessive scrolling
@@ -286,21 +318,27 @@ function FeedList(): JSX.Element {
       setOffset(newOffset);
       
       // Set up timeout to detect when scrolling stops
-      wheelTimer.current = setTimeout(() => {
-        // Determine if we've scrolled far enough to change videos
-        if (Math.abs(newOffset) > containerHeight * 0.3) {
-          if (newOffset > 0 && canScrollInDirection('up')) {
-            goToPrevVideo();
-          } else if (newOffset < 0 && canScrollInDirection('down')) {
-            goToNextVideo();
+      // Use higher timeout (150ms) to allow more time for the user to complete their gesture
+      scrollEndTimer.current = setTimeout(() => {
+        // Only execute if we're not still scrolling actively
+        if (isScrolling.current) {
+          isScrolling.current = false;
+          
+          // Increase threshold to 40% to require more intentional scrolls
+          if (Math.abs(newOffset) > containerHeight * 0.4) {
+            if (newOffset > 0 && canScrollInDirection('up')) {
+              goToPrevVideo();
+            } else if (newOffset < 0 && canScrollInDirection('down')) {
+              goToNextVideo();
+            } else {
+              setOffset(0);
+            }
           } else {
+            // Return to current video
             setOffset(0);
           }
-        } else {
-          // Return to current video
-          setOffset(0);
         }
-      }, 40); // Very short timeout to detect end of scrolling
+      }, 150); // Longer timeout for better gesture completion
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
@@ -309,7 +347,7 @@ function FeedList(): JSX.Element {
       wheelAccumulator.current += e.deltaY;
       
       // Use a threshold to prevent accidental navigation
-      if (Math.abs(wheelAccumulator.current) >= 50) {
+      if (Math.abs(wheelAccumulator.current) >= 65) { // Increased threshold
         wheelLock.current = true;
         
         if (wheelAccumulator.current > 0) {
@@ -321,10 +359,10 @@ function FeedList(): JSX.Element {
         // Reset accumulator
         wheelAccumulator.current = 0;
         
-        // Release lock after animation completes (faster)
+        // Release lock after animation completes
         setTimeout(() => {
           wheelLock.current = false;
-        }, 150);
+        }, 250); // Slightly longer lockout
       }
     }
   };
@@ -358,11 +396,23 @@ function FeedList(): JSX.Element {
     lastTap.current = now;
   };
   
-  // Touch handlers for mobile
+  // Improved touch handlers for mobile
   const handleTouchStart = (e: React.TouchEvent) => {
+    // Clear any timers
     if (wheelTimer.current) {
       clearTimeout(wheelTimer.current);
     }
+    if (scrollEndTimer.current) {
+      clearTimeout(scrollEndTimer.current);
+    }
+    
+    // Reset scroll velocity
+    scrollVelocity.current = 0;
+    
+    // Mark that we're actively touching
+    isScrolling.current = true;
+    
+    // Store the touch position
     touchStartY.current = e.touches[0].clientY;
   };
   
@@ -372,17 +422,24 @@ function FeedList(): JSX.Element {
     const touchY = e.touches[0].clientY;
     const diff = touchY - touchStartY.current;
     
+    // Calculate velocity for adaptive resistance
+    const now = Date.now();
+    const timeDelta = now - (lastScrollPosition.current || now);
+    lastScrollPosition.current = now;
+    
+    scrollVelocity.current = 0.7 * scrollVelocity.current + 0.3 * Math.abs(diff) / Math.max(1, timeDelta);
+    
     // Determine direction
     const direction = diff > 0 ? 'up' : 'down';
     
     // If we can't scroll in this direction, apply elastic resistance
     if (!canScrollInDirection(direction)) {
       // Allow some elastic movement but with high resistance
-      const elasticFactor = 0.15;
+      const elasticFactor = 0.12; // Reduced elasticity
       let elasticDiff = diff * elasticFactor;
       
       // Limit the maximum elastic pull
-      const maxElasticPull = containerHeight * 0.15;
+      const maxElasticPull = containerHeight * 0.12; // Reduced max pull
       if (direction === 'up') {
         elasticDiff = Math.min(elasticDiff, maxElasticPull);
       } else {
@@ -405,22 +462,27 @@ function FeedList(): JSX.Element {
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
     
-    // Apply the threshold to determine if we should change videos
-    if (Math.abs(offset) > containerHeight * 0.3) {
-      if (offset > 0 && canScrollInDirection('up')) {
-        goToPrevVideo();
-      } else if (offset < 0 && canScrollInDirection('down')) {
-        goToNextVideo();
+    // Wait a bit to make sure it's a deliberate gesture
+    setTimeout(() => {
+      isScrolling.current = false;
+      
+      // Apply the threshold to determine if we should change videos - more intentional 40%
+      if (Math.abs(offset) > containerHeight * 0.4) {
+        if (offset > 0 && canScrollInDirection('up')) {
+          goToPrevVideo();
+        } else if (offset < 0 && canScrollInDirection('down')) {
+          goToNextVideo();
+        } else {
+          setOffset(0);
+        }
       } else {
+        // Return to current video
         setOffset(0);
       }
-    } else {
-      // Return to current video
-      setOffset(0);
-    }
-    
-    // Reset states
-    touchStartY.current = null;
+      
+      // Reset states
+      touchStartY.current = null;
+    }, 50);
   };
   
   // Handle keyboard navigation
