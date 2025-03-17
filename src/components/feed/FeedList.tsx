@@ -178,6 +178,9 @@ function FeedList(): JSX.Element {
     if (currentVideoIndex < VIDEOS.length - 1) {
       setCurrentVideoIndex(currentVideoIndex + 1);
       setOffset(0);
+    } else {
+      // Snap back to current video with a little bounce animation
+      setOffset(0);
     }
   };
   
@@ -185,6 +188,9 @@ function FeedList(): JSX.Element {
   const goToPrevVideo = () => {
     if (currentVideoIndex > 0) {
       setCurrentVideoIndex(currentVideoIndex - 1);
+      setOffset(0);
+    } else {
+      // Snap back to current video with a little bounce animation
       setOffset(0);
     }
   };
@@ -216,9 +222,67 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Improved wheel event handler with dynamic sensitivity
+  // Check if scrolling is allowed in the given direction
+  const canScrollInDirection = (direction: 'up' | 'down'): boolean => {
+    if (direction === 'up') {
+      // Can only scroll up if not at the first video
+      return currentVideoIndex > 0;
+    } else {
+      // Can only scroll down if not at the last video
+      return currentVideoIndex < VIDEOS.length - 1;
+    }
+  };
+  
+  // Improved wheel event handler with dynamic sensitivity and bounds checking
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
+    
+    // Determine direction based on deltaY
+    const direction = e.deltaY > 0 ? 'down' : 'up';
+    
+    // Check if we can scroll in this direction
+    if (!canScrollInDirection(direction)) {
+      // For mouse wheel, just block completely
+      if (Math.abs(e.deltaY) >= 40) {
+        return;
+      }
+      
+      // For trackpad, allow a small elastic pull but restrict the movement
+      // This provides feedback to the user that they've reached the end
+      const elasticFactor = 0.2; // Reduce movement to 20% for elastic effect
+      
+      // Only update if the offset would be moving back toward center
+      if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
+        // Allow full movement back to center
+        let newOffset = offset + e.deltaY * -1;
+        setOffset(newOffset);
+      } else {
+        // Restricted elastic pull
+        let elasticDelta = e.deltaY * -elasticFactor;
+        let newOffset = offset + elasticDelta;
+        
+        // Prevent pulling too far (max 15% of container height)
+        const maxElasticPull = containerHeight * 0.15;
+        if (direction === 'up') {
+          newOffset = Math.max(newOffset, -maxElasticPull);
+        } else {
+          newOffset = Math.min(newOffset, maxElasticPull);
+        }
+        
+        setOffset(newOffset);
+        
+        // Set timer to snap back
+        if (wheelTimer.current) {
+          clearTimeout(wheelTimer.current);
+        }
+        
+        wheelTimer.current = setTimeout(() => {
+          setOffset(0);
+        }, 100);
+      }
+      
+      return;
+    }
     
     // Record when the last wheel event happened
     const now = Date.now();
@@ -344,6 +408,28 @@ function FeedList(): JSX.Element {
     const touchY = e.touches[0].clientY;
     const diff = touchY - touchStartY.current;
     
+    // Determine direction
+    const direction = diff > 0 ? 'up' : 'down';
+    
+    // If we can't scroll in this direction, apply elastic resistance
+    if (!canScrollInDirection(direction)) {
+      // Allow some elastic movement but with high resistance
+      const elasticFactor = 0.15; // Even more resistance for touch
+      let elasticDiff = diff * elasticFactor;
+      
+      // Limit the maximum elastic pull
+      const maxElasticPull = containerHeight * 0.15;
+      if (direction === 'up') {
+        elasticDiff = Math.min(elasticDiff, maxElasticPull);
+      } else {
+        elasticDiff = Math.max(elasticDiff, -maxElasticPull);
+      }
+      
+      setOffset(elasticDiff);
+      return;
+    }
+    
+    // Normal scrolling behavior when direction is valid
     // Apply limits to prevent excessive scrolling - use 90% to prevent showing too much of next video
     let newOffset = diff;
     const maxOffset = containerHeight * 0.9;
@@ -377,9 +463,13 @@ function FeedList(): JSX.Element {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
-        goToNextVideo();
+        if (canScrollInDirection('down')) {
+          goToNextVideo();
+        }
       } else if (e.key === 'ArrowUp') {
-        goToPrevVideo();
+        if (canScrollInDirection('up')) {
+          goToPrevVideo();
+        }
       } else if (e.key === 'm') {
         toggleMute();
       } else if (e.key === ' ' || e.key === 'Spacebar') { // Space key
@@ -563,7 +653,7 @@ function FeedList(): JSX.Element {
         </div>
       </div>
       
-      {/* Scroll guide indicator */}
+      {/* Scroll guide indicator - only show if there are more videos below */}
       {VIDEOS.length > 1 && currentVideoIndex === 0 && (
         <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/30 px-3 py-1 rounded-full z-30 flex items-center">
           <span className="mr-2">Swipe up for more</span>
