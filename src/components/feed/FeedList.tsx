@@ -232,22 +232,29 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Wheel event handler with improved sensitivity
+  // Enhanced wheel event handler - designed for immediate response on touchpad release
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Clear any existing wheel timer
+    // Detect touchpad vs mouse wheel
+    const isTrackpad = Math.abs(e.deltaY) < 40;
+    
+    // Determine direction
+    const direction = e.deltaY > 0 ? 'down' : 'up';
+    
+    // Clear any existing wheel timer 
     if (wheelTimer.current) {
       clearTimeout(wheelTimer.current);
     }
     
-    // Determine direction based on deltaY
-    const direction = e.deltaY > 0 ? 'down' : 'up';
+    // Mark that we're actively scrolling and capture the current time
+    isScrolling.current = true;
+    lastScrollPosition.current = Date.now();
     
     // Check if we can scroll in this direction
     if (!canScrollInDirection(direction)) {
-      // For trackpad, allow a small elastic pull but restrict the movement
-      const elasticFactor = 0.15; // Reduce elastic factor for less stretchy feeling
+      // For boundaries, allow a small elastic pull with minimal resistance
+      const elasticFactor = 0.12; 
       
       // Only update if the offset would be moving back toward center
       if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
@@ -259,8 +266,8 @@ function FeedList(): JSX.Element {
         let elasticDelta = e.deltaY * -elasticFactor;
         let newOffset = offset + elasticDelta;
         
-        // Prevent pulling too far (max 12% of container height - reduced for less stretchy feeling)
-        const maxElasticPull = containerHeight * 0.12;
+        // Prevent pulling too far (max 10% - tighter feeling)
+        const maxElasticPull = containerHeight * 0.1;
         if (direction === 'up') {
           newOffset = Math.max(newOffset, -maxElasticPull);
         } else {
@@ -269,7 +276,7 @@ function FeedList(): JSX.Element {
         
         setOffset(newOffset);
         
-        // Snap back after a short delay
+        // Auto snap-back after tiny delay if no wheel events occur
         wheelTimer.current = setTimeout(() => {
           setOffset(0);
         }, 50);
@@ -278,54 +285,56 @@ function FeedList(): JSX.Element {
       return;
     }
     
-    // Detect if this is mouse wheel or trackpad - look for small increments
-    const isTrackpad = Math.abs(e.deltaY) < 40;
-    
     if (isTrackpad) {
-      // Mark that we're actively scrolling
-      isScrolling.current = true;
-      
-      // Clear any previous scroll end timer
-      if (scrollEndTimer.current) {
-        clearTimeout(scrollEndTimer.current);
-      }
-      
-      // Calculate scroll velocity for adaptive sensitivity
+      // For trackpad, we'll use direct mapping of movement with some acceleration
+      // Calculate acceleration factor based on speed of movement
       const now = Date.now();
       const timeDelta = now - (lastScrollPosition.current || now);
       lastScrollPosition.current = now;
       
-      // Update velocity (smooth with previous value)
-      scrollVelocity.current = 0.7 * scrollVelocity.current + 0.3 * Math.abs(e.deltaY) / Math.max(1, timeDelta);
+      // Calculate current velocity
+      const instantVelocity = Math.abs(e.deltaY) / Math.max(1, timeDelta);
       
-      // Use lower sensitivity for slow, precise movements, higher for fast flicks
+      // Update velocity with smoothing (but faster response to changes)
+      scrollVelocity.current = 0.5 * scrollVelocity.current + 0.5 * instantVelocity;
+      
+      // Adaptive sensitivity - more responsive to fast movements
       let sensitivity;
-      if (scrollVelocity.current < 0.2) {
-        sensitivity = 0.8; // Lower sensitivity for careful scrolling
-      } else if (scrollVelocity.current < 0.5) {
-        sensitivity = 1.2; // Medium sensitivity
+      if (scrollVelocity.current < 0.1) {
+        sensitivity = 0.9; // Most precise control
+      } else if (scrollVelocity.current < 0.3) {
+        sensitivity = 1.2; // Medium acceleration
       } else {
-        sensitivity = 1.5; // Higher sensitivity for fast flicks
+        sensitivity = 1.8; // Higher acceleration for fast scrolling
       }
       
-      // Update the offset with adaptive sensitivity
+      // Update the offset with the adaptive sensitivity
       let newOffset = offset + e.deltaY * -sensitivity;
       
-      // Apply limits to prevent excessive scrolling
-      const maxOffset = containerHeight * 0.9;
+      // Apply limits but allow more range for fast scrolling
+      const maxOffset = containerHeight * 0.95;
       newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
       
+      // Update offset immediately
       setOffset(newOffset);
       
-      // Set up timeout to detect when scrolling stops
-      // Use higher timeout (150ms) to allow more time for the user to complete their gesture
-      scrollEndTimer.current = setTimeout(() => {
-        // Only execute if we're not still scrolling actively
-        if (isScrolling.current) {
+      // Set minimum wheel gap detection - if no wheel events for 30ms, consider it a release
+      // This is very aggressive detection to eliminate perceived lag
+      wheelTimer.current = setTimeout(() => {
+        // First check how long since the last wheel event
+        const timeSinceLastWheel = Date.now() - lastScrollPosition.current;
+        
+        // If it's been longer than our threshold, consider it a release
+        if (timeSinceLastWheel >= 30) {
+          // Consider this a touchpad release - execute immediately
           isScrolling.current = false;
           
-          // Increase threshold to 40% to require more intentional scrolls
-          if (Math.abs(newOffset) > containerHeight * 0.4) {
+          // Use velocity-adjusted threshold (lower threshold for fast scrolls)
+          const thresholdAdjustment = Math.min(0.15, scrollVelocity.current * 0.5);
+          const snapThreshold = 0.3 - thresholdAdjustment;
+          
+          if (Math.abs(newOffset) > containerHeight * snapThreshold) {
+            // Handle high-velocity scrolling - prevent skipping videos
             if (newOffset > 0 && canScrollInDirection('up')) {
               goToPrevVideo();
             } else if (newOffset < 0 && canScrollInDirection('down')) {
@@ -338,7 +347,7 @@ function FeedList(): JSX.Element {
             setOffset(0);
           }
         }
-      }, 150); // Longer timeout for better gesture completion
+      }, 30); // Ultra-responsive 30ms detection
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
@@ -462,27 +471,28 @@ function FeedList(): JSX.Element {
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
     
-    // Wait a bit to make sure it's a deliberate gesture
-    setTimeout(() => {
-      isScrolling.current = false;
-      
-      // Apply the threshold to determine if we should change videos - more intentional 40%
-      if (Math.abs(offset) > containerHeight * 0.4) {
-        if (offset > 0 && canScrollInDirection('up')) {
-          goToPrevVideo();
-        } else if (offset < 0 && canScrollInDirection('down')) {
-          goToNextVideo();
-        } else {
-          setOffset(0);
-        }
+    // React immediately to touch end - no delay
+    isScrolling.current = false;
+    
+    // Apply velocity-adjusted threshold for consistency with wheel behavior
+    const thresholdAdjustment = Math.min(0.15, scrollVelocity.current * 0.5);
+    const snapThreshold = 0.3 - thresholdAdjustment;
+    
+    if (Math.abs(offset) > containerHeight * snapThreshold) {
+      if (offset > 0 && canScrollInDirection('up')) {
+        goToPrevVideo();
+      } else if (offset < 0 && canScrollInDirection('down')) {
+        goToNextVideo();
       } else {
-        // Return to current video
         setOffset(0);
       }
-      
-      // Reset states
-      touchStartY.current = null;
-    }, 50);
+    } else {
+      // Return to current video
+      setOffset(0);
+    }
+    
+    // Reset states immediately
+    touchStartY.current = null;
   };
   
   // Handle keyboard navigation
