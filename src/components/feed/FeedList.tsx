@@ -94,6 +94,7 @@ function FeedList(): JSX.Element {
   
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const videoTimeRefs = useRef<Record<string, number>>({});
   
   // Touch tracking
   const touchStartY = useRef<number | null>(null);
@@ -101,7 +102,6 @@ function FeedList(): JSX.Element {
   // Wheel handling
   const wheelLock = useRef<boolean>(false);
   const wheelAccumulator = useRef<number>(0);
-  const wheelTimer = useRef<NodeJS.Timeout | null>(null);
   const isWheelActive = useRef<boolean>(false);
   const lastWheelTime = useRef<number>(0);
   const recentWheelDeltas = useRef<number[]>([]);
@@ -124,17 +124,24 @@ function FeedList(): JSX.Element {
     setIsMuted(!isMuted);
   };
   
-  // Toggle play/pause
+  // Toggle play/pause - Save and restore position
   const togglePlayPause = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     
-    const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
+    const videoId = VIDEOS[currentVideoIndex]?.id;
+    const currentVideo = videoRefs.current[videoId];
+    
     if (currentVideo) {
       if (currentVideo.paused) {
-        // Just play from current position, don't reset
+        // If we have a saved position, restore it
+        if (videoTimeRefs.current[videoId] !== undefined) {
+          currentVideo.currentTime = videoTimeRefs.current[videoId];
+        }
         currentVideo.play();
         setIsPaused(false);
       } else {
+        // Save the current position before pausing
+        videoTimeRefs.current[videoId] = currentVideo.currentTime;
         currentVideo.pause();
         setIsPaused(true);
       }
@@ -152,28 +159,33 @@ function FeedList(): JSX.Element {
   
   // Handle video playback when switching videos
   useEffect(() => {
-    // Pause all videos first
-    Object.values(videoRefs.current).forEach(videoRef => {
+    // Pause all videos and save their positions
+    Object.entries(videoRefs.current).forEach(([id, videoRef]) => {
       if (videoRef && !videoRef.paused) {
+        videoTimeRefs.current[id] = videoRef.currentTime;
         videoRef.pause();
       }
     });
     
     // Play current video if not paused
-    const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
-    if (currentVideo && !isPaused) {
-      // Start from the beginning when switching videos
+    const videoId = VIDEOS[currentVideoIndex]?.id;
+    const currentVideo = videoRefs.current[videoId];
+    
+    if (currentVideo) {
+      // Always start from beginning when switching videos
       currentVideo.currentTime = 0;
-      const playPromise = currentVideo.play();
       
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          console.log("Autoplay prevented, waiting for user interaction");
-          setIsPaused(true);
-        });
+      if (!isPaused) {
+        const playPromise = currentVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            console.log("Autoplay prevented, waiting for user interaction");
+            setIsPaused(true);
+          });
+        }
       }
     }
-  }, [currentVideoIndex, isPaused]);
+  }, [currentVideoIndex]);
   
   // Go to next video if possible
   const goToNextVideo = () => {
@@ -235,7 +247,7 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Improved wheel event handler with dynamic sensitivity and bounds checking
+  // Improved wheel event handler with instant snapping
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
@@ -250,7 +262,6 @@ function FeedList(): JSX.Element {
       }
       
       // For trackpad, allow a small elastic pull but restrict the movement
-      // This provides feedback to the user that they've reached the end
       const elasticFactor = 0.2; // Reduce movement to 20% for elastic effect
       
       // Only update if the offset would be moving back toward center
@@ -273,14 +284,10 @@ function FeedList(): JSX.Element {
         
         setOffset(newOffset);
         
-        // Set timer to snap back QUICKLY
-        if (wheelTimer.current) {
-          clearTimeout(wheelTimer.current);
-        }
-        
-        wheelTimer.current = setTimeout(() => {
+        // Snap back instantly
+        window.requestAnimationFrame(() => {
           setOffset(0);
-        }, 50); // Much faster snap-back (50ms instead of 100ms)
+        });
       }
       
       return;
@@ -297,44 +304,34 @@ function FeedList(): JSX.Element {
       // Flag that wheel is active
       isWheelActive.current = true;
       
-      // Clear any existing timer
-      if (wheelTimer.current) {
-        clearTimeout(wheelTimer.current);
-      }
-      
       // Get dynamic sensitivity factor based on speed
       const sensitivityFactor = calculateDynamicSensitivity(e.deltaY);
       
       // Update the offset with dynamic sensitivity
       let newOffset = offset + e.deltaY * -sensitivityFactor; 
       
-      // Apply limits to prevent excessive scrolling - use 90% instead of 100% to prevent showing next video
+      // Apply limits to prevent excessive scrolling
       const maxOffset = containerHeight * 0.9;
       newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
       
       setOffset(newOffset);
       
-      // Set timer to snap to nearest video IMMEDIATELY after user stops scrolling
-      wheelTimer.current = setTimeout(() => {
-        // Only execute if no new wheel events for a short time
-        if (Date.now() - lastWheelTime.current >= 80) { // Much faster detection (80ms instead of 150ms)
-          const thresholdRatio = 0.3; // Lower threshold for faster response (30% instead of 50%)
-          
-          if (newOffset > containerHeight * thresholdRatio && currentVideoIndex > 0) {
-            // Scroll up to previous video
-            goToPrevVideo();
-          } else if (newOffset < -containerHeight * thresholdRatio && currentVideoIndex < VIDEOS.length - 1) {
-            // Scroll down to next video
-            goToNextVideo();
-          } else {
-            // Return to current video instantly
-            setOffset(0);
+      // Set up instant check for wheel activity ending (using requestIdleCallback or setTimeout)
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(() => {
+          // Check if wheel has been inactive for a very small amount of time
+          if (Date.now() - lastWheelTime.current >= 20) {
+            snapToClosestVideo(newOffset);
           }
-          
-          isWheelActive.current = false;
-          recentWheelDeltas.current = []; // Reset deltas when finishing a scroll
-        }
-      }, 80); // Much faster check (80ms instead of 200ms)
+        }, { timeout: 20 });
+      } else {
+        // Fallback to setTimeout for browsers without requestIdleCallback
+        setTimeout(() => {
+          if (Date.now() - lastWheelTime.current >= 20) {
+            snapToClosestVideo(newOffset);
+          }
+        }, 20);
+      }
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
@@ -358,8 +355,31 @@ function FeedList(): JSX.Element {
         // Release lock after animation completes (faster)
         setTimeout(() => {
           wheelLock.current = false;
-        }, 200); // Faster lock release (200ms instead of 300ms)
+        }, 150);
       }
+    }
+  };
+  
+  // Helper function for instant snapping
+  const snapToClosestVideo = (currentOffset: number) => {
+    // Only snap if not already animating
+    if (isWheelActive.current) {
+      // Lower threshold for faster response
+      const thresholdRatio = 0.3; 
+      
+      if (currentOffset > containerHeight * thresholdRatio && currentVideoIndex > 0) {
+        // Scroll up to previous video
+        goToPrevVideo();
+      } else if (currentOffset < -containerHeight * thresholdRatio && currentVideoIndex < VIDEOS.length - 1) {
+        // Scroll down to next video
+        goToNextVideo();
+      } else {
+        // Return to current video instantly
+        setOffset(0);
+      }
+      
+      isWheelActive.current = false;
+      recentWheelDeltas.current = [];
     }
   };
   
@@ -394,12 +414,6 @@ function FeedList(): JSX.Element {
   
   // Touch handlers for mobile
   const handleTouchStart = (e: React.TouchEvent) => {
-    // Cancel any timer that might be running
-    if (wheelTimer.current) {
-      clearTimeout(wheelTimer.current);
-      wheelTimer.current = null;
-    }
-    
     touchStartY.current = e.touches[0].clientY;
   };
   
@@ -415,7 +429,7 @@ function FeedList(): JSX.Element {
     // If we can't scroll in this direction, apply elastic resistance
     if (!canScrollInDirection(direction)) {
       // Allow some elastic movement but with high resistance
-      const elasticFactor = 0.15; // Even more resistance for touch
+      const elasticFactor = 0.15;
       let elasticDiff = diff * elasticFactor;
       
       // Limit the maximum elastic pull
@@ -431,7 +445,7 @@ function FeedList(): JSX.Element {
     }
     
     // Normal scrolling behavior when direction is valid
-    // Apply limits to prevent excessive scrolling - use 90% to prevent showing too much of next video
+    // Apply limits to prevent excessive scrolling
     let newOffset = diff;
     const maxOffset = containerHeight * 0.9;
     newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
@@ -442,8 +456,8 @@ function FeedList(): JSX.Element {
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
     
-    // Apply a lower threshold for faster response
-    const thresholdRatio = 0.3; // 30% threshold for faster response
+    // Snap instantly with a lower threshold
+    const thresholdRatio = 0.3;
     
     if (offset > containerHeight * thresholdRatio && currentVideoIndex > 0) {
       // Scroll up to previous video
