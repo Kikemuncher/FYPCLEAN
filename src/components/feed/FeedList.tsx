@@ -131,6 +131,7 @@ function FeedList(): JSX.Element {
     const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
     if (currentVideo) {
       if (currentVideo.paused) {
+        // Just play from current position, don't reset
         currentVideo.play();
         setIsPaused(false);
       } else {
@@ -149,7 +150,7 @@ function FeedList(): JSX.Element {
     }));
   };
   
-  // Handle video playback
+  // Handle video playback when switching videos
   useEffect(() => {
     // Pause all videos first
     Object.values(videoRefs.current).forEach(videoRef => {
@@ -161,6 +162,7 @@ function FeedList(): JSX.Element {
     // Play current video if not paused
     const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
     if (currentVideo && !isPaused) {
+      // Start from the beginning when switching videos
       currentVideo.currentTime = 0;
       const playPromise = currentVideo.play();
       
@@ -179,7 +181,7 @@ function FeedList(): JSX.Element {
       setCurrentVideoIndex(currentVideoIndex + 1);
       setOffset(0);
     } else {
-      // Snap back to current video with a little bounce animation
+      // Snap back to current video instantly
       setOffset(0);
     }
   };
@@ -190,7 +192,7 @@ function FeedList(): JSX.Element {
       setCurrentVideoIndex(currentVideoIndex - 1);
       setOffset(0);
     } else {
-      // Snap back to current video with a little bounce animation
+      // Snap back to current video instantly
       setOffset(0);
     }
   };
@@ -271,14 +273,14 @@ function FeedList(): JSX.Element {
         
         setOffset(newOffset);
         
-        // Set timer to snap back
+        // Set timer to snap back QUICKLY
         if (wheelTimer.current) {
           clearTimeout(wheelTimer.current);
         }
         
         wheelTimer.current = setTimeout(() => {
           setOffset(0);
-        }, 100);
+        }, 50); // Much faster snap-back (50ms instead of 100ms)
       }
       
       return;
@@ -295,7 +297,6 @@ function FeedList(): JSX.Element {
       // Flag that wheel is active
       isWheelActive.current = true;
       
-      // For trackpad scrolling - accumulate + immediate feedback
       // Clear any existing timer
       if (wheelTimer.current) {
         clearTimeout(wheelTimer.current);
@@ -313,11 +314,11 @@ function FeedList(): JSX.Element {
       
       setOffset(newOffset);
       
-      // Set timer to snap to nearest video ONLY after user stops scrolling
+      // Set timer to snap to nearest video IMMEDIATELY after user stops scrolling
       wheelTimer.current = setTimeout(() => {
-        // Only execute if no new wheel events for 150ms
-        if (Date.now() - lastWheelTime.current >= 150) {
-          const thresholdRatio = 0.5; // 50% threshold
+        // Only execute if no new wheel events for a short time
+        if (Date.now() - lastWheelTime.current >= 80) { // Much faster detection (80ms instead of 150ms)
+          const thresholdRatio = 0.3; // Lower threshold for faster response (30% instead of 50%)
           
           if (newOffset > containerHeight * thresholdRatio && currentVideoIndex > 0) {
             // Scroll up to previous video
@@ -326,14 +327,14 @@ function FeedList(): JSX.Element {
             // Scroll down to next video
             goToNextVideo();
           } else {
-            // Return to current video
+            // Return to current video instantly
             setOffset(0);
           }
           
           isWheelActive.current = false;
           recentWheelDeltas.current = []; // Reset deltas when finishing a scroll
         }
-      }, 200);
+      }, 80); // Much faster check (80ms instead of 200ms)
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
@@ -354,10 +355,10 @@ function FeedList(): JSX.Element {
         // Reset accumulator
         wheelAccumulator.current = 0;
         
-        // Release lock after animation completes
+        // Release lock after animation completes (faster)
         setTimeout(() => {
           wheelLock.current = false;
-        }, 300);
+        }, 200); // Faster lock release (200ms instead of 300ms)
       }
     }
   };
@@ -441,8 +442,8 @@ function FeedList(): JSX.Element {
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
     
-    // Apply the 50% threshold rule
-    const thresholdRatio = 0.5; // 50% threshold
+    // Apply a lower threshold for faster response
+    const thresholdRatio = 0.3; // 30% threshold for faster response
     
     if (offset > containerHeight * thresholdRatio && currentVideoIndex > 0) {
       // Scroll up to previous video
@@ -451,7 +452,7 @@ function FeedList(): JSX.Element {
       // Scroll down to next video
       goToNextVideo();
     } else {
-      // Return to current video
+      // Return to current video instantly
       setOffset(0);
     }
     
@@ -501,7 +502,7 @@ function FeedList(): JSX.Element {
           }}
         >
           <div 
-            className={`absolute w-full ${isWheelActive.current ? 'transition-none' : 'transition-transform duration-300 ease-out'}`}
+            className={`absolute w-full ${isWheelActive.current ? 'transition-none' : 'transition-transform duration-150 ease-out'}`}
             style={{ 
               height: containerHeight * VIDEOS.length,
               transform: `translateY(${-currentVideoIndex * containerHeight + offset}px)`,
@@ -647,7 +648,7 @@ function FeedList(): JSX.Element {
                 index === currentVideoIndex 
                   ? 'w-4 bg-white' 
                   : 'w-1.5 bg-white/50'
-              } transition-all duration-200`}
+              } transition-all duration-150`}
             />
           ))}
         </div>
