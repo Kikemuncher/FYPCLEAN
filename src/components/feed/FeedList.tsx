@@ -102,9 +102,9 @@ function FeedList(): JSX.Element {
   // Wheel handling
   const wheelLock = useRef<boolean>(false);
   const wheelAccumulator = useRef<number>(0);
-  const isWheelActive = useRef<boolean>(false);
-  const lastWheelTime = useRef<number>(0);
-  const recentWheelDeltas = useRef<number[]>([]);
+  const isScrolling = useRef<boolean>(false);
+  const lastWheelEvent = useRef<number>(Date.now());
+  const scrollEndTimeout = useRef<NodeJS.Timeout | null>(null);
   
   // Set up container height
   useEffect(() => {
@@ -115,9 +115,14 @@ function FeedList(): JSX.Element {
     };
     
     window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      if (scrollEndTimeout.current) {
+        clearTimeout(scrollEndTimeout.current);
+      }
+    };
   }, []);
-  
+
   // Toggle mute
   const toggleMute = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -187,7 +192,7 @@ function FeedList(): JSX.Element {
     }
   }, [currentVideoIndex]);
   
-  // Go to next video if possible
+  // Go to next video if possible with a direct implementation
   const goToNextVideo = () => {
     if (currentVideoIndex < VIDEOS.length - 1) {
       setCurrentVideoIndex(currentVideoIndex + 1);
@@ -198,7 +203,7 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Go to previous video if possible
+  // Go to previous video if possible with a direct implementation
   const goToPrevVideo = () => {
     if (currentVideoIndex > 0) {
       setCurrentVideoIndex(currentVideoIndex - 1);
@@ -206,33 +211,6 @@ function FeedList(): JSX.Element {
     } else {
       // Snap back to current video instantly
       setOffset(0);
-    }
-  };
-  
-  // Calculate dynamic sensitivity based on scroll speed
-  const calculateDynamicSensitivity = (deltaY: number): number => {
-    // Add to recent deltas array
-    recentWheelDeltas.current.push(Math.abs(deltaY));
-    
-    // Keep only recent values
-    if (recentWheelDeltas.current.length > 5) {
-      recentWheelDeltas.current.shift();
-    }
-    
-    // Calculate average speed
-    const avgSpeed = recentWheelDeltas.current.reduce((a, b) => a + b, 0) / recentWheelDeltas.current.length;
-    
-    // For slower movements (less than 10), use a lower sensitivity
-    if (avgSpeed < 10) {
-      return 1.0; // Low sensitivity for slow scrolling
-    } 
-    // For medium speed movements
-    else if (avgSpeed < 20) {
-      return 2.0; // Medium sensitivity
-    }
-    // For fast movements, use slightly reduced sensitivity from previous implementation
-    else {
-      return Math.min(2.5, 2 + (avgSpeed * 0.02)); // Cap at 2.5x for very fast scrolling
     }
   };
   
@@ -247,9 +225,17 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Improved wheel event handler with instant snapping
+  // Simplified wheel event handler that guarantees snapping
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
+    
+    // Update last wheel event timestamp
+    lastWheelEvent.current = Date.now();
+    
+    // Clear any existing scroll timeout
+    if (scrollEndTimeout.current) {
+      clearTimeout(scrollEndTimeout.current);
+    }
     
     // Determine direction based on deltaY
     const direction = e.deltaY > 0 ? 'down' : 'up';
@@ -284,31 +270,27 @@ function FeedList(): JSX.Element {
         
         setOffset(newOffset);
         
-        // Snap back instantly
-        window.requestAnimationFrame(() => {
+        // Snap back after a short delay
+        scrollEndTimeout.current = setTimeout(() => {
           setOffset(0);
-        });
+        }, 50);
       }
       
       return;
     }
     
-    // Record when the last wheel event happened
-    const now = Date.now();
-    lastWheelTime.current = now;
-    
     // Detect if this is mouse wheel or trackpad
     const isTrackpad = Math.abs(e.deltaY) < 40;
     
     if (isTrackpad) {
-      // Flag that wheel is active
-      isWheelActive.current = true;
+      // Mark we're in scrolling state
+      isScrolling.current = true;
       
-      // Get dynamic sensitivity factor based on speed
-      const sensitivityFactor = calculateDynamicSensitivity(e.deltaY);
+      // Apply sensitivity for trackpad
+      const sensitivity = 1.5; // Lower for more precise control
       
-      // Update the offset with dynamic sensitivity
-      let newOffset = offset + e.deltaY * -sensitivityFactor; 
+      // Update the offset with sensitivity
+      let newOffset = offset + e.deltaY * -sensitivity; 
       
       // Apply limits to prevent excessive scrolling
       const maxOffset = containerHeight * 0.9;
@@ -316,22 +298,26 @@ function FeedList(): JSX.Element {
       
       setOffset(newOffset);
       
-      // Set up instant check for wheel activity ending (using requestIdleCallback or setTimeout)
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(() => {
-          // Check if wheel has been inactive for a very small amount of time
-          if (Date.now() - lastWheelTime.current >= 20) {
-            snapToClosestVideo(newOffset);
-          }
-        }, { timeout: 20 });
-      } else {
-        // Fallback to setTimeout for browsers without requestIdleCallback
-        setTimeout(() => {
-          if (Date.now() - lastWheelTime.current >= 20) {
-            snapToClosestVideo(newOffset);
-          }
-        }, 20);
-      }
+      // Set a timeout to detect when scrolling stops - GUARANTEED to run
+      scrollEndTimeout.current = setTimeout(() => {
+        // Simple threshold check
+        const thresholdRatio = 0.3; // 30% threshold
+        
+        console.log("Scroll ended, current offset:", newOffset);
+        
+        if (newOffset > containerHeight * thresholdRatio && currentVideoIndex > 0) {
+          // Scroll up to previous video
+          goToPrevVideo();
+        } else if (newOffset < -containerHeight * thresholdRatio && currentVideoIndex < VIDEOS.length - 1) {
+          // Scroll down to next video
+          goToNextVideo();
+        } else {
+          // Return to current video
+          setOffset(0);
+        }
+        
+        isScrolling.current = false;
+      }, 100); // 100ms after last wheel event
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
@@ -357,29 +343,6 @@ function FeedList(): JSX.Element {
           wheelLock.current = false;
         }, 150);
       }
-    }
-  };
-  
-  // Helper function for instant snapping
-  const snapToClosestVideo = (currentOffset: number) => {
-    // Only snap if not already animating
-    if (isWheelActive.current) {
-      // Lower threshold for faster response
-      const thresholdRatio = 0.3; 
-      
-      if (currentOffset > containerHeight * thresholdRatio && currentVideoIndex > 0) {
-        // Scroll up to previous video
-        goToPrevVideo();
-      } else if (currentOffset < -containerHeight * thresholdRatio && currentVideoIndex < VIDEOS.length - 1) {
-        // Scroll down to next video
-        goToNextVideo();
-      } else {
-        // Return to current video instantly
-        setOffset(0);
-      }
-      
-      isWheelActive.current = false;
-      recentWheelDeltas.current = [];
     }
   };
   
@@ -414,6 +377,10 @@ function FeedList(): JSX.Element {
   
   // Touch handlers for mobile
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (scrollEndTimeout.current) {
+      clearTimeout(scrollEndTimeout.current);
+    }
+    
     touchStartY.current = e.touches[0].clientY;
   };
   
@@ -456,7 +423,7 @@ function FeedList(): JSX.Element {
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
     
-    // Snap instantly with a lower threshold
+    // Snap with a lower threshold
     const thresholdRatio = 0.3;
     
     if (offset > containerHeight * thresholdRatio && currentVideoIndex > 0) {
@@ -516,7 +483,7 @@ function FeedList(): JSX.Element {
           }}
         >
           <div 
-            className={`absolute w-full ${isWheelActive.current ? 'transition-none' : 'transition-transform duration-150 ease-out'}`}
+            className={`absolute w-full ${isScrolling.current ? 'transition-none' : 'transition-transform duration-150 ease-out'}`}
             style={{ 
               height: containerHeight * VIDEOS.length,
               transform: `translateY(${-currentVideoIndex * containerHeight + offset}px)`,
