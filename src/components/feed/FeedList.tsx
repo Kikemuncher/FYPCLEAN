@@ -104,11 +104,13 @@ function FeedList(): JSX.Element {
   const wheelAccumulator = useRef<number>(0);
   const wheelTimer = useRef<any>(null);
   
-  // Scroll state management
+  // Enhanced scroll state management
   const isScrolling = useRef<boolean>(false);
   const scrollEndTimer = useRef<any>(null);
   const lastScrollPosition = useRef<number>(0);
   const scrollVelocity = useRef<number>(0);
+  const lastScrollDirection = useRef<'up' | 'down' | null>(null);
+  const consecutiveScrollsInDirection = useRef<number>(0);
   
   // Set up container height
   useEffect(() => {
@@ -199,8 +201,13 @@ function FeedList(): JSX.Element {
     }
   }, [currentVideoIndex]);
   
-  // Go to next video if possible
+  // Enhanced navigation with scroll reset
   const goToNextVideo = () => {
+    // Reset all scroll tracking when changing videos
+    consecutiveScrollsInDirection.current = 0;
+    lastScrollDirection.current = null;
+    scrollVelocity.current = 0;
+    
     if (currentVideoIndex < VIDEOS.length - 1) {
       setCurrentVideoIndex(currentVideoIndex + 1);
       setOffset(0);
@@ -212,6 +219,11 @@ function FeedList(): JSX.Element {
   
   // Go to previous video if possible
   const goToPrevVideo = () => {
+    // Reset all scroll tracking when changing videos
+    consecutiveScrollsInDirection.current = 0;
+    lastScrollDirection.current = null;
+    scrollVelocity.current = 0;
+    
     if (currentVideoIndex > 0) {
       setCurrentVideoIndex(currentVideoIndex - 1);
       setOffset(0);
@@ -232,29 +244,37 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Enhanced wheel event handler - designed for immediate response on touchpad release
+  // Zero-lag wheel event handler with instant detection
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Detect touchpad vs mouse wheel
-    const isTrackpad = Math.abs(e.deltaY) < 40;
+    // Record wheel event time to detect when user stops scrolling
+    const currentTime = Date.now();
+    const timeSinceLastWheel = currentTime - lastScrollPosition.current;
+    lastScrollPosition.current = currentTime;
     
-    // Determine direction
-    const direction = e.deltaY > 0 ? 'down' : 'up';
-    
-    // Clear any existing wheel timer 
+    // Clear any existing wheel timer to reset detection
     if (wheelTimer.current) {
       clearTimeout(wheelTimer.current);
     }
     
-    // Mark that we're actively scrolling and capture the current time
+    // Track consecutive scroll events in same direction to prevent skipping
+    const direction = e.deltaY > 0 ? 'down' : 'up';
+    
+    // Reset direction tracking if direction changed (important for preventing skips)
+    if (lastScrollDirection.current && lastScrollDirection.current !== direction) {
+      consecutiveScrollsInDirection.current = 0;
+    }
+    lastScrollDirection.current = direction;
+    consecutiveScrollsInDirection.current += 1;
+    
+    // Mark that we're actively scrolling
     isScrolling.current = true;
-    lastScrollPosition.current = Date.now();
     
     // Check if we can scroll in this direction
     if (!canScrollInDirection(direction)) {
-      // For boundaries, allow a small elastic pull with minimal resistance
-      const elasticFactor = 0.12; 
+      // For boundaries, very minimal elastic effect
+      const elasticFactor = 0.08; 
       
       // Only update if the offset would be moving back toward center
       if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
@@ -262,12 +282,12 @@ function FeedList(): JSX.Element {
         let newOffset = offset + e.deltaY * -1;
         setOffset(newOffset);
       } else {
-        // Restricted elastic pull
+        // Minimal elastic pull
         let elasticDelta = e.deltaY * -elasticFactor;
         let newOffset = offset + elasticDelta;
         
-        // Prevent pulling too far (max 10% - tighter feeling)
-        const maxElasticPull = containerHeight * 0.1;
+        // Very tight boundary (8% - barely noticeable elastic effect)
+        const maxElasticPull = containerHeight * 0.08;
         if (direction === 'up') {
           newOffset = Math.max(newOffset, -maxElasticPull);
         } else {
@@ -276,65 +296,56 @@ function FeedList(): JSX.Element {
         
         setOffset(newOffset);
         
-        // Auto snap-back after tiny delay if no wheel events occur
+        // Instant snap-back with minimal delay
         wheelTimer.current = setTimeout(() => {
           setOffset(0);
-        }, 50);
+        }, 20);
       }
-      
       return;
     }
     
+    // Detect if this is likely a touchpad vs mouse wheel
+    const isTrackpad = Math.abs(e.deltaY) < 50;
+    
     if (isTrackpad) {
-      // For trackpad, we'll use direct mapping of movement with some acceleration
-      // Calculate acceleration factor based on speed of movement
-      const now = Date.now();
-      const timeDelta = now - (lastScrollPosition.current || now);
-      lastScrollPosition.current = now;
+      // For trackpad, use simple inertial scrolling with minimal processing
       
-      // Calculate current velocity
-      const instantVelocity = Math.abs(e.deltaY) / Math.max(1, timeDelta);
+      // Calculate raw scroll speed (minimizes computation for responsiveness)
+      const instantVelocity = Math.abs(e.deltaY) / Math.max(1, timeSinceLastWheel);
       
-      // Update velocity with smoothing (but faster response to changes)
-      scrollVelocity.current = 0.5 * scrollVelocity.current + 0.5 * instantVelocity;
-      
-      // Adaptive sensitivity - more responsive to fast movements
-      let sensitivity;
-      if (scrollVelocity.current < 0.1) {
-        sensitivity = 0.9; // Most precise control
-      } else if (scrollVelocity.current < 0.3) {
-        sensitivity = 1.2; // Medium acceleration
-      } else {
-        sensitivity = 1.8; // Higher acceleration for fast scrolling
+      // Prevent skipping by limiting maximum amount moved in a single direction
+      // This is crucial for fast scrolling stability
+      let limitMultiplier = 1;
+      if (consecutiveScrollsInDirection.current > 10) {
+        // If many consecutive scrolls in same direction, limit acceleration
+        limitMultiplier = 0.7;
       }
       
-      // Update the offset with the adaptive sensitivity
+      // Simple fixed sensitivity to reduce computation - improves perceived response time
+      const sensitivity = 1.2 * limitMultiplier;
+      
+      // Calculate new offset with the sensitivity applied
       let newOffset = offset + e.deltaY * -sensitivity;
       
-      // Apply limits but allow more range for fast scrolling
-      const maxOffset = containerHeight * 0.95;
+      // Apply limits to prevent excessive scrolling
+      const maxOffset = containerHeight * 0.9;
       newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
       
       // Update offset immediately
       setOffset(newOffset);
       
-      // Set minimum wheel gap detection - if no wheel events for 30ms, consider it a release
-      // This is very aggressive detection to eliminate perceived lag
+      // Ultra-low latency detection (10ms) for when scrolling stops
+      // This creates an almost instantaneous snap response
       wheelTimer.current = setTimeout(() => {
-        // First check how long since the last wheel event
-        const timeSinceLastWheel = Date.now() - lastScrollPosition.current;
-        
-        // If it's been longer than our threshold, consider it a release
-        if (timeSinceLastWheel >= 30) {
-          // Consider this a touchpad release - execute immediately
+        // Immediate check if we need to snap
+        if (Date.now() - lastScrollPosition.current >= 10) {
           isScrolling.current = false;
           
-          // Use velocity-adjusted threshold (lower threshold for fast scrolls)
-          const thresholdAdjustment = Math.min(0.15, scrollVelocity.current * 0.5);
-          const snapThreshold = 0.3 - thresholdAdjustment;
+          // Fixed threshold for more consistent behavior
+          const snapThreshold = 0.25; // 25% threshold for all speeds
           
+          // Simple decision with minimal computation for speed
           if (Math.abs(newOffset) > containerHeight * snapThreshold) {
-            // Handle high-velocity scrolling - prevent skipping videos
             if (newOffset > 0 && canScrollInDirection('up')) {
               goToPrevVideo();
             } else if (newOffset < 0 && canScrollInDirection('down')) {
@@ -343,11 +354,10 @@ function FeedList(): JSX.Element {
               setOffset(0);
             }
           } else {
-            // Return to current video
             setOffset(0);
           }
         }
-      }, 30); // Ultra-responsive 30ms detection
+      }, 10); // Ultra-low 10ms detection for instant response
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
