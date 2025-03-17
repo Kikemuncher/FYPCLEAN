@@ -86,9 +86,8 @@ function FeedList(): JSX.Element {
   // Container height
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // For tactile scrolling - no state to prevent re-renders
-  const offsetRef = useRef<number>(0);
-  const translateYRef = useRef<number>(0);
+  // For tactile scrolling
+  const [offset, setOffset] = useState<number>(0);
   
   // Last tap for double tap detection
   const lastTap = useRef<number>(0);
@@ -96,18 +95,14 @@ function FeedList(): JSX.Element {
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const videoTimeRefs = useRef<Record<string, number>>({});
-  const containerRef = useRef<HTMLDivElement>(null);
-  const videosContainerRef = useRef<HTMLDivElement>(null);
   
   // Touch tracking
   const touchStartY = useRef<number | null>(null);
-  const touchMoveTotal = useRef<number>(0);
   
   // Wheel handling
   const wheelLock = useRef<boolean>(false);
   const wheelAccumulator = useRef<number>(0);
-  const isUserScrolling = useRef<boolean>(false);
-  const lastWheelTime = useRef<number>(0);
+  const wheelTimer = useRef<any>(null);
   
   // Set up container height
   useEffect(() => {
@@ -115,22 +110,16 @@ function FeedList(): JSX.Element {
     
     const updateHeight = () => {
       setContainerHeight(window.innerHeight);
-      updateTransform();
     };
     
     window.addEventListener('resize', updateHeight);
     return () => {
       window.removeEventListener('resize', updateHeight);
+      if (wheelTimer.current) {
+        clearTimeout(wheelTimer.current);
+      }
     };
   }, []);
-  
-  // Apply transform directly to DOM to avoid React rendering cycle
-  const updateTransform = () => {
-    if (!videosContainerRef.current) return;
-    
-    translateYRef.current = -currentVideoIndex * containerHeight + offsetRef.current;
-    videosContainerRef.current.style.transform = `translateY(${translateYRef.current}px)`;
-  };
   
   // Toggle mute
   const toggleMute = (e?: React.MouseEvent) => {
@@ -199,32 +188,27 @@ function FeedList(): JSX.Element {
         }
       }
     }
-    
-    // Update transform when video changes
-    updateTransform();
-  }, [currentVideoIndex, containerHeight]);
+  }, [currentVideoIndex]);
   
-  // Go to next video if possible with a direct implementation
+  // Go to next video if possible
   const goToNextVideo = () => {
     if (currentVideoIndex < VIDEOS.length - 1) {
-      offsetRef.current = 0;
       setCurrentVideoIndex(currentVideoIndex + 1);
+      setOffset(0);
     } else {
       // Snap back to current video instantly
-      offsetRef.current = 0;
-      updateTransform();
+      setOffset(0);
     }
   };
   
-  // Go to previous video if possible with a direct implementation
+  // Go to previous video if possible
   const goToPrevVideo = () => {
     if (currentVideoIndex > 0) {
-      offsetRef.current = 0;
       setCurrentVideoIndex(currentVideoIndex - 1);
+      setOffset(0);
     } else {
       // Snap back to current video instantly
-      offsetRef.current = 0;
-      updateTransform();
+      setOffset(0);
     }
   };
   
@@ -239,80 +223,47 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Handle the end of scrolling - check if we need to snap
-  const handleScrollEnd = () => {
-    const threshold = containerHeight * 0.3; // 30% threshold
-    
-    if (offsetRef.current > threshold && canScrollInDirection('up')) {
-      goToPrevVideo();
-    } else if (offsetRef.current < -threshold && canScrollInDirection('down')) {
-      goToNextVideo();
-    } else {
-      // Return to current video with animation
-      offsetRef.current = 0;
-      if (videosContainerRef.current) {
-        videosContainerRef.current.style.transition = "transform 200ms ease-out";
-        updateTransform();
-        
-        // Remove transition after animation completes
-        setTimeout(() => {
-          if (videosContainerRef.current) {
-            videosContainerRef.current.style.transition = "none";
-          }
-        }, 200);
-      }
-    }
-    
-    isUserScrolling.current = false;
-  };
-  
-  // Direct wheel event handler
+  // Wheel event handler
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Update timestamp for last wheel event
-    lastWheelTime.current = Date.now();
+    // Clear any existing wheel timer
+    if (wheelTimer.current) {
+      clearTimeout(wheelTimer.current);
+    }
     
     // Determine direction based on deltaY
     const direction = e.deltaY > 0 ? 'down' : 'up';
     
     // Check if we can scroll in this direction
     if (!canScrollInDirection(direction)) {
-      // For mouse wheel, just block completely
-      if (Math.abs(e.deltaY) >= 40) {
-        return;
-      }
-      
       // For trackpad, allow a small elastic pull but restrict the movement
       const elasticFactor = 0.2; // Reduce movement to 20% for elastic effect
       
       // Only update if the offset would be moving back toward center
-      if ((direction === 'up' && offsetRef.current < 0) || 
-          (direction === 'down' && offsetRef.current > 0)) {
+      if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
         // Allow full movement back to center
-        offsetRef.current += e.deltaY * -1;
-        updateTransform();
+        let newOffset = offset + e.deltaY * -1;
+        setOffset(newOffset);
       } else {
         // Restricted elastic pull
         let elasticDelta = e.deltaY * -elasticFactor;
-        offsetRef.current += elasticDelta;
+        let newOffset = offset + elasticDelta;
         
         // Prevent pulling too far (max 15% of container height)
         const maxElasticPull = containerHeight * 0.15;
         if (direction === 'up') {
-          offsetRef.current = Math.max(offsetRef.current, -maxElasticPull);
+          newOffset = Math.max(newOffset, -maxElasticPull);
         } else {
-          offsetRef.current = Math.min(offsetRef.current, maxElasticPull);
+          newOffset = Math.min(newOffset, maxElasticPull);
         }
         
-        updateTransform();
+        setOffset(newOffset);
         
-        // Elastic snap-back
-        if (!isUserScrolling.current) {
-          // Immediate snap-back
-          offsetRef.current = 0;
-          updateTransform();
-        }
+        // Snap back after a short delay
+        wheelTimer.current = setTimeout(() => {
+          setOffset(0);
+        }, 50);
       }
       
       return;
@@ -322,37 +273,34 @@ function FeedList(): JSX.Element {
     const isTrackpad = Math.abs(e.deltaY) < 40;
     
     if (isTrackpad) {
-      // Mark we're in scrolling state
-      isUserScrolling.current = true;
+      // For trackpad, apply sensitivity for direct manipulation
+      const sensitivity = 1.5; // Adjust for desired sensitivity
       
-      // Make sure we are using direct manipulation (no transitions)
-      if (videosContainerRef.current) {
-        videosContainerRef.current.style.transition = "none";
-      }
-      
-      // Apply sensitivity for trackpad
-      const sensitivity = 1.5; // For precise control
-      
-      // Update the offset directly
-      offsetRef.current += e.deltaY * -sensitivity;
+      // Update the offset with sensitivity
+      let newOffset = offset + e.deltaY * -sensitivity;
       
       // Apply limits to prevent excessive scrolling
       const maxOffset = containerHeight * 0.9;
-      offsetRef.current = Math.max(Math.min(offsetRef.current, maxOffset), -maxOffset);
+      newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
       
-      // Update transform directly
-      updateTransform();
+      setOffset(newOffset);
       
-      // Check for scrolling end after a very short delay (just enough to see if more events come)
-      // This is processed on the next animation frame to be as responsive as possible
-      window.requestAnimationFrame(() => {
-        const timeSinceLastWheel = Date.now() - lastWheelTime.current;
-        
-        // If no wheel events for 10ms, consider it stopped
-        if (timeSinceLastWheel >= 10 && isUserScrolling.current) {
-          handleScrollEnd();
+      // Set up timeout to detect when scrolling stops
+      wheelTimer.current = setTimeout(() => {
+        // Determine if we've scrolled far enough to change videos
+        if (Math.abs(newOffset) > containerHeight * 0.3) {
+          if (newOffset > 0 && canScrollInDirection('up')) {
+            goToPrevVideo();
+          } else if (newOffset < 0 && canScrollInDirection('down')) {
+            goToNextVideo();
+          } else {
+            setOffset(0);
+          }
+        } else {
+          // Return to current video
+          setOffset(0);
         }
-      });
+      }, 40); // Very short timeout to detect end of scrolling
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
@@ -373,10 +321,10 @@ function FeedList(): JSX.Element {
         // Reset accumulator
         wheelAccumulator.current = 0;
         
-        // Release lock after animation completes
+        // Release lock after animation completes (faster)
         setTimeout(() => {
           wheelLock.current = false;
-        }, 200);
+        }, 150);
       }
     }
   };
@@ -412,14 +360,10 @@ function FeedList(): JSX.Element {
   
   // Touch handlers for mobile
   const handleTouchStart = (e: React.TouchEvent) => {
-    isUserScrolling.current = true;
-    touchStartY.current = e.touches[0].clientY;
-    touchMoveTotal.current = 0;
-    
-    // Ensure we have no transitions for direct manipulation
-    if (videosContainerRef.current) {
-      videosContainerRef.current.style.transition = "none";
+    if (wheelTimer.current) {
+      clearTimeout(wheelTimer.current);
     }
+    touchStartY.current = e.touches[0].clientY;
   };
   
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -427,9 +371,6 @@ function FeedList(): JSX.Element {
     
     const touchY = e.touches[0].clientY;
     const diff = touchY - touchStartY.current;
-    
-    // Track total movement for this touch session
-    touchMoveTotal.current = diff;
     
     // Determine direction
     const direction = diff > 0 ? 'up' : 'down';
@@ -448,26 +389,38 @@ function FeedList(): JSX.Element {
         elasticDiff = Math.max(elasticDiff, -maxElasticPull);
       }
       
-      offsetRef.current = elasticDiff;
-      updateTransform();
+      setOffset(elasticDiff);
       return;
     }
     
     // Normal scrolling behavior when direction is valid
     // Apply limits to prevent excessive scrolling
-    offsetRef.current = diff;
+    let newOffset = diff;
     const maxOffset = containerHeight * 0.9;
-    offsetRef.current = Math.max(Math.min(offsetRef.current, maxOffset), -maxOffset);
+    newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
     
-    updateTransform();
+    setOffset(newOffset);
   };
   
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
-    touchStartY.current = null;
     
-    // Process the end of touch
-    handleScrollEnd();
+    // Apply the threshold to determine if we should change videos
+    if (Math.abs(offset) > containerHeight * 0.3) {
+      if (offset > 0 && canScrollInDirection('up')) {
+        goToPrevVideo();
+      } else if (offset < 0 && canScrollInDirection('down')) {
+        goToNextVideo();
+      } else {
+        setOffset(0);
+      }
+    } else {
+      // Return to current video
+      setOffset(0);
+    }
+    
+    // Reset states
+    touchStartY.current = null;
   };
   
   // Handle keyboard navigation
@@ -490,11 +443,10 @@ function FeedList(): JSX.Element {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentVideoIndex, containerHeight]);
+  }, [currentVideoIndex]);
   
   return (
     <div 
-      ref={containerRef}
       className="h-screen w-full overflow-hidden bg-black relative"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
@@ -513,12 +465,10 @@ function FeedList(): JSX.Element {
           }}
         >
           <div 
-            ref={videosContainerRef}
-            className="absolute w-full"
+            className="absolute w-full transition-transform duration-300 ease-out"
             style={{ 
               height: containerHeight * VIDEOS.length,
-              transform: `translateY(${-currentVideoIndex * containerHeight}px)`,
-              transition: "transform 200ms ease-out" 
+              transform: `translateY(${-currentVideoIndex * containerHeight + offset}px)`,
             }}
           >
             {VIDEOS.map((video, index) => {
