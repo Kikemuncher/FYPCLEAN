@@ -2,8 +2,19 @@
 
 import React, { useEffect, useState, useRef } from "react";
 
+// Define video interface
+interface Video {
+  id: string;
+  url: string;
+  username: string;
+  caption: string;
+  song: string;
+  likes: number;
+  comments: number;
+}
+
 // Static data for videos
-const VIDEOS = [
+const VIDEOS: Video[] = [
   {
     id: "video1",
     url: "https://assets.mixkit.co/videos/preview/mixkit-young-mother-with-her-little-daughter-decorating-a-christmas-tree-39745-large.mp4",
@@ -52,7 +63,7 @@ const VIDEOS = [
 ];
 
 // Format function for numbers
-const formatCount = (count) => {
+const formatCount = (count: number): string => {
   if (count >= 1000000) {
     return (count / 1000000).toFixed(1) + 'M';
   } else if (count >= 1000) {
@@ -61,25 +72,25 @@ const formatCount = (count) => {
   return count.toString();
 };
 
-function FeedList() {
+function FeedList(): JSX.Element {
   // State
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [likedVideos, setLikedVideos] = useState({});
-  const [isMuted, setIsMuted] = useState(false);
-  const [containerHeight, setContainerHeight] = useState(0);
-  const [containerWidth, setContainerWidth] = useState(0);
-  const [translateY, setTranslateY] = useState(0);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState<number>(0);
+  const [likedVideos, setLikedVideos] = useState<Record<string, boolean>>({});
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [containerHeight, setContainerHeight] = useState<number>(0);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const [translateY, setTranslateY] = useState<number>(0);
   
   // Refs
-  const videoRefs = useRef({});
-  const lastTap = useRef(0);
-  const isDragging = useRef(false);
-  const startY = useRef(null);
-  const lastY = useRef(0);
-  const velocity = useRef(0);
-  const lastVelocity = useRef([]);
-  const animationRef = useRef(null);
-  const isMouseWheel = useRef(false);
+  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const lastTap = useRef<number>(0);
+  const isDragging = useRef<boolean>(false);
+  const startY = useRef<number | null>(null);
+  const lastY = useRef<number>(0);
+  const velocity = useRef<number>(0);
+  const lastVelocity = useRef<number[]>([]);
+  const animationRef = useRef<number | null>(null);
+  const isMouseWheel = useRef<boolean>(false);
   
   // Set up container dimensions
   useEffect(() => {
@@ -95,7 +106,7 @@ function FeedList() {
   }, []);
   
   // Update dimensions
-  const updateDimensions = () => {
+  const updateDimensions = (): void => {
     const height = window.innerHeight;
     const width = Math.min(window.innerWidth, height * 9 / 16);
     
@@ -136,7 +147,7 @@ function FeedList() {
   }, [translateY, containerHeight, currentVideoIndex]);
   
   // Snap to nearest video
-  const snapToNearestVideo = () => {
+  const snapToNearestVideo = (): void => {
     if (isDragging.current) return;
     
     const normalizedTranslate = -translateY;
@@ -150,7 +161,7 @@ function FeedList() {
     const startTime = performance.now();
     const duration = 300;
     
-    const animate = (time) => {
+    const animate = (time: number): void => {
       const elapsed = time - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const easing = 1 - Math.pow(1 - progress, 3); // Cubic ease out
@@ -172,7 +183,7 @@ function FeedList() {
   };
   
   // Apply momentum scrolling
-  const applyMomentum = () => {
+  const applyMomentum = (): void => {
     if (isDragging.current) return;
     
     // Get average velocity
@@ -217,7 +228,7 @@ function FeedList() {
   };
   
   // Handle wheel events
-  const handleWheel = (e) => {
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>): void => {
     e.preventDefault();
     
     // Cancel any running animation
@@ -241,7 +252,7 @@ function FeedList() {
       const startTime = performance.now();
       const duration = 300;
       
-      const animateWheel = (time) => {
+      const animateWheel = (time: number): void => {
         const elapsed = time - startTime;
         const progress = Math.min(elapsed / duration, 1);
         const easing = 1 - Math.pow(1 - progress, 3);
@@ -296,7 +307,7 @@ function FeedList() {
   };
   
   // Touch/pointer events
-  const handlePointerDown = (e) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
     if (e.pointerType !== 'touch' && e.button !== 0) return;
     
     // Cancel any running animation
@@ -312,7 +323,7 @@ function FeedList() {
     lastVelocity.current = [];
   };
   
-  const handlePointerMove = (e) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
     if (!isDragging.current || startY.current === null) return;
     
     const currentY = e.clientY;
@@ -347,7 +358,7 @@ function FeedList() {
     lastY.current = currentY;
   };
   
-  const handlePointerUp = () => {
+  const handlePointerUp = (): void => {
     if (!isDragging.current) return;
     
     isDragging.current = false;
@@ -358,13 +369,13 @@ function FeedList() {
   };
   
   // Toggle mute
-  const toggleMute = (e) => {
+  const toggleMute = (e?: React.MouseEvent): void => {
     if (e) e.stopPropagation();
     setIsMuted(!isMuted);
   };
   
   // Handle likes
-  const toggleLike = (videoId, e) => {
+  const toggleLike = (videoId: string, e: React.MouseEvent): void => {
     e.stopPropagation();
     setLikedVideos(prev => ({
       ...prev,
@@ -373,7 +384,7 @@ function FeedList() {
   };
   
   // Double tap
-  const handleDoubleTap = () => {
+  const handleDoubleTap = (): void => {
     const now = Date.now();
     const timeSince = now - lastTap.current;
     
@@ -457,9 +468,10 @@ function FeedList() {
                               alt={video.username} 
                               className="w-full h-full object-cover"
                               loading="lazy"
-                              onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.src = 'https://placehold.co/100/gray/white?text=User';
+                              onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                                const target = e.target as HTMLImageElement;
+                                target.onerror = null;
+                                target.src = 'https://placehold.co/100/gray/white?text=User';
                               }}
                             />
                           </div>
