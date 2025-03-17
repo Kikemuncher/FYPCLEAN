@@ -2,19 +2,8 @@
 
 import React, { useEffect, useState, useRef } from "react";
 
-// Define video interface
-interface Video {
-  id: string;
-  url: string;
-  username: string;
-  caption: string;
-  song: string;
-  likes: number;
-  comments: number;
-}
-
-// Static data to ensure we always have videos
-const VIDEOS: Video[] = [
+// Static data for videos
+const VIDEOS = [
   {
     id: "video1",
     url: "https://assets.mixkit.co/videos/preview/mixkit-young-mother-with-her-little-daughter-decorating-a-christmas-tree-39745-large.mp4",
@@ -62,8 +51,8 @@ const VIDEOS: Video[] = [
   }
 ];
 
-// Simple format function for large numbers
-const formatCount = (count: number): string => {
+// Format function for numbers
+const formatCount = (count) => {
   if (count >= 1000000) {
     return (count / 1000000).toFixed(1) + 'M';
   } else if (count >= 1000) {
@@ -72,56 +61,31 @@ const formatCount = (count: number): string => {
   return count.toString();
 };
 
-function FeedList(): JSX.Element {
-  // Client-side rendering detection
-  const [isClient, setIsClient] = useState<boolean>(false);
+function FeedList() {
+  // State
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [likedVideos, setLikedVideos] = useState({});
+  const [isMuted, setIsMuted] = useState(false);
+  const [containerHeight, setContainerHeight] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [translateY, setTranslateY] = useState(0);
   
-  // Current active video
-  const [currentVideoIndex, setCurrentVideoIndex] = useState<number>(0);
+  // Refs
+  const videoRefs = useRef({});
+  const lastTap = useRef(0);
+  const isDragging = useRef(false);
+  const startY = useRef(null);
+  const lastY = useRef(0);
+  const velocity = useRef(0);
+  const lastVelocity = useRef([]);
+  const animationRef = useRef(null);
+  const isMouseWheel = useRef(false);
   
-  // Track likes
-  const [likedVideos, setLikedVideos] = useState<Record<string, boolean>>({});
-  
-  // Video playing state
-  const [isMuted, setIsMuted] = useState<boolean>(false);
-  
-  // Container height and width
-  const [containerHeight, setContainerHeight] = useState<number>(0);
-  const [containerWidth, setContainerWidth] = useState<number>(0);
-  
-  // Direct translation for videos container
-  // This allows for partial scrolling without snapping
-  const [translateY, setTranslateY] = useState<number>(0);
-  
-  // Animation frame ID for inertial scrolling
-  const animationRef = useRef<number | null>(null);
-  
-  // Video element references
-  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
-  
-  // Mouse/touch tracking
-  const isDragging = useRef<boolean>(false);
-  const startY = useRef<number | null>(null);
-  const lastY = useRef<number>(0);
-  const velocity = useRef<number>(0);
-  const lastVelocity = useRef<number[]>([]);
-  const lastTimestamp = useRef<number>(0);
-  const lastTap = useRef<number>(0);
-  
-  // Wheel specific handling
-  const wheelType = useRef<'mouse' | 'trackpad' | null>(null);
-  const wheelAccumulator = useRef<number>(0);
-  const wheelTimeout = useRef<NodeJS.Timeout | null>(null);
-  
-  // Track if we should snap to video after scrolling
-  const shouldSnapToVideo = useRef<boolean>(true);
-  
-  // Initialize client-side state
+  // Set up container dimensions
   useEffect(() => {
-    setIsClient(true);
     updateDimensions();
-    
     window.addEventListener('resize', updateDimensions);
+    
     return () => {
       window.removeEventListener('resize', updateDimensions);
       if (animationRef.current) {
@@ -130,55 +94,19 @@ function FeedList(): JSX.Element {
     };
   }, []);
   
-  // Update container dimensions
+  // Update dimensions
   const updateDimensions = () => {
     const height = window.innerHeight;
-    // Calculate width to maintain 9:16 aspect ratio
     const width = Math.min(window.innerWidth, height * 9 / 16);
     
     setContainerHeight(height);
     setContainerWidth(width);
-    
-    // Update translate to match current video
     setTranslateY(-currentVideoIndex * height);
   };
   
-  // Toggle mute
-  const toggleMute = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setIsMuted(!isMuted);
-  };
-  
-  // Handle likes
-  const toggleLike = (videoId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setLikedVideos(prev => ({
-      ...prev,
-      [videoId]: !prev[videoId]
-    }));
-  };
-  
-  // Double tap to like
-  const handleDoubleTap = () => {
-    const now = new Date().getTime();
-    const timeSince = now - lastTap.current;
-    
-    if (timeSince < 300 && timeSince > 0) {
-      const currentVideo = VIDEOS[currentVideoIndex];
-      if (currentVideo) {
-        setLikedVideos(prev => ({
-          ...prev,
-          [currentVideo.id]: true
-        }));
-      }
-    }
-    
-    lastTap.current = now;
-  };
-  
-  // Handle video playback
+  // Video playback management
   useEffect(() => {
-    if (!isClient || containerHeight === 0) return;
+    if (containerHeight === 0) return;
     
     // Determine which video is most visible
     const normalizedTranslate = -translateY;
@@ -188,92 +116,74 @@ function FeedList(): JSX.Element {
       setCurrentVideoIndex(visibleIndex);
     }
     
-    // Pause all videos first
+    // Pause all videos
     Object.values(videoRefs.current).forEach(videoRef => {
       if (videoRef && !videoRef.paused) {
         videoRef.pause();
       }
     });
     
-    // Only play the video if it's more than 50% visible
-    const visiblePct = 1 - Math.abs((normalizedTranslate % containerHeight) / containerHeight);
-    if (visiblePct > 0.5) {
-      const currentVideo = videoRefs.current[VIDEOS[visibleIndex]?.id];
-      if (currentVideo) {
-        currentVideo.currentTime = 0;
-        const playPromise = currentVideo.play();
-        
-        if (playPromise !== undefined) {
-          playPromise.catch(() => {
-            console.log("Autoplay prevented, waiting for user interaction");
-          });
-        }
+    // Play current video
+    const currentVideo = videoRefs.current[VIDEOS[visibleIndex]?.id];
+    if (currentVideo) {
+      const playPromise = currentVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          console.log("Autoplay prevented, waiting for user interaction");
+        });
       }
     }
-  }, [translateY, containerHeight, isClient, currentVideoIndex]);
+  }, [translateY, containerHeight, currentVideoIndex]);
   
-  // Snap to nearest video with animation
+  // Snap to nearest video
   const snapToNearestVideo = () => {
-    // Only snap if we should (not during continuous scroll or drag)
-    if (!shouldSnapToVideo.current) return;
+    if (isDragging.current) return;
     
-    // Calculate which video to snap to
     const normalizedTranslate = -translateY;
     const nearestIndex = Math.round(normalizedTranslate / containerHeight);
     const targetIndex = Math.max(0, Math.min(VIDEOS.length - 1, nearestIndex));
     const targetTranslate = -targetIndex * containerHeight;
     
-    // Don't animate if we're already very close
-    if (Math.abs(translateY - targetTranslate) < 5) {
-      setTranslateY(targetTranslate);
-      return;
-    }
-    
-    // Animate to target position
-    const startPosition = translateY;
-    const distance = targetTranslate - startPosition;
+    // Animation
+    const startTranslate = translateY;
+    const distance = targetTranslate - startTranslate;
     const startTime = performance.now();
-    const duration = 300; // ms
+    const duration = 300;
     
-    const animateSnap = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
+    const animate = (time) => {
+      const elapsed = time - startTime;
       const progress = Math.min(elapsed / duration, 1);
+      const easing = 1 - Math.pow(1 - progress, 3); // Cubic ease out
       
-      // Ease out cubic
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-      
-      setTranslateY(startPosition + distance * easedProgress);
+      setTranslateY(startTranslate + distance * easing);
       
       if (progress < 1) {
-        animationRef.current = requestAnimationFrame(animateSnap);
+        animationRef.current = requestAnimationFrame(animate);
       } else {
         animationRef.current = null;
       }
     };
     
-    // Cancel any ongoing animation
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
     
-    // Start animation
-    animationRef.current = requestAnimationFrame(animateSnap);
+    animationRef.current = requestAnimationFrame(animate);
   };
   
   // Apply momentum scrolling
   const applyMomentum = () => {
-    // Calculate velocity based on recent movements
+    if (isDragging.current) return;
+    
+    // Get average velocity
     if (lastVelocity.current.length > 0) {
-      // Average recent velocities
       velocity.current = lastVelocity.current.reduce((a, b) => a + b, 0) / lastVelocity.current.length;
     }
     
-    // Don't continue if velocity is very low
+    // If velocity is very low, just snap to nearest
     if (Math.abs(velocity.current) < 0.5) {
       velocity.current = 0;
       lastVelocity.current = [];
-      
-      // Snap to nearest video
       snapToNearestVideo();
       return;
     }
@@ -306,41 +216,62 @@ function FeedList(): JSX.Element {
     animationRef.current = requestAnimationFrame(applyMomentum);
   };
   
-  // Enhanced wheel event handler that differentiates between mouse wheel and trackpad
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+  // Handle wheel events
+  const handleWheel = (e) => {
     e.preventDefault();
     
-    // Cancel any ongoing animation
+    // Cancel any running animation
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
     
-    // Calculate current time
-    const now = performance.now();
-    const dt = now - lastTimestamp.current;
-    lastTimestamp.current = now;
+    // Detect if this is mouse wheel or trackpad
+    isMouseWheel.current = Math.abs(e.deltaY) > 50;
     
-    // Detect if this is likely a trackpad (smooth, small deltas)
-    // or mouse wheel (chunky, large deltas)
-    const isTrackpad = Math.abs(e.deltaY) < 40 && e.deltaMode === 0;
-    
-    if (isTrackpad) {
-      wheelType.current = 'trackpad';
+    if (isMouseWheel.current) {
+      // For mouse wheel, discrete navigation
+      const direction = e.deltaY > 0 ? 1 : -1;
+      const targetIndex = Math.max(0, Math.min(VIDEOS.length - 1, currentVideoIndex + direction));
+      const targetTranslate = -targetIndex * containerHeight;
       
-      // For trackpad, directly update position
-      const newTranslate = translateY - e.deltaY;
+      // Simple animation
+      const startPosition = translateY;
+      const distance = targetTranslate - startPosition;
+      const startTime = performance.now();
+      const duration = 300;
+      
+      const animateWheel = (time) => {
+        const elapsed = time - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easing = 1 - Math.pow(1 - progress, 3);
+        
+        setTranslateY(startPosition + distance * easing);
+        
+        if (progress < 1) {
+          animationRef.current = requestAnimationFrame(animateWheel);
+        } else {
+          animationRef.current = null;
+          setCurrentVideoIndex(targetIndex);
+        }
+      };
+      
+      animationRef.current = requestAnimationFrame(animateWheel);
+    } else {
+      // For trackpad, direct manipulation
+      const now = performance.now();
       
       // Calculate velocity for momentum
-      if (dt > 0) {
-        const instantVelocity = -e.deltaY / dt * 15; // Scale to make it feel right
-        lastVelocity.current.push(instantVelocity);
-        
-        // Keep only recent velocities
-        if (lastVelocity.current.length > 5) {
-          lastVelocity.current.shift();
-        }
+      const instantVelocity = -e.deltaY * 0.5;
+      lastVelocity.current.push(instantVelocity);
+      
+      // Keep only recent velocities
+      if (lastVelocity.current.length > 5) {
+        lastVelocity.current.shift();
       }
+      
+      // Update position directly
+      const newTranslate = translateY - e.deltaY;
       
       // Apply boundaries with rubber band effect
       const maxTranslate = 0;
@@ -349,83 +280,26 @@ function FeedList(): JSX.Element {
       let finalTranslate = newTranslate;
       
       if (newTranslate > maxTranslate) {
-        // Rubber band at top
         finalTranslate = maxTranslate + (newTranslate - maxTranslate) * 0.2;
       } else if (newTranslate < minTranslate) {
-        // Rubber band at bottom
         finalTranslate = minTranslate + (newTranslate - minTranslate) * 0.2;
       }
       
       setTranslateY(finalTranslate);
       
-      // Clear any existing timeout
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
-        wheelTimeout.current = null;
-      }
-      
-      // Set a timeout to apply momentum when scrolling stops
-      wheelTimeout.current = setTimeout(() => {
-        shouldSnapToVideo.current = true;
+      // Set up momentum scrolling when no more wheel events come in
+      clearTimeout(window.wheelTimeout);
+      window.wheelTimeout = setTimeout(() => {
         animationRef.current = requestAnimationFrame(applyMomentum);
       }, 100);
-      
-    } else {
-      // For mouse wheel, do discrete navigation
-      wheelType.current = 'mouse';
-      
-      // Accumulate in case of small mouse wheel deltas
-      wheelAccumulator.current += e.deltaY;
-      
-      if (Math.abs(wheelAccumulator.current) >= 50) {
-        // Calculate target index based on direction
-        const direction = wheelAccumulator.current > 0 ? 1 : -1;
-        const targetIndex = Math.max(0, Math.min(VIDEOS.length - 1, currentVideoIndex + direction));
-        
-        // Reset accumulator
-        wheelAccumulator.current = 0;
-        
-        // If we're already at the edge, don't do anything
-        if (targetIndex === currentVideoIndex) return;
-        
-        // Animate to target video
-        const targetTranslate = -targetIndex * containerHeight;
-        
-        // Simple animation
-        const startPosition = translateY;
-        const distance = targetTranslate - startPosition;
-        const startTime = performance.now();
-        const duration = 300; // ms
-        
-        const animateWheel = (currentTime: number) => {
-          const elapsed = currentTime - startTime;
-          const progress = Math.min(elapsed / duration, 1);
-          
-          // Ease out cubic
-          const easedProgress = 1 - Math.pow(1 - progress, 3);
-          
-          setTranslateY(startPosition + distance * easedProgress);
-          
-          if (progress < 1) {
-            animationRef.current = requestAnimationFrame(animateWheel);
-          } else {
-            animationRef.current = null;
-            setCurrentVideoIndex(targetIndex);
-          }
-        };
-        
-        // Start animation
-        animationRef.current = requestAnimationFrame(animateWheel);
-      }
     }
   };
   
-  // Mouse/touch event handlers for direct manipulation
-  const handlePointerDown = (e: React.PointerEvent) => {
-    // Only handle primary button or touch
+  // Touch/pointer events
+  const handlePointerDown = (e) => {
     if (e.pointerType !== 'touch' && e.button !== 0) return;
     
-    // Cancel any ongoing animation
+    // Cancel any running animation
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
@@ -434,30 +308,23 @@ function FeedList(): JSX.Element {
     isDragging.current = true;
     startY.current = e.clientY;
     lastY.current = e.clientY;
-    lastTimestamp.current = performance.now();
     velocity.current = 0;
     lastVelocity.current = [];
-    shouldSnapToVideo.current = false;
   };
   
-  const handlePointerMove = (e: React.PointerEvent) => {
+  const handlePointerMove = (e) => {
     if (!isDragging.current || startY.current === null) return;
     
     const currentY = e.clientY;
     const deltaY = lastY.current - currentY;
     
-    // Calculate instantaneous velocity
-    const now = performance.now();
-    const dt = now - lastTimestamp.current;
+    // Calculate velocity
+    const instantVelocity = deltaY * 0.5;
+    lastVelocity.current.push(instantVelocity);
     
-    if (dt > 0) {
-      const instantVelocity = deltaY / dt * 15; // Scale to make it feel right
-      lastVelocity.current.push(instantVelocity);
-      
-      // Keep only recent velocities
-      if (lastVelocity.current.length > 5) {
-        lastVelocity.current.shift();
-      }
+    // Keep only recent velocities
+    if (lastVelocity.current.length > 5) {
+      lastVelocity.current.shift();
     }
     
     // Update position
@@ -470,17 +337,14 @@ function FeedList(): JSX.Element {
     let finalTranslate = newTranslate;
     
     if (newTranslate > maxTranslate) {
-      // Rubber band at top
       finalTranslate = maxTranslate + (newTranslate - maxTranslate) * 0.2;
     } else if (newTranslate < minTranslate) {
-      // Rubber band at bottom
       finalTranslate = minTranslate + (newTranslate - minTranslate) * 0.2;
     }
     
     setTranslateY(finalTranslate);
     
     lastY.current = currentY;
-    lastTimestamp.current = now;
   };
   
   const handlePointerUp = () => {
@@ -488,104 +352,43 @@ function FeedList(): JSX.Element {
     
     isDragging.current = false;
     startY.current = null;
-    shouldSnapToVideo.current = true;
     
-    // Apply momentum scrolling
+    // Apply momentum
     animationRef.current = requestAnimationFrame(applyMomentum);
   };
   
-  // Handle keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        // Move to next video
-        const targetIndex = Math.min(VIDEOS.length - 1, currentVideoIndex + 1);
-        const targetTranslate = -targetIndex * containerHeight;
-        
-        // Animate to target
-        const startPosition = translateY;
-        const distance = targetTranslate - startPosition;
-        const startTime = performance.now();
-        const duration = 300; // ms
-        
-        const animateKey = (currentTime: number) => {
-          const elapsed = currentTime - startTime;
-          const progress = Math.min(elapsed / duration, 1);
-          
-          // Ease out cubic
-          const easedProgress = 1 - Math.pow(1 - progress, 3);
-          
-          setTranslateY(startPosition + distance * easedProgress);
-          
-          if (progress < 1) {
-            animationRef.current = requestAnimationFrame(animateKey);
-          } else {
-            animationRef.current = null;
-            setCurrentVideoIndex(targetIndex);
-          }
-        };
-        
-        // Cancel any ongoing animation
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-        }
-        
-        // Start animation
-        animationRef.current = requestAnimationFrame(animateKey);
-        
-      } else if (e.key === 'ArrowUp') {
-        // Move to previous video
-        const targetIndex = Math.max(0, currentVideoIndex - 1);
-        const targetTranslate = -targetIndex * containerHeight;
-        
-        // Animate to target
-        const startPosition = translateY;
-        const distance = targetTranslate - startPosition;
-        const startTime = performance.now();
-        const duration = 300; // ms
-        
-        const animateKey = (currentTime: number) => {
-          const elapsed = currentTime - startTime;
-          const progress = Math.min(elapsed / duration, 1);
-          
-          // Ease out cubic
-          const easedProgress = 1 - Math.pow(1 - progress, 3);
-          
-          setTranslateY(startPosition + distance * easedProgress);
-          
-          if (progress < 1) {
-            animationRef.current = requestAnimationFrame(animateKey);
-          } else {
-            animationRef.current = null;
-            setCurrentVideoIndex(targetIndex);
-          }
-        };
-        
-        // Cancel any ongoing animation
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-        }
-        
-        // Start animation
-        animationRef.current = requestAnimationFrame(animateKey);
-        
-      } else if (e.key === 'm') {
-        toggleMute();
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentVideoIndex, containerHeight, translateY]);
+  // Toggle mute
+  const toggleMute = (e) => {
+    if (e) e.stopPropagation();
+    setIsMuted(!isMuted);
+  };
   
-  // Loading state
-  if (!isClient) {
-    return (
-      <div className="flex items-center justify-center h-screen w-full bg-black">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
-      </div>
-    );
-  }
+  // Handle likes
+  const toggleLike = (videoId, e) => {
+    e.stopPropagation();
+    setLikedVideos(prev => ({
+      ...prev,
+      [videoId]: !prev[videoId]
+    }));
+  };
+  
+  // Double tap
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    const timeSince = now - lastTap.current;
+    
+    if (timeSince < 300 && timeSince > 0) {
+      const currentVideo = VIDEOS[currentVideoIndex];
+      if (currentVideo) {
+        setLikedVideos(prev => ({
+          ...prev,
+          [currentVideo.id]: true
+        }));
+      }
+    }
+    
+    lastTap.current = now;
+  };
   
   return (
     <div 
@@ -596,29 +399,30 @@ function FeedList(): JSX.Element {
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
       onClick={handleDoubleTap}
-      style={{ touchAction: 'none' }} // Prevent browser handling of touch gestures
+      style={{ touchAction: 'none' }}
     >
       {/* Main video container */}
       <div className="w-full h-full flex justify-center items-center">
         <div 
           className="relative"
           style={{ 
-            width: containerWidth,
-            height: containerHeight
+            width: containerWidth || '100%',
+            maxWidth: `${(containerHeight || window.innerHeight) * 9 / 16}px`,
+            height: containerHeight || '100%'
           }}
         >
           {/* Videos container */}
           <div 
-            className="absolute w-full transition-none"
+            className="absolute w-full"
             style={{ 
-              height: containerHeight * VIDEOS.length,
+              height: (containerHeight || window.innerHeight) * VIDEOS.length,
               transform: `translateY(${translateY}px)`,
-              willChange: 'transform' // Performance optimization
+              willChange: 'transform'
             }}
           >
             {VIDEOS.map((video, index) => {
-              // Only render videos that are potentially visible
-              const distanceFromVisible = Math.abs((translateY / containerHeight) + index);
+              // Only render nearby videos
+              const distanceFromVisible = Math.abs((translateY / (containerHeight || window.innerHeight)) + index);
               const isVisible = distanceFromVisible < 2;
               
               return (
@@ -626,8 +430,8 @@ function FeedList(): JSX.Element {
                   key={video.id} 
                   className="absolute w-full"
                   style={{ 
-                    height: containerHeight,
-                    top: index * containerHeight,
+                    height: containerHeight || window.innerHeight,
+                    top: index * (containerHeight || window.innerHeight),
                   }}
                 >
                   {isVisible && (
@@ -654,80 +458,11 @@ function FeedList(): JSX.Element {
                               className="w-full h-full object-cover"
                               loading="lazy"
                               onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.onerror = null;
-                                target.src = 'https://placehold.co/100/gray/white?text=User';
+                                e.target.onerror = null;
+                                e.target.src = 'https://placehold.co/100/gray/white?text=User';
                               }}
                             />
                           </div>
-        </div>
-      </div>
-      
-      {/* Sound toggle button */}
-      <button 
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleMute(e);
-        }}
-        className="absolute top-4 right-4 bg-black/30 hover:bg-black/50 rounded-full p-2 z-30 transition-colors"
-      >
-        {isMuted ? (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-          </svg>
-        ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-          </svg>
-        )}
-      </button>
-
-      {/* Video counter indicator */}
-      <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
-        <span className="text-white text-sm">{currentVideoIndex + 1} / {VIDEOS.length}</span>
-      </div>
-      
-      {/* Progress dots - show progress between videos */}
-      <div className="absolute top-14 left-0 right-0 flex justify-center z-30">
-        <div className="flex space-x-1">
-          {VIDEOS.map((_, index) => {
-            // Calculate how close we are to this video
-            const normalizedPosition = -translateY / containerHeight;
-            const distanceFromIndex = Math.abs(normalizedPosition - index);
-            const isActive = distanceFromIndex < 1;
-            const isCurrent = index === currentVideoIndex;
-            
-            return (
-              <div 
-                key={index}
-                className={`rounded-full h-1.5 ${
-                  isActive 
-                    ? isCurrent 
-                      ? 'w-4 bg-white' 
-                      : 'w-3 bg-white/80'
-                    : 'w-1.5 bg-white/50'
-                } transition-all duration-200`}
-              />
-            );
-          })}
-        </div>
-      </div>
-      
-      {/* Scroll guide indicator */}
-      {VIDEOS.length > 1 && currentVideoIndex === 0 && (
-        <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/30 px-3 py-1 rounded-full z-30 flex items-center">
-          <span className="mr-2">Swipe up for more</span>
-          <svg className="h-4 w-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-          </svg>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default FeedList;
                           <div>
                             <p className="font-bold text-white flex items-center">
                               @{video.username}
@@ -775,3 +510,66 @@ export default FeedList;
               );
             })}
           </div>
+        </div>
+      </div>
+      
+      {/* Sound toggle button */}
+      <button 
+        onClick={(e) => toggleMute(e)}
+        className="absolute top-4 right-4 bg-black/30 hover:bg-black/50 rounded-full p-2 z-30 transition-colors"
+      >
+        {isMuted ? (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+          </svg>
+        )}
+      </button>
+
+      {/* Video counter indicator */}
+      <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
+        <span className="text-white text-sm">{currentVideoIndex + 1} / {VIDEOS.length}</span>
+      </div>
+      
+      {/* Progress dots */}
+      <div className="absolute top-14 left-0 right-0 flex justify-center z-30">
+        <div className="flex space-x-1">
+          {VIDEOS.map((_, index) => {
+            const normalizedPosition = -translateY / containerHeight;
+            const distanceFromIndex = Math.abs(normalizedPosition - index);
+            const isActive = distanceFromIndex < 1;
+            
+            return (
+              <div 
+                key={index}
+                className={`rounded-full h-1.5 ${
+                  isActive 
+                    ? index === currentVideoIndex 
+                      ? 'w-4 bg-white' 
+                      : 'w-3 bg-white/80'
+                    : 'w-1.5 bg-white/50'
+                } transition-all duration-200`}
+              />
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* Scroll guide indicator */}
+      {VIDEOS.length > 1 && currentVideoIndex === 0 && (
+        <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/30 px-3 py-1 rounded-full z-30 flex items-center">
+          <span className="mr-2">Swipe up for more</span>
+          <svg className="h-4 w-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default FeedList;
