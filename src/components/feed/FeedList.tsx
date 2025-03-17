@@ -13,6 +13,13 @@ interface Video {
   comments: number;
 }
 
+// Extend Window interface to include wheelTimeout
+declare global {
+  interface Window {
+    wheelTimeout: ReturnType<typeof setTimeout> | null;
+  }
+}
+
 // Static data for videos
 const VIDEOS: Video[] = [
   {
@@ -91,6 +98,14 @@ function FeedList(): JSX.Element {
   const lastVelocity = useRef<number[]>([]);
   const animationRef = useRef<number | null>(null);
   const isMouseWheel = useRef<boolean>(false);
+  const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Initialize window.wheelTimeout
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.wheelTimeout = null;
+    }
+  }, []);
   
   // Set up container dimensions
   useEffect(() => {
@@ -101,6 +116,9 @@ function FeedList(): JSX.Element {
       window.removeEventListener('resize', updateDimensions);
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+      }
+      if (wheelTimeoutRef.current) {
+        clearTimeout(wheelTimeoutRef.current);
       }
     };
   }, []);
@@ -134,14 +152,16 @@ function FeedList(): JSX.Element {
       }
     });
     
-    // Play current video
-    const currentVideo = videoRefs.current[VIDEOS[visibleIndex]?.id];
-    if (currentVideo) {
-      const playPromise = currentVideo.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          console.log("Autoplay prevented, waiting for user interaction");
-        });
+    // Play current video if it's visible
+    if (visibleIndex >= 0 && visibleIndex < VIDEOS.length) {
+      const currentVideo = videoRefs.current[VIDEOS[visibleIndex]?.id];
+      if (currentVideo) {
+        const playPromise = currentVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            console.log("Autoplay prevented, waiting for user interaction");
+          });
+        }
       }
     }
   }, [translateY, containerHeight, currentVideoIndex]);
@@ -299,8 +319,11 @@ function FeedList(): JSX.Element {
       setTranslateY(finalTranslate);
       
       // Set up momentum scrolling when no more wheel events come in
-      clearTimeout(window.wheelTimeout);
-      window.wheelTimeout = setTimeout(() => {
+      if (wheelTimeoutRef.current) {
+        clearTimeout(wheelTimeoutRef.current);
+      }
+      
+      wheelTimeoutRef.current = setTimeout(() => {
         animationRef.current = requestAnimationFrame(applyMomentum);
       }, 100);
     }
