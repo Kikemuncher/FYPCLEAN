@@ -81,7 +81,7 @@ function FeedList(): JSX.Element {
   
   // Video playing state
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(true); // Start paused
   
   // Container height
   const [containerHeight, setContainerHeight] = useState<number>(0);
@@ -104,6 +104,7 @@ function FeedList(): JSX.Element {
   const wheelTimer = useRef<NodeJS.Timeout | null>(null);
   const isWheelActive = useRef<boolean>(false);
   const lastWheelTime = useRef<number>(0);
+  const recentWheelDeltas = useRef<number[]>([]);
   
   // Set up container height
   useEffect(() => {
@@ -157,7 +158,7 @@ function FeedList(): JSX.Element {
       }
     });
     
-    // Play current video
+    // Play current video if not paused
     const currentVideo = videoRefs.current[VIDEOS[currentVideoIndex]?.id];
     if (currentVideo && !isPaused) {
       currentVideo.currentTime = 0;
@@ -166,28 +167,11 @@ function FeedList(): JSX.Element {
       if (playPromise !== undefined) {
         playPromise.catch(() => {
           console.log("Autoplay prevented, waiting for user interaction");
-        });
-      }
-    }
-  }, [currentVideoIndex, isPaused]);
-  
-  // Auto-play first video when page loads
-  useEffect(() => {
-    // This will run once after the component mounts
-    const firstVideo = videoRefs.current[VIDEOS[0]?.id];
-    if (firstVideo) {
-      // Try to play the first video
-      const playPromise = firstVideo.play();
-      
-      if (playPromise !== undefined) {
-        playPromise.catch((error) => {
-          console.log("Autoplay prevented:", error);
-          // Set isPaused so the user knows they need to interact
           setIsPaused(true);
         });
       }
     }
-  }, []);
+  }, [currentVideoIndex, isPaused]);
   
   // Go to next video if possible
   const goToNextVideo = () => {
@@ -205,7 +189,34 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Improved wheel event handler
+  // Calculate dynamic sensitivity based on scroll speed
+  const calculateDynamicSensitivity = (deltaY: number): number => {
+    // Add to recent deltas array
+    recentWheelDeltas.current.push(Math.abs(deltaY));
+    
+    // Keep only recent values
+    if (recentWheelDeltas.current.length > 5) {
+      recentWheelDeltas.current.shift();
+    }
+    
+    // Calculate average speed
+    const avgSpeed = recentWheelDeltas.current.reduce((a, b) => a + b, 0) / recentWheelDeltas.current.length;
+    
+    // For slower movements (less than 10), use a lower sensitivity
+    if (avgSpeed < 10) {
+      return 1.0; // Low sensitivity for slow scrolling
+    } 
+    // For medium speed movements
+    else if (avgSpeed < 20) {
+      return 2.0; // Medium sensitivity
+    }
+    // For fast movements, use slightly reduced sensitivity from previous implementation
+    else {
+      return Math.min(2.5, 2 + (avgSpeed * 0.02)); // Cap at 2.5x for very fast scrolling
+    }
+  };
+  
+  // Improved wheel event handler with dynamic sensitivity
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
@@ -226,8 +237,11 @@ function FeedList(): JSX.Element {
         clearTimeout(wheelTimer.current);
       }
       
-      // Update the offset directly for smooth movement, multiply by 3 for more sensitivity
-      let newOffset = offset + e.deltaY * -3; 
+      // Get dynamic sensitivity factor based on speed
+      const sensitivityFactor = calculateDynamicSensitivity(e.deltaY);
+      
+      // Update the offset with dynamic sensitivity
+      let newOffset = offset + e.deltaY * -sensitivityFactor; 
       
       // Apply limits to prevent excessive scrolling - use 90% instead of 100% to prevent showing next video
       const maxOffset = containerHeight * 0.9;
@@ -237,8 +251,8 @@ function FeedList(): JSX.Element {
       
       // Set timer to snap to nearest video ONLY after user stops scrolling
       wheelTimer.current = setTimeout(() => {
-        // Only execute if no new wheel events for 100ms
-        if (Date.now() - lastWheelTime.current >= 100) {
+        // Only execute if no new wheel events for 150ms
+        if (Date.now() - lastWheelTime.current >= 150) {
           const thresholdRatio = 0.5; // 50% threshold
           
           if (newOffset > containerHeight * thresholdRatio && currentVideoIndex > 0) {
@@ -253,8 +267,9 @@ function FeedList(): JSX.Element {
           }
           
           isWheelActive.current = false;
+          recentWheelDeltas.current = []; // Reset deltas when finishing a scroll
         }
-      }, 200); // Increased to 200ms for better responsiveness
+      }, 200);
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
@@ -281,6 +296,17 @@ function FeedList(): JSX.Element {
         }, 300);
       }
     }
+  };
+  
+  // Handle video click to play/pause
+  const handleVideoClick = (e: React.MouseEvent) => {
+    // Don't trigger on double-tap
+    if (Date.now() - lastTap.current < 300) {
+      return;
+    }
+    
+    // Only toggle play/pause on single tap/click
+    togglePlayPause(e);
   };
   
   // Double tap to like
@@ -394,6 +420,7 @@ function FeedList(): JSX.Element {
             {VIDEOS.map((video, index) => {
               // Only render videos that are close to current
               const isVisible = Math.abs(index - currentVideoIndex) <= 1;
+              const isCurrentVideo = index === currentVideoIndex;
               
               return (
                 <div 
@@ -405,7 +432,10 @@ function FeedList(): JSX.Element {
                   }}
                 >
                   {isVisible && (
-                    <div className="relative w-full h-full overflow-hidden">
+                    <div 
+                      className="relative w-full h-full overflow-hidden"
+                      onClick={isCurrentVideo ? handleVideoClick : undefined}
+                    >
                       {/* Video element */}
                       <video
                         ref={(el) => { if (el) videoRefs.current[video.id] = el; }}
@@ -418,11 +448,11 @@ function FeedList(): JSX.Element {
                         controls={false}
                       />
                       
-                      {/* Play/pause overlay */}
-                      {isPaused && index === currentVideoIndex && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                          <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
-                            <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      {/* Play overlay (only show when current and paused) */}
+                      {isPaused && isCurrentVideo && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-10">
+                          <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center cursor-pointer">
+                            <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M8 5v14l11-7z" />
                             </svg>
                           </div>
@@ -430,7 +460,7 @@ function FeedList(): JSX.Element {
                       )}
                       
                       {/* Video info overlay */}
-                      <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+                      <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
                         <div className="flex items-center mb-2">
                           <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
                             <img 
@@ -459,7 +489,7 @@ function FeedList(): JSX.Element {
                       </div>
                       
                       {/* Side actions */}
-                      <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5">
+                      <div className="absolute right-3 bottom-20 flex flex-col items-center space-y-5 z-10">
                         <button 
                           className="flex flex-col items-center"
                           onClick={(e) => toggleLike(video.id, e)}
@@ -495,41 +525,22 @@ function FeedList(): JSX.Element {
         </div>
       </div>
       
-      {/* Control buttons */}
-      <div className="absolute top-4 right-4 flex space-x-2 z-30">
-        {/* Pause/play button */}
-        <button 
-          onClick={(e) => togglePlayPause(e)}
-          className="bg-black/30 hover:bg-black/50 rounded-full p-2 transition-colors"
-        >
-          {isPaused ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="white" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="white" viewBox="0 0 24 24">
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-            </svg>
-          )}
-        </button>
-        
-        {/* Sound toggle button */}
-        <button 
-          onClick={(e) => toggleMute(e)}
-          className="bg-black/30 hover:bg-black/50 rounded-full p-2 transition-colors"
-        >
-          {isMuted ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-            </svg>
-          )}
-        </button>
-      </div>
+      {/* Sound toggle button */}
+      <button 
+        onClick={(e) => toggleMute(e)}
+        className="absolute top-4 right-4 bg-black/30 hover:bg-black/50 rounded-full p-2 z-30 transition-colors"
+      >
+        {isMuted ? (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+          </svg>
+        )}
+      </button>
 
       {/* Video counter indicator */}
       <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
