@@ -86,11 +86,11 @@ function FeedList(): JSX.Element {
   // Container height
   const [containerHeight, setContainerHeight] = useState<number>(0);
   
-  // For tactile scrolling
-  const [offset, setOffset] = useState<number>(0);
+  // Actual scroll position
+  const [scrollY, setScrollY] = useState<number>(0);
   
-  // Last tap for double tap detection
-  const lastTap = useRef<number>(0);
+  // Animation frame ID for smooth scrolling
+  const animationFrameId = useRef<number | null>(null);
   
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
@@ -98,21 +98,18 @@ function FeedList(): JSX.Element {
   
   // Touch tracking
   const touchStartY = useRef<number | null>(null);
+  const touchDeltaY = useRef<number>(0);
   
-  // Wheel handling
-  const wheelLock = useRef<boolean>(false);
-  const wheelAccumulator = useRef<number>(0);
-  const wheelTimer = useRef<any>(null);
+  // Scroll tracking (for smooth scrolling)
+  const targetScrollY = useRef<number>(0);
+  const isDragging = useRef<boolean>(false);
+  const lastScrollTime = useRef<number>(0);
+  const isSnapAnimating = useRef<boolean>(false);
   
-  // Enhanced scroll state management
-  const isScrolling = useRef<boolean>(false);
-  const scrollEndTimer = useRef<any>(null);
-  const lastScrollPosition = useRef<number>(0);
-  const scrollVelocity = useRef<number>(0);
-  const lastScrollDirection = useRef<'up' | 'down' | null>(null);
-  const consecutiveScrollsInDirection = useRef<number>(0);
+  // Last tap for double tap detection
+  const lastTap = useRef<number>(0);
   
-  // Set up container height
+  // Set up container height and initial scroll position
   useEffect(() => {
     setContainerHeight(window.innerHeight);
     
@@ -123,11 +120,8 @@ function FeedList(): JSX.Element {
     window.addEventListener('resize', updateHeight);
     return () => {
       window.removeEventListener('resize', updateHeight);
-      if (wheelTimer.current) {
-        clearTimeout(wheelTimer.current);
-      }
-      if (scrollEndTimer.current) {
-        clearTimeout(scrollEndTimer.current);
+      if (animationFrameId.current !== null) {
+        cancelAnimationFrame(animationFrameId.current);
       }
     };
   }, []);
@@ -199,37 +193,76 @@ function FeedList(): JSX.Element {
         }
       }
     }
-  }, [currentVideoIndex]);
+    
+    // Update the target scroll position to match the current video
+    targetScrollY.current = currentVideoIndex * containerHeight;
+    setScrollY(targetScrollY.current);
+  }, [currentVideoIndex, containerHeight]);
   
-  // Enhanced navigation with scroll reset
+  // Smooth scrolling animation using requestAnimationFrame
+  const animateScroll = () => {
+    const currentPosition = scrollY;
+    const targetPosition = targetScrollY.current;
+    
+    // If we're at the target or animation was canceled, stop
+    if (Math.abs(currentPosition - targetPosition) < 1 || isSnapAnimating.current === false) {
+      setScrollY(targetPosition);
+      isSnapAnimating.current = false;
+      return;
+    }
+    
+    // Logarithmic easing for smooth deceleration
+    const distance = targetPosition - currentPosition;
+    const speed = distance * 0.15; // Adjust this value to control animation speed
+    
+    // Update the scroll position
+    setScrollY(currentPosition + speed);
+    
+    // Continue the animation
+    animationFrameId.current = requestAnimationFrame(animateScroll);
+  };
+  
+  // Go to next video if possible
   const goToNextVideo = () => {
-    // Reset all scroll tracking when changing videos
-    consecutiveScrollsInDirection.current = 0;
-    lastScrollDirection.current = null;
-    scrollVelocity.current = 0;
+    if (isSnapAnimating.current) return; // Prevent multiple navigations
     
     if (currentVideoIndex < VIDEOS.length - 1) {
+      // Start the snap animation
+      isSnapAnimating.current = true;
+      targetScrollY.current = (currentVideoIndex + 1) * containerHeight;
+      
+      // Set the current index
       setCurrentVideoIndex(currentVideoIndex + 1);
-      setOffset(0);
+      
+      // Start the animation
+      animationFrameId.current = requestAnimationFrame(animateScroll);
     } else {
-      // Snap back to current video instantly
-      setOffset(0);
+      // Snap back to current video with animation
+      isSnapAnimating.current = true;
+      targetScrollY.current = currentVideoIndex * containerHeight;
+      animationFrameId.current = requestAnimationFrame(animateScroll);
     }
   };
   
   // Go to previous video if possible
   const goToPrevVideo = () => {
-    // Reset all scroll tracking when changing videos
-    consecutiveScrollsInDirection.current = 0;
-    lastScrollDirection.current = null;
-    scrollVelocity.current = 0;
+    if (isSnapAnimating.current) return; // Prevent multiple navigations
     
     if (currentVideoIndex > 0) {
+      // Start the snap animation
+      isSnapAnimating.current = true;
+      targetScrollY.current = (currentVideoIndex - 1) * containerHeight;
+      
+      // Set the current index
       setCurrentVideoIndex(currentVideoIndex - 1);
-      setOffset(0);
+      
+      // Start the animation
+      animationFrameId.current = requestAnimationFrame(animateScroll);
     } else {
-      // Snap back to current video instantly
-      setOffset(0);
+      // Snap back to current video with animation
+      isSnapAnimating.current = true;
+      targetScrollY.current = currentVideoIndex * containerHeight;
+      animationFrameId.current = requestAnimationFrame(animateScroll);
     }
   };
   
@@ -244,146 +277,71 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Zero-lag wheel event handler with instant detection
+  // Simple and reliable wheel handler that directly affects scroll position
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Record wheel event time to detect when user stops scrolling
-    const currentTime = Date.now();
-    const timeSinceLastWheel = currentTime - lastScrollPosition.current;
-    lastScrollPosition.current = currentTime;
-    
-    // Clear any existing wheel timer to reset detection
-    if (wheelTimer.current) {
-      clearTimeout(wheelTimer.current);
+    if (isSnapAnimating.current) {
+      // If currently animating, cancel it and update to current position
+      isSnapAnimating.current = false;
+      if (animationFrameId.current !== null) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
     }
     
-    // Track consecutive scroll events in same direction to prevent skipping
+    // Direct scroll control
     const direction = e.deltaY > 0 ? 'down' : 'up';
     
-    // Reset direction tracking if direction changed (important for preventing skips)
-    if (lastScrollDirection.current && lastScrollDirection.current !== direction) {
-      consecutiveScrollsInDirection.current = 0;
-    }
-    lastScrollDirection.current = direction;
-    consecutiveScrollsInDirection.current += 1;
+    // Update the scroll position directly
+    const newScrollY = scrollY + e.deltaY;
     
-    // Mark that we're actively scrolling
-    isScrolling.current = true;
+    // Check boundaries
+    const minScrollY = 0;
+    const maxScrollY = (VIDEOS.length - 1) * containerHeight;
     
-    // Check if we can scroll in this direction
-    if (!canScrollInDirection(direction)) {
-      // For boundaries, very minimal elastic effect
-      const elasticFactor = 0.08; 
-      
-      // Only update if the offset would be moving back toward center
-      if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
-        // Allow full movement back to center
-        let newOffset = offset + e.deltaY * -1;
-        setOffset(newOffset);
-      } else {
-        // Minimal elastic pull
-        let elasticDelta = e.deltaY * -elasticFactor;
-        let newOffset = offset + elasticDelta;
-        
-        // Very tight boundary (8% - barely noticeable elastic effect)
-        const maxElasticPull = containerHeight * 0.08;
-        if (direction === 'up') {
-          newOffset = Math.max(newOffset, -maxElasticPull);
-        } else {
-          newOffset = Math.min(newOffset, maxElasticPull);
-        }
-        
-        setOffset(newOffset);
-        
-        // Instant snap-back with minimal delay
-        wheelTimer.current = setTimeout(() => {
-          setOffset(0);
-        }, 20);
-      }
-      return;
+    let finalScrollY = newScrollY;
+    
+    // Apply elastic effect at boundaries
+    if (newScrollY < minScrollY) {
+      // Elastic pull at top
+      const overscroll = minScrollY - newScrollY;
+      finalScrollY = minScrollY - (overscroll * 0.2); // 20% elasticity
+    } else if (newScrollY > maxScrollY) {
+      // Elastic pull at bottom
+      const overscroll = newScrollY - maxScrollY;
+      finalScrollY = maxScrollY + (overscroll * 0.2); // 20% elasticity
     }
     
-    // Detect if this is likely a touchpad vs mouse wheel
-    const isTrackpad = Math.abs(e.deltaY) < 50;
+    // Update target and current scroll position
+    targetScrollY.current = finalScrollY;
+    setScrollY(finalScrollY);
     
-    if (isTrackpad) {
-      // For trackpad, use simple inertial scrolling with minimal processing
-      
-      // Calculate raw scroll speed (minimizes computation for responsiveness)
-      const instantVelocity = Math.abs(e.deltaY) / Math.max(1, timeSinceLastWheel);
-      
-      // Prevent skipping by limiting maximum amount moved in a single direction
-      // This is crucial for fast scrolling stability
-      let limitMultiplier = 1;
-      if (consecutiveScrollsInDirection.current > 10) {
-        // If many consecutive scrolls in same direction, limit acceleration
-        limitMultiplier = 0.7;
-      }
-      
-      // Simple fixed sensitivity to reduce computation - improves perceived response time
-      const sensitivity = 1.2 * limitMultiplier;
-      
-      // Calculate new offset with the sensitivity applied
-      let newOffset = offset + e.deltaY * -sensitivity;
-      
-      // Apply limits to prevent excessive scrolling
-      const maxOffset = containerHeight * 0.9;
-      newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
-      
-      // Update offset immediately
-      setOffset(newOffset);
-      
-      // Ultra-low latency detection (10ms) for when scrolling stops
-      // This creates an almost instantaneous snap response
-      wheelTimer.current = setTimeout(() => {
-        // Immediate check if we need to snap
-        if (Date.now() - lastScrollPosition.current >= 10) {
-          isScrolling.current = false;
-          
-          // Fixed threshold for more consistent behavior
-          const snapThreshold = 0.25; // 25% threshold for all speeds
-          
-          // Simple decision with minimal computation for speed
-          if (Math.abs(newOffset) > containerHeight * snapThreshold) {
-            if (newOffset > 0 && canScrollInDirection('up')) {
-              goToPrevVideo();
-            } else if (newOffset < 0 && canScrollInDirection('down')) {
-              goToNextVideo();
-            } else {
-              setOffset(0);
-            }
-          } else {
-            setOffset(0);
-          }
-        }
-      }, 10); // Ultra-low 10ms detection for instant response
-    } else {
-      // For mouse wheel - discrete navigation with threshold
-      if (wheelLock.current) return;
-      
-      // Add to accumulator
-      wheelAccumulator.current += e.deltaY;
-      
-      // Use a threshold to prevent accidental navigation
-      if (Math.abs(wheelAccumulator.current) >= 65) { // Increased threshold
-        wheelLock.current = true;
+    // Mark as dragging to show we're actively scrolling
+    isDragging.current = true;
+    lastScrollTime.current = Date.now();
+    
+    // Check if scroll has stopped after a threshold
+    setTimeout(() => {
+      const now = Date.now();
+      if (now - lastScrollTime.current >= 100 && isDragging.current) {
+        // No scroll events for 100ms, consider it stopped
+        isDragging.current = false;
         
-        if (wheelAccumulator.current > 0) {
-          goToNextVideo();
-        } else {
-          goToPrevVideo();
+        // Find what video we're closest to and snap to it
+        const closestVideoIndex = Math.round(targetScrollY.current / containerHeight);
+        const validIndex = Math.max(0, Math.min(closestVideoIndex, VIDEOS.length - 1));
+        
+        if (validIndex !== currentVideoIndex) {
+          setCurrentVideoIndex(validIndex);
         }
         
-        // Reset accumulator
-        wheelAccumulator.current = 0;
-        
-        // Release lock after animation completes
-        setTimeout(() => {
-          wheelLock.current = false;
-        }, 250); // Slightly longer lockout
+        // Animate to the nearest video
+        isSnapAnimating.current = true;
+        targetScrollY.current = validIndex * containerHeight;
+        animationFrameId.current = requestAnimationFrame(animateScroll);
       }
-    }
+    }, 100);
   };
   
   // Handle video click to play/pause
@@ -415,93 +373,69 @@ function FeedList(): JSX.Element {
     lastTap.current = now;
   };
   
-  // Improved touch handlers for mobile
+  // Touch handlers for mobile with direct manipulation
   const handleTouchStart = (e: React.TouchEvent) => {
-    // Clear any timers
-    if (wheelTimer.current) {
-      clearTimeout(wheelTimer.current);
+    // If currently snap animating, cancel it
+    if (isSnapAnimating.current) {
+      isSnapAnimating.current = false;
+      if (animationFrameId.current !== null) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
     }
-    if (scrollEndTimer.current) {
-      clearTimeout(scrollEndTimer.current);
-    }
     
-    // Reset scroll velocity
-    scrollVelocity.current = 0;
-    
-    // Mark that we're actively touching
-    isScrolling.current = true;
-    
-    // Store the touch position
     touchStartY.current = e.touches[0].clientY;
+    touchDeltaY.current = 0;
+    isDragging.current = true;
   };
   
   const handleTouchMove = (e: React.TouchEvent) => {
     if (touchStartY.current === null) return;
     
     const touchY = e.touches[0].clientY;
-    const diff = touchY - touchStartY.current;
+    touchDeltaY.current = touchY - touchStartY.current!;
     
-    // Calculate velocity for adaptive resistance
-    const now = Date.now();
-    const timeDelta = now - (lastScrollPosition.current || now);
-    lastScrollPosition.current = now;
+    // Direct manipulation - move content with finger
+    let newScrollY = scrollY - touchDeltaY.current;
     
-    scrollVelocity.current = 0.7 * scrollVelocity.current + 0.3 * Math.abs(diff) / Math.max(1, timeDelta);
+    // Check boundaries with elastic effect
+    const minScrollY = 0;
+    const maxScrollY = (VIDEOS.length - 1) * containerHeight;
     
-    // Determine direction
-    const direction = diff > 0 ? 'up' : 'down';
-    
-    // If we can't scroll in this direction, apply elastic resistance
-    if (!canScrollInDirection(direction)) {
-      // Allow some elastic movement but with high resistance
-      const elasticFactor = 0.12; // Reduced elasticity
-      let elasticDiff = diff * elasticFactor;
-      
-      // Limit the maximum elastic pull
-      const maxElasticPull = containerHeight * 0.12; // Reduced max pull
-      if (direction === 'up') {
-        elasticDiff = Math.min(elasticDiff, maxElasticPull);
-      } else {
-        elasticDiff = Math.max(elasticDiff, -maxElasticPull);
-      }
-      
-      setOffset(elasticDiff);
-      return;
+    if (newScrollY < minScrollY) {
+      // Elastic pull at top
+      const overscroll = minScrollY - newScrollY;
+      newScrollY = minScrollY - (overscroll * 0.2); // 20% elasticity
+    } else if (newScrollY > maxScrollY) {
+      // Elastic pull at bottom
+      const overscroll = newScrollY - maxScrollY;
+      newScrollY = maxScrollY + (overscroll * 0.2); // 20% elasticity
     }
     
-    // Normal scrolling behavior when direction is valid
-    // Apply limits to prevent excessive scrolling
-    let newOffset = diff;
-    const maxOffset = containerHeight * 0.9;
-    newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
-    
-    setOffset(newOffset);
+    targetScrollY.current = newScrollY;
+    setScrollY(newScrollY);
+    lastScrollTime.current = Date.now();
   };
   
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
     
-    // React immediately to touch end - no delay
-    isScrolling.current = false;
+    isDragging.current = false;
     
-    // Apply velocity-adjusted threshold for consistency with wheel behavior
-    const thresholdAdjustment = Math.min(0.15, scrollVelocity.current * 0.5);
-    const snapThreshold = 0.3 - thresholdAdjustment;
+    // Find nearest video for snapping
+    const videoIndex = Math.round(targetScrollY.current / containerHeight);
+    const validIndex = Math.max(0, Math.min(videoIndex, VIDEOS.length - 1));
     
-    if (Math.abs(offset) > containerHeight * snapThreshold) {
-      if (offset > 0 && canScrollInDirection('up')) {
-        goToPrevVideo();
-      } else if (offset < 0 && canScrollInDirection('down')) {
-        goToNextVideo();
-      } else {
-        setOffset(0);
-      }
-    } else {
-      // Return to current video
-      setOffset(0);
+    if (validIndex !== currentVideoIndex) {
+      setCurrentVideoIndex(validIndex);
     }
     
-    // Reset states immediately
+    // Animate to the nearest video
+    isSnapAnimating.current = true;
+    targetScrollY.current = validIndex * containerHeight;
+    animationFrameId.current = requestAnimationFrame(animateScroll);
+    
+    // Reset touch state
     touchStartY.current = null;
   };
   
@@ -509,13 +443,9 @@ function FeedList(): JSX.Element {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
-        if (canScrollInDirection('down')) {
-          goToNextVideo();
-        }
+        goToNextVideo();
       } else if (e.key === 'ArrowUp') {
-        if (canScrollInDirection('up')) {
-          goToPrevVideo();
-        }
+        goToPrevVideo();
       } else if (e.key === 'm') {
         toggleMute();
       } else if (e.key === ' ' || e.key === 'Spacebar') { // Space key
@@ -547,10 +477,11 @@ function FeedList(): JSX.Element {
           }}
         >
           <div 
-            className="absolute w-full transition-transform duration-300 ease-out"
+            className="absolute w-full"
             style={{ 
               height: containerHeight * VIDEOS.length,
-              transform: `translateY(${-currentVideoIndex * containerHeight + offset}px)`,
+              transform: `translateY(${-scrollY}px)`,
+              transition: isSnapAnimating.current ? 'none' : 'transform 0.05s linear'
             }}
           >
             {VIDEOS.map((video, index) => {
