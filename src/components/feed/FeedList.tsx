@@ -101,6 +101,7 @@ function FeedList(): JSX.Element {
   
   // Wheel handling
   const wheelLock = useRef<boolean>(false);
+  const wheelAccumulator = useRef<number>(0);
   const wheelTimer = useRef<any>(null);
   
   // Set up container height
@@ -237,7 +238,7 @@ function FeedList(): JSX.Element {
     // Check if we can scroll in this direction
     if (!canScrollInDirection(direction)) {
       // For trackpad, allow a small elastic pull but restrict the movement
-      const elasticFactor = 0.15; // Elastic factor for boundaries
+      const elasticFactor = 0.2; // Reduce movement to 20% for elastic effect
       
       // Only update if the offset would be moving back toward center
       if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
@@ -299,24 +300,32 @@ function FeedList(): JSX.Element {
           // Return to current video
           setOffset(0);
         }
-      }, 40); // Short timeout to detect end of scrolling
+      }, 40); // Very short timeout to detect end of scrolling
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
       
-      // Use direction directly for mouse wheel
-      wheelLock.current = true;
+      // Add to accumulator
+      wheelAccumulator.current += e.deltaY;
       
-      if (direction === 'down') {
-        goToNextVideo();
-      } else {
-        goToPrevVideo();
+      // Use a threshold to prevent accidental navigation
+      if (Math.abs(wheelAccumulator.current) >= 50) {
+        wheelLock.current = true;
+        
+        if (wheelAccumulator.current > 0) {
+          goToNextVideo();
+        } else {
+          goToPrevVideo();
+        }
+        
+        // Reset accumulator
+        wheelAccumulator.current = 0;
+        
+        // Release lock after animation completes (faster)
+        setTimeout(() => {
+          wheelLock.current = false;
+        }, 150);
       }
-      
-      // Release lock after animation completes
-      setTimeout(() => {
-        wheelLock.current = false;
-      }, 500);
     }
   };
   
