@@ -104,6 +104,11 @@ function FeedList(): JSX.Element {
   const wheelAccumulator = useRef<number>(0);
   const wheelTimer = useRef<any>(null);
   
+  // Active scrolling detection - key to fixing the issue
+  const isActivelyScrolling = useRef<boolean>(false);
+  const lastWheelTime = useRef<number>(0);
+  const releaseTimeout = useRef<any>(null);
+  
   // Set up container height
   useEffect(() => {
     setContainerHeight(window.innerHeight);
@@ -117,6 +122,9 @@ function FeedList(): JSX.Element {
       window.removeEventListener('resize', updateHeight);
       if (wheelTimer.current) {
         clearTimeout(wheelTimer.current);
+      }
+      if (releaseTimeout.current) {
+        clearTimeout(releaseTimeout.current);
       }
     };
   }, []);
@@ -223,11 +231,54 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Wheel event handler
+  // Handle touchpad/wheel release - only changes video when scrolling stops
+  const handleScrollRelease = () => {
+    // Only execute if we were actively scrolling
+    if (isActivelyScrolling.current) {
+      isActivelyScrolling.current = false;
+      
+      // Check if we've scrolled enough to change videos
+      if (Math.abs(offset) > containerHeight * 0.3) {
+        if (offset > 0 && canScrollInDirection('up')) {
+          goToPrevVideo();
+        } else if (offset < 0 && canScrollInDirection('down')) {
+          goToNextVideo();
+        } else {
+          setOffset(0);
+        }
+      } else {
+        // Not enough scroll to change video, snap back
+        setOffset(0);
+      }
+    }
+  };
+  
+  // Wheel event handler - modified to only track offset while scrolling
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Clear any existing wheel timer
+    // Update timestamp of last wheel event
+    lastWheelTime.current = Date.now();
+    
+    // Mark that we're actively scrolling
+    isActivelyScrolling.current = true;
+    
+    // Clear any existing release detection timeout
+    if (releaseTimeout.current) {
+      clearTimeout(releaseTimeout.current);
+    }
+    
+    // Set a timeout to detect when the user stops scrolling/releases the touchpad
+    // This is the key part that fixes the issue - only check for video change on release
+    releaseTimeout.current = setTimeout(() => {
+      // If no wheel events for 120ms, consider it a release
+      const timeSinceLastWheel = Date.now() - lastWheelTime.current;
+      if (timeSinceLastWheel >= 120) {
+        handleScrollRelease();
+      }
+    }, 120); // Wait longer to ensure release detection is reliable
+    
+    // Clear any existing animation timing
     if (wheelTimer.current) {
       clearTimeout(wheelTimer.current);
     }
@@ -238,7 +289,7 @@ function FeedList(): JSX.Element {
     // Check if we can scroll in this direction
     if (!canScrollInDirection(direction)) {
       // For trackpad, allow a small elastic pull but restrict the movement
-      const elasticFactor = 0.2; // Reduce movement to 20% for elastic effect
+      const elasticFactor = 0.2; 
       
       // Only update if the offset would be moving back toward center
       if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
@@ -260,12 +311,11 @@ function FeedList(): JSX.Element {
         
         setOffset(newOffset);
         
-        // Snap back after a short delay
+        // Snap back after a short delay if at boundary
         wheelTimer.current = setTimeout(() => {
           setOffset(0);
-        }, 50);
+        }, 100);
       }
-      
       return;
     }
     
@@ -273,7 +323,7 @@ function FeedList(): JSX.Element {
     const isTrackpad = Math.abs(e.deltaY) < 40;
     
     if (isTrackpad) {
-      // For trackpad, apply sensitivity for direct manipulation
+      // For trackpad, just update offset while scrolling - no decisions yet
       const sensitivity = 1.5; // Adjust for desired sensitivity
       
       // Update the offset with sensitivity
@@ -283,24 +333,8 @@ function FeedList(): JSX.Element {
       const maxOffset = containerHeight * 0.9;
       newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
       
+      // Just update the offset - we'll make navigation decision on release
       setOffset(newOffset);
-      
-      // Set up timeout to detect when scrolling stops
-      wheelTimer.current = setTimeout(() => {
-        // Determine if we've scrolled far enough to change videos
-        if (Math.abs(newOffset) > containerHeight * 0.3) {
-          if (newOffset > 0 && canScrollInDirection('up')) {
-            goToPrevVideo();
-          } else if (newOffset < 0 && canScrollInDirection('down')) {
-            goToNextVideo();
-          } else {
-            setOffset(0);
-          }
-        } else {
-          // Return to current video
-          setOffset(0);
-        }
-      }, 40); // Very short timeout to detect end of scrolling
     } else {
       // For mouse wheel - discrete navigation with threshold
       if (wheelLock.current) return;
@@ -321,10 +355,10 @@ function FeedList(): JSX.Element {
         // Reset accumulator
         wheelAccumulator.current = 0;
         
-        // Release lock after animation completes (faster)
+        // Release lock after animation completes
         setTimeout(() => {
           wheelLock.current = false;
-        }, 150);
+        }, 500);
       }
     }
   };
@@ -358,11 +392,16 @@ function FeedList(): JSX.Element {
     lastTap.current = now;
   };
   
-  // Touch handlers for mobile
+  // Touch handlers for mobile - similar logic as wheel
   const handleTouchStart = (e: React.TouchEvent) => {
     if (wheelTimer.current) {
       clearTimeout(wheelTimer.current);
     }
+    if (releaseTimeout.current) {
+      clearTimeout(releaseTimeout.current);
+    }
+    
+    isActivelyScrolling.current = true;
     touchStartY.current = e.touches[0].clientY;
   };
   
@@ -374,6 +413,9 @@ function FeedList(): JSX.Element {
     
     // Determine direction
     const direction = diff > 0 ? 'up' : 'down';
+    
+    // Update timestamp to track active scrolling
+    lastWheelTime.current = Date.now();
     
     // If we can't scroll in this direction, apply elastic resistance
     if (!canScrollInDirection(direction)) {
@@ -404,6 +446,9 @@ function FeedList(): JSX.Element {
   
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
+    
+    // Handle release immediately for touch
+    isActivelyScrolling.current = false;
     
     // Apply the threshold to determine if we should change videos
     if (Math.abs(offset) > containerHeight * 0.3) {
