@@ -99,15 +99,12 @@ function FeedList(): JSX.Element {
   // Touch tracking
   const touchStartY = useRef<number | null>(null);
   
-  // Wheel handling
-  const wheelLock = useRef<boolean>(false);
-  const wheelAccumulator = useRef<number>(0);
-  const wheelTimer = useRef<any>(null);
-  
-  // Active scrolling detection - key to fixing the issue
-  const isActivelyScrolling = useRef<boolean>(false);
-  const lastWheelTime = useRef<number>(0);
-  const releaseTimeout = useRef<any>(null);
+  // Wheel handling - new approach for extremely reliable wheel release detection
+  const wheelEvents = useRef<WheelEvent[]>([]);
+  const isWheeling = useRef<boolean>(false);
+  const wheelDetectionTimer = useRef<any>(null);
+  const wheelReleaseTimer = useRef<any>(null);
+  const inertiaFrameId = useRef<any>(null);
   
   // Set up container height
   useEffect(() => {
@@ -120,11 +117,14 @@ function FeedList(): JSX.Element {
     window.addEventListener('resize', updateHeight);
     return () => {
       window.removeEventListener('resize', updateHeight);
-      if (wheelTimer.current) {
-        clearTimeout(wheelTimer.current);
+      if (wheelDetectionTimer.current) {
+        clearTimeout(wheelDetectionTimer.current);
       }
-      if (releaseTimeout.current) {
-        clearTimeout(releaseTimeout.current);
+      if (wheelReleaseTimer.current) {
+        clearTimeout(wheelReleaseTimer.current);
+      }
+      if (inertiaFrameId.current) {
+        cancelAnimationFrame(inertiaFrameId.current);
       }
     };
   }, []);
@@ -198,6 +198,17 @@ function FeedList(): JSX.Element {
     }
   }, [currentVideoIndex]);
   
+  // Check if scrolling is allowed in the given direction
+  const canScrollInDirection = (direction: 'up' | 'down'): boolean => {
+    if (direction === 'up') {
+      // Can only scroll up if not at the first video
+      return currentVideoIndex > 0;
+    } else {
+      // Can only scroll down if not at the last video
+      return currentVideoIndex < VIDEOS.length - 1;
+    }
+  };
+  
   // Go to next video if possible
   const goToNextVideo = () => {
     if (currentVideoIndex < VIDEOS.length - 1) {
@@ -220,147 +231,176 @@ function FeedList(): JSX.Element {
     }
   };
   
-  // Check if scrolling is allowed in the given direction
-  const canScrollInDirection = (direction: 'up' | 'down'): boolean => {
-    if (direction === 'up') {
-      // Can only scroll up if not at the first video
-      return currentVideoIndex > 0;
-    } else {
-      // Can only scroll down if not at the last video
-      return currentVideoIndex < VIDEOS.length - 1;
+  // Handle wheel release - only called when user STOPS scrolling
+  const handleWheelRelease = () => {
+    // Only process if there were wheel events
+    if (wheelEvents.current.length === 0) return;
+    
+    // Cancel any running inertia
+    if (inertiaFrameId.current) {
+      cancelAnimationFrame(inertiaFrameId.current);
+      inertiaFrameId.current = null;
     }
-  };
-  
-  // Handle touchpad/wheel release - only changes video when scrolling stops
-  const handleScrollRelease = () => {
-    // Only execute if we were actively scrolling
-    if (isActivelyScrolling.current) {
-      isActivelyScrolling.current = false;
-      
-      // Check if we've scrolled enough to change videos
-      if (Math.abs(offset) > containerHeight * 0.3) {
-        if (offset > 0 && canScrollInDirection('up')) {
-          goToPrevVideo();
-        } else if (offset < 0 && canScrollInDirection('down')) {
-          goToNextVideo();
-        } else {
-          setOffset(0);
-        }
+    
+    // Calculate the average delta and direction from the last few events
+    const recentEvents = wheelEvents.current.slice(-5);
+    const totalDelta = recentEvents.reduce((sum, event) => sum + event.deltaY, 0);
+    const avgDelta = totalDelta / recentEvents.length;
+    const direction = avgDelta > 0 ? 'down' : 'up';
+    
+    // Determine if we've scrolled enough to change videos
+    if (Math.abs(offset) > containerHeight * 0.25) {
+      if (offset > 0 && canScrollInDirection('up')) {
+        goToPrevVideo();
+      } else if (offset < 0 && canScrollInDirection('down')) {
+        goToNextVideo();
       } else {
-        // Not enough scroll to change video, snap back
-        setOffset(0);
+        // Snap back with inertia
+        animateSnapBack();
       }
+    } else {
+      // Not enough to change, snap back with inertia
+      animateSnapBack();
     }
+    
+    // Reset wheel tracking
+    wheelEvents.current = [];
+    isWheeling.current = false;
   };
   
-  // Wheel event handler - modified to only track offset while scrolling
+  // Smooth snap back animation using requestAnimationFrame
+  const animateSnapBack = () => {
+    const startOffset = offset;
+    const startTime = performance.now();
+    const duration = 300; // animation duration in ms
+    
+    const animateFrame = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Easing function - ease out cubic
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+      
+      // Calculate new offset
+      const newOffset = startOffset * (1 - easedProgress);
+      
+      // Update offset
+      setOffset(newOffset);
+      
+      // Continue animation if not complete
+      if (progress < 1) {
+        inertiaFrameId.current = requestAnimationFrame(animateFrame);
+      } else {
+        // Animation complete
+        setOffset(0);
+        inertiaFrameId.current = null;
+      }
+    };
+    
+    // Start animation
+    inertiaFrameId.current = requestAnimationFrame(animateFrame);
+  };
+  
+  // Wheel event handler - collects events during scrolling but ONLY processes on release
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Update timestamp of last wheel event
-    lastWheelTime.current = Date.now();
-    
-    // Mark that we're actively scrolling
-    isActivelyScrolling.current = true;
-    
-    // Clear any existing release detection timeout
-    if (releaseTimeout.current) {
-      clearTimeout(releaseTimeout.current);
+    // Cancel any running animations when wheel starts
+    if (inertiaFrameId.current) {
+      cancelAnimationFrame(inertiaFrameId.current);
+      inertiaFrameId.current = null;
     }
     
-    // Set a timeout to detect when the user stops scrolling/releases the touchpad
-    // This is the key part that fixes the issue - only check for video change on release
-    releaseTimeout.current = setTimeout(() => {
-      // If no wheel events for 120ms, consider it a release
-      const timeSinceLastWheel = Date.now() - lastWheelTime.current;
-      if (timeSinceLastWheel >= 120) {
-        handleScrollRelease();
-      }
-    }, 120); // Wait longer to ensure release detection is reliable
-    
-    // Clear any existing animation timing
-    if (wheelTimer.current) {
-      clearTimeout(wheelTimer.current);
+    // Clear previous timers
+    if (wheelDetectionTimer.current) {
+      clearTimeout(wheelDetectionTimer.current);
     }
+    if (wheelReleaseTimer.current) {
+      clearTimeout(wheelReleaseTimer.current);
+    }
+    
+    // Store wheel event for later processing
+    wheelEvents.current.push(e.nativeEvent);
+    
+    // Limit stored events to prevent memory issues
+    if (wheelEvents.current.length > 30) {
+      wheelEvents.current = wheelEvents.current.slice(-30);
+    }
+    
+    // Mark as actively wheeling
+    isWheeling.current = true;
     
     // Determine direction based on deltaY
     const direction = e.deltaY > 0 ? 'down' : 'up';
     
-    // Check if we can scroll in this direction
-    if (!canScrollInDirection(direction)) {
-      // For trackpad, allow a small elastic pull but restrict the movement
-      const elasticFactor = 0.2; 
-      
-      // Only update if the offset would be moving back toward center
-      if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
-        // Allow full movement back to center
-        let newOffset = offset + e.deltaY * -1;
-        setOffset(newOffset);
-      } else {
-        // Restricted elastic pull
-        let elasticDelta = e.deltaY * -elasticFactor;
-        let newOffset = offset + elasticDelta;
-        
-        // Prevent pulling too far (max 15% of container height)
-        const maxElasticPull = containerHeight * 0.15;
-        if (direction === 'up') {
-          newOffset = Math.max(newOffset, -maxElasticPull);
-        } else {
-          newOffset = Math.min(newOffset, maxElasticPull);
-        }
-        
-        setOffset(newOffset);
-        
-        // Snap back after a short delay if at boundary
-        wheelTimer.current = setTimeout(() => {
-          setOffset(0);
-        }, 100);
-      }
-      return;
-    }
-    
     // Detect if this is mouse wheel or trackpad
-    const isTrackpad = Math.abs(e.deltaY) < 40;
+    const isTrackpad = Math.abs(e.deltaY) < 50;
     
+    // For trackpad, just apply 1:1 movement while scrolling without any threshold decisions
     if (isTrackpad) {
-      // For trackpad, just update offset while scrolling - no decisions yet
-      const sensitivity = 1.5; // Adjust for desired sensitivity
+      // Check if we can scroll in this direction
+      if (!canScrollInDirection(direction)) {
+        // For boundaries, allow a small elastic pull with resistance
+        const elasticFactor = 0.2;
+        
+        // Only update if the offset would be moving back toward center
+        if ((direction === 'up' && offset < 0) || (direction === 'down' && offset > 0)) {
+          // Allow full movement back to center
+          let newOffset = offset + e.deltaY * -1;
+          setOffset(newOffset);
+        } else {
+          // Restricted elastic pull
+          let elasticDelta = e.deltaY * -elasticFactor;
+          let newOffset = offset + elasticDelta;
+          
+          // Prevent pulling too far (max 15% of container height)
+          const maxElasticPull = containerHeight * 0.15;
+          if (direction === 'up') {
+            newOffset = Math.max(newOffset, -maxElasticPull);
+          } else {
+            newOffset = Math.min(newOffset, maxElasticPull);
+          }
+          
+          setOffset(newOffset);
+        }
+      } else {
+        // Just apply natural 1:1 movement - no decisions yet
+        const sensitivity = 1.2; // Slightly higher for better feel
+        
+        // Calculate new position
+        let newOffset = offset + e.deltaY * -sensitivity;
+        
+        // Apply limits to prevent excessive scrolling
+        const maxOffset = containerHeight * 0.8;
+        newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
+        
+        // Update offset
+        setOffset(newOffset);
+      }
+    } else {
+      // For mouse wheel, use classic behavior but just update offset for visibility
+      // Process actual navigation on release if needed
       
-      // Update the offset with sensitivity
-      let newOffset = offset + e.deltaY * -sensitivity;
+      // Add to accumulated offset
+      const wheelSensitivity = 20; // More conservative for full wheel clicks
+      let newOffset = offset + (e.deltaY > 0 ? -wheelSensitivity : wheelSensitivity);
       
-      // Apply limits to prevent excessive scrolling
-      const maxOffset = containerHeight * 0.9;
+      // Apply limits
+      const maxOffset = containerHeight * 0.8;
       newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
       
-      // Just update the offset - we'll make navigation decision on release
+      // Update offset
       setOffset(newOffset);
-    } else {
-      // For mouse wheel - discrete navigation with threshold
-      if (wheelLock.current) return;
-      
-      // Add to accumulator
-      wheelAccumulator.current += e.deltaY;
-      
-      // Use a threshold to prevent accidental navigation
-      if (Math.abs(wheelAccumulator.current) >= 50) {
-        wheelLock.current = true;
-        
-        if (wheelAccumulator.current > 0) {
-          goToNextVideo();
-        } else {
-          goToPrevVideo();
-        }
-        
-        // Reset accumulator
-        wheelAccumulator.current = 0;
-        
-        // Release lock after animation completes
-        setTimeout(() => {
-          wheelLock.current = false;
-        }, 500);
-      }
     }
+    
+    // Set a timer to detect when the user STOPS scrolling
+    // This is the key part - we ONLY process navigation when scrolling stops
+    wheelReleaseTimer.current = setTimeout(() => {
+      // Only if we were actively scrolling
+      if (isWheeling.current) {
+        handleWheelRelease();
+      }
+    }, 200); // Longer timeout to ensure we don't trigger on pauses between scroll actions
   };
   
   // Handle video click to play/pause
@@ -392,16 +432,14 @@ function FeedList(): JSX.Element {
     lastTap.current = now;
   };
   
-  // Touch handlers for mobile - similar logic as wheel
+  // Touch handlers for mobile - similar approach of collecting during touch and processing on release
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (wheelTimer.current) {
-      clearTimeout(wheelTimer.current);
-    }
-    if (releaseTimeout.current) {
-      clearTimeout(releaseTimeout.current);
+    // Cancel any inertia animation
+    if (inertiaFrameId.current) {
+      cancelAnimationFrame(inertiaFrameId.current);
+      inertiaFrameId.current = null;
     }
     
-    isActivelyScrolling.current = true;
     touchStartY.current = e.touches[0].clientY;
   };
   
@@ -413,9 +451,6 @@ function FeedList(): JSX.Element {
     
     // Determine direction
     const direction = diff > 0 ? 'up' : 'down';
-    
-    // Update timestamp to track active scrolling
-    lastWheelTime.current = Date.now();
     
     // If we can't scroll in this direction, apply elastic resistance
     if (!canScrollInDirection(direction)) {
@@ -438,7 +473,7 @@ function FeedList(): JSX.Element {
     // Normal scrolling behavior when direction is valid
     // Apply limits to prevent excessive scrolling
     let newOffset = diff;
-    const maxOffset = containerHeight * 0.9;
+    const maxOffset = containerHeight * 0.8;
     newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
     
     setOffset(newOffset);
@@ -447,24 +482,22 @@ function FeedList(): JSX.Element {
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
     
-    // Handle release immediately for touch
-    isActivelyScrolling.current = false;
-    
-    // Apply the threshold to determine if we should change videos
-    if (Math.abs(offset) > containerHeight * 0.3) {
+    // Process navigation on touch end
+    if (Math.abs(offset) > containerHeight * 0.25) {
       if (offset > 0 && canScrollInDirection('up')) {
         goToPrevVideo();
       } else if (offset < 0 && canScrollInDirection('down')) {
         goToNextVideo();
       } else {
-        setOffset(0);
+        // Snap back with inertia
+        animateSnapBack();
       }
     } else {
-      // Return to current video
-      setOffset(0);
+      // Not enough to navigate, snap back
+      animateSnapBack();
     }
     
-    // Reset states
+    // Reset touch state
     touchStartY.current = null;
   };
   
