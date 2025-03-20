@@ -7,5 +7,4 @@
     </div>
   );
 }
-
 export default FeedList;
