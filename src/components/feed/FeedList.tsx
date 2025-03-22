@@ -24,13 +24,6 @@ const VIDEOS = [
     username: "neon_vibes",
     caption: "Neon lights at night ✨ #aesthetic #nightlife",
     song: "Neon Dreams",
-  },
-  {
-    id: "video4",
-    url: "https://assets.mixkit.co/videos/preview/mixkit-taking-photos-from-different-angles-of-a-model-34421-large.mp4",
-    username: "fashion_photo",
-    caption: "Fashion shoot BTS 📸 #fashion #photoshoot",
-    song: "Studio Vibes",
   }
 ];
 
@@ -47,11 +40,15 @@ function FeedList() {
   // Mouse wheel tracking
   const wheelLock = useRef(false);
   
-  // Trackpad detection
-  const isTrackpadActive = useRef(false);
+  // Trackpad tracking
+  const trackpadActive = useRef(false);
+  const trackpadDelta = useRef(0);
   const lastWheelTime = useRef(0);
-  const isPointerDown = useRef(false);
-  const scrollAccumulator = useRef(0);
+  const wheelEvents = useRef<{time: number, deltaY: number}[]>([]);
+  
+  // Check if we need to decide navigation
+  const checkNavDecision = useRef(false);
+  const activeTimer = useRef<any>(null);
   
   // Set up container height
   useEffect(() => {
@@ -60,17 +57,21 @@ function FeedList() {
     return () => window.removeEventListener('resize', () => setContainerHeight(window.innerHeight));
   }, []);
   
-  // Track actual pointer down/up events
+  // Set up event listeners to detect when trackpad scrolling stops
   useEffect(() => {
-    const handlePointerDown = () => {
-      isPointerDown.current = true;
-      scrollAccumulator.current = 0;
-    };
-    
-    const handlePointerUp = () => {
-      // Only trigger navigation if pointer was down (not mouse wheel)
-      if (isPointerDown.current && isTrackpadActive.current) {
-        // Make navigation decision on pointer up
+    const detectScrollStop = () => {
+      if (!trackpadActive.current) return;
+      
+      // Get the current time
+      const now = performance.now();
+      // Check the time since the last wheel event
+      const timeSinceLastWheel = now - lastWheelTime.current;
+      
+      // If we haven't seen any wheel events for 200ms, consider it stopped
+      if (timeSinceLastWheel > 200) {
+        trackpadActive.current = false;
+        
+        // Make navigation decision
         const threshold = containerHeight * 0.2;
         
         if (offset > threshold && currentVideoIndex > 0) {
@@ -80,21 +81,13 @@ function FeedList() {
         } else {
           setOffset(0);
         }
-        
-        // Reset state
-        isTrackpadActive.current = false;
       }
-      
-      isPointerDown.current = false;
     };
     
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('pointerup', handlePointerUp);
+    // Check every 100ms
+    const interval = setInterval(detectScrollStop, 100);
     
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
+    return () => clearInterval(interval);
   }, [containerHeight, currentVideoIndex, offset]);
   
   // Toggle mute
@@ -108,10 +101,10 @@ function FeedList() {
     if (currentVideoIndex < VIDEOS.length - 1) {
       setCurrentVideoIndex(prev => prev + 1);
       setOffset(0);
-      scrollAccumulator.current = 0;
+      trackpadDelta.current = 0;
     } else {
       setOffset(0);
-      scrollAccumulator.current = 0;
+      trackpadDelta.current = 0;
     }
   };
   
@@ -120,35 +113,43 @@ function FeedList() {
     if (currentVideoIndex > 0) {
       setCurrentVideoIndex(prev => prev - 1);
       setOffset(0);
-      scrollAccumulator.current = 0;
+      trackpadDelta.current = 0;
     } else {
       setOffset(0);
-      scrollAccumulator.current = 0;
+      trackpadDelta.current = 0;
     }
   };
   
-  // Wheel handler that distinguishes between mouse and trackpad
+  // Wheel handler with proper detection
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
+    // Record time of this event
     const now = performance.now();
     const timeSinceLastWheel = now - lastWheelTime.current;
     lastWheelTime.current = now;
     
-    // Detect if this is mouse wheel or trackpad
-    // Mouse wheel: Large deltaY + longer intervals between events
-    // Trackpad: Small deltaY + shorter intervals + sometimes has deltaX
-    const isMouseWheel = Math.abs(e.deltaY) > 50 && timeSinceLastWheel > 100 && Math.abs(e.deltaX) === 0;
+    // Store wheel event
+    wheelEvents.current.push({time: now, deltaY: e.deltaY});
+    if (wheelEvents.current.length > 10) {
+      wheelEvents.current = wheelEvents.current.slice(-10);
+    }
     
-    // For mouse wheel, navigate immediately on each distinct "click"
+    // DETECT DEVICE TYPE
+    // Mouse wheel: Large deltaY values, spaced out events
+    // Trackpad: Small deltaY values, rapid succession, sometimes has deltaX
+    const isMouseWheel = Math.abs(e.deltaY) > 40 && Math.abs(e.deltaX) === 0 && timeSinceLastWheel > 100;
+    
+    // HANDLE MOUSE WHEEL
     if (isMouseWheel && !wheelLock.current) {
+      // Navigate immediately for mouse wheel
       if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
         goToNextVideo();
       } else if (e.deltaY < 0 && currentVideoIndex > 0) {
         goToPrevVideo();
       }
       
-      // Prevent multiple rapid navigations
+      // Lock to prevent skipping videos
       wheelLock.current = true;
       setTimeout(() => {
         wheelLock.current = false;
@@ -157,28 +158,71 @@ function FeedList() {
       return;
     }
     
-    // For trackpad, mark as active and accumulate the movement
-    isTrackpadActive.current = true;
-    scrollAccumulator.current += e.deltaY;
+    // HANDLE TRACKPAD
+    // Mark as active trackpad scrolling
+    trackpadActive.current = true;
+    trackpadDelta.current += e.deltaY;
     
-    // Calculate visual offset based on accumulated scrolling
-    const sensitivity = 0.6; // Higher = more responsive
-    let newOffset = -scrollAccumulator.current * sensitivity;
+    // Calculate visual offset
+    const sensitivity = 0.8;
+    let newOffset = -trackpadDelta.current * sensitivity;
     
-    // Apply limits and boundary resistance
+    // Apply limits
     const maxOffset = containerHeight * 0.8;
     newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
     
-    // Apply extra resistance at boundaries
+    // Apply resistance at boundaries
     if ((newOffset > 0 && currentVideoIndex === 0) || 
         (newOffset < 0 && currentVideoIndex === VIDEOS.length - 1)) {
-      // 70% resistance at edges
-      newOffset = newOffset * 0.3;
+      newOffset = newOffset * 0.3; // 70% resistance
     }
     
     // Update visual offset - always follows fingers exactly
     setOffset(newOffset);
+    
+    // Reset any active timer
+    if (activeTimer.current) {
+      clearTimeout(activeTimer.current);
+    }
+    
+    // Set a new timer to double-check after wheel events stop
+    activeTimer.current = setTimeout(() => {
+      if (trackpadActive.current) {
+        // If we haven't seen any events for a while, make a decision
+        const threshold = containerHeight * 0.2;
+        
+        if (offset > threshold && currentVideoIndex > 0) {
+          goToPrevVideo();
+        } else if (offset < -threshold && currentVideoIndex < VIDEOS.length - 1) {
+          goToNextVideo();
+        } else {
+          setOffset(0);
+        }
+        
+        trackpadActive.current = false;
+      }
+    }, 300);
   };
+  
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        if (currentVideoIndex < VIDEOS.length - 1) {
+          goToNextVideo();
+        }
+      } else if (e.key === 'ArrowUp') {
+        if (currentVideoIndex > 0) {
+          goToPrevVideo();
+        }
+      } else if (e.key === 'm') {
+        toggleMute();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentVideoIndex]);
   
   return (
     <div 
