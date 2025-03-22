@@ -5,7 +5,7 @@ import { useVideoStore } from "@/store/videoStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { useInView } from "react-intersection-observer";
 
-// Improved FeedList with advanced scrolling from original implementation
+// Exact copy of the excellent scrolling mechanism from original FeedList
 export default function FeedList() {
   const { 
     videos, 
@@ -16,33 +16,39 @@ export default function FeedList() {
     loading,
     hasMore,
     likeVideo,
-    unlikeVideo 
   } = useVideoStore();
   
-  // Container and video state
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Current active video
+  // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const videoTimeRefs = useRef<Record<string, number>>({});
   
-  // UI state
+  // Container height
   const [containerHeight, setContainerHeight] = useState<number>(0);
-  const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [isPaused, setIsPaused] = useState<boolean>(true);
+  
+  // For tactile scrolling
+  const [offset, setOffset] = useState<number>(0);
+  
+  // Track likes
   const [likedVideos, setLikedVideos] = useState<Record<string, boolean>>({});
   
-  // Scroll handling state
-  const [offset, setOffset] = useState<number>(0);
-  const [isScrolling, setIsScrolling] = useState<boolean>(false);
-  const touchStartY = useRef<number | null>(null);
+  // Video playing state
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(true); // Start paused
+  
+  // Last tap for double tap detection
   const lastTap = useRef<number>(0);
   
-  // Wheel event tracking (from original implementation)
+  // Touch tracking
+  const touchStartY = useRef<number | null>(null);
+  
+  // Wheel handling - new approach for extremely reliable wheel release detection
   const wheelEvents = useRef<WheelEvent[]>([]);
   const isWheeling = useRef<boolean>(false);
   const wheelDetectionTimer = useRef<any>(null);
   const wheelReleaseTimer = useRef<any>(null);
   const inertiaFrameId = useRef<any>(null);
-
+  
   // Load initial videos
   useEffect(() => {
     fetchVideos();
@@ -59,7 +65,6 @@ export default function FeedList() {
     window.addEventListener('resize', updateHeight);
     return () => {
       window.removeEventListener('resize', updateHeight);
-      // Clean up timers and animation frames
       if (wheelDetectionTimer.current) {
         clearTimeout(wheelDetectionTimer.current);
       }
@@ -82,6 +87,57 @@ export default function FeedList() {
       fetchMoreVideos();
     }
   }, [loadMoreInView, fetchMoreVideos, videos.length, hasMore, loading]);
+  
+  // Toggle mute
+  const toggleMute = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIsMuted(!isMuted);
+  };
+  
+  // Toggle play/pause - Save and restore position
+  const togglePlayPause = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    if (videos.length === 0) return;
+    const videoId = videos[currentVideoIndex]?.id;
+    if (!videoId) return;
+    
+    const currentVideo = videoRefs.current[videoId];
+    
+    if (currentVideo) {
+      if (currentVideo.paused) {
+        // If we have a saved position, restore it
+        if (videoTimeRefs.current[videoId] !== undefined) {
+          currentVideo.currentTime = videoTimeRefs.current[videoId];
+        }
+        currentVideo.play();
+        setIsPaused(false);
+      } else {
+        // Save the current position before pausing
+        videoTimeRefs.current[videoId] = currentVideo.currentTime;
+        currentVideo.pause();
+        setIsPaused(true);
+      }
+    }
+  };
+  
+  // Handle likes
+  const toggleLike = (videoId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLikedVideos(prev => {
+      const newState = {
+        ...prev,
+        [videoId]: !prev[videoId]
+      };
+      
+      // Update store
+      if (newState[videoId]) {
+        likeVideo(videoId);
+      }
+      
+      return newState;
+    });
+  };
   
   // Handle video playback when switching videos
   useEffect(() => {
@@ -117,70 +173,6 @@ export default function FeedList() {
     }
   }, [currentVideoIndex, videos, isPaused]);
   
-  // Format numbers for display
-  const formatCount = (count: number): string => {
-    if (count >= 1000000) {
-      return (count / 1000000).toFixed(1) + 'M';
-    } else if (count >= 1000) {
-      return (count / 1000).toFixed(1) + 'K';
-    }
-    return count.toString();
-  };
-  
-  // Toggle mute
-  const toggleMute = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setIsMuted(!isMuted);
-  };
-  
-  // Toggle play/pause with position save/restore
-  const togglePlayPause = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (videos.length === 0) return;
-    
-    const videoId = videos[currentVideoIndex]?.id;
-    if (!videoId) return;
-    
-    const currentVideo = videoRefs.current[videoId];
-    
-    if (currentVideo) {
-      if (currentVideo.paused) {
-        // If we have a saved position, restore it
-        if (videoTimeRefs.current[videoId] !== undefined) {
-          currentVideo.currentTime = videoTimeRefs.current[videoId];
-        }
-        currentVideo.play();
-        setIsPaused(false);
-      } else {
-        // Save the current position before pausing
-        videoTimeRefs.current[videoId] = currentVideo.currentTime;
-        currentVideo.pause();
-        setIsPaused(true);
-      }
-    }
-  };
-  
-  // Handle likes with UI update and store update
-  const toggleLike = (videoId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    setLikedVideos(prev => {
-      const newState = {
-        ...prev,
-        [videoId]: !prev[videoId]
-      };
-      
-      // Also update store
-      if (newState[videoId]) {
-        likeVideo(videoId);
-      } else {
-        unlikeVideo(videoId);
-      }
-      
-      return newState;
-    });
-  };
-  
   // Check if scrolling is allowed in the given direction
   const canScrollInDirection = (direction: 'up' | 'down'): boolean => {
     if (direction === 'up') {
@@ -214,6 +206,7 @@ export default function FeedList() {
     }
   };
   
+  // COPIED DIRECTLY FROM ORIGINAL - DO NOT MODIFY
   // Smooth snap back animation using requestAnimationFrame
   const animateSnapBack = () => {
     const startOffset = offset;
@@ -247,6 +240,7 @@ export default function FeedList() {
     inertiaFrameId.current = requestAnimationFrame(animateFrame);
   };
   
+  // COPIED DIRECTLY FROM ORIGINAL - DO NOT MODIFY
   // Handle wheel release - only called when user STOPS scrolling
   const handleWheelRelease = () => {
     // Only process if there were wheel events
@@ -284,6 +278,7 @@ export default function FeedList() {
     isWheeling.current = false;
   };
   
+  // COPIED DIRECTLY FROM ORIGINAL - DO NOT MODIFY
   // Wheel event handler - collects events during scrolling but ONLY processes on release
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -386,6 +381,45 @@ export default function FeedList() {
     }, 200); // Longer timeout to ensure we don't trigger on pauses between scroll actions
   };
   
+  // COPIED DIRECTLY FROM ORIGINAL - DO NOT MODIFY
+  // Handle video click to play/pause
+  const handleVideoClick = (e: React.MouseEvent) => {
+    // Don't trigger on double-tap
+    if (Date.now() - lastTap.current < 300) {
+      return;
+    }
+    
+    // Only toggle play/pause on single tap/click
+    togglePlayPause(e);
+  };
+  
+  // COPIED DIRECTLY FROM ORIGINAL - DO NOT MODIFY
+  // Double tap to like
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    const timeSince = now - lastTap.current;
+    
+    if (timeSince < 300 && timeSince > 0 && videos.length > 0) {
+      const currentVideo = videos[currentVideoIndex];
+      if (currentVideo) {
+        setLikedVideos(prev => {
+          const newState = {
+            ...prev,
+            [currentVideo.id]: true
+          };
+          
+          // Also update store
+          likeVideo(currentVideo.id);
+          
+          return newState;
+        });
+      }
+    }
+    
+    lastTap.current = now;
+  };
+  
+  // COPIED DIRECTLY FROM ORIGINAL - DO NOT MODIFY
   // Touch handlers for mobile - similar approach of collecting during touch and processing on release
   const handleTouchStart = (e: React.TouchEvent) => {
     // Cancel any inertia animation
@@ -397,6 +431,7 @@ export default function FeedList() {
     touchStartY.current = e.touches[0].clientY;
   };
   
+  // COPIED DIRECTLY FROM ORIGINAL - DO NOT MODIFY
   const handleTouchMove = (e: React.TouchEvent) => {
     if (touchStartY.current === null) return;
     
@@ -433,6 +468,7 @@ export default function FeedList() {
     setOffset(newOffset);
   };
   
+  // COPIED DIRECTLY FROM ORIGINAL - DO NOT MODIFY
   const handleTouchEnd = () => {
     if (touchStartY.current === null) return;
     
@@ -455,40 +491,14 @@ export default function FeedList() {
     touchStartY.current = null;
   };
   
-  // Handle video click to play/pause
-  const handleVideoClick = (e: React.MouseEvent) => {
-    // Don't trigger on double-tap
-    if (Date.now() - lastTap.current < 300) {
-      return;
+  // Format function for numbers
+  const formatCount = (count: number): string => {
+    if (count >= 1000000) {
+      return (count / 1000000).toFixed(1) + 'M';
+    } else if (count >= 1000) {
+      return (count / 1000).toFixed(1) + 'K';
     }
-    
-    // Only toggle play/pause on single tap/click
-    togglePlayPause(e);
-  };
-  
-  // Double tap to like
-  const handleDoubleTap = () => {
-    const now = Date.now();
-    const timeSince = now - lastTap.current;
-    
-    if (timeSince < 300 && timeSince > 0 && videos.length > 0) {
-      const currentVideo = videos[currentVideoIndex];
-      if (currentVideo) {
-        setLikedVideos(prev => {
-          const newState = {
-            ...prev,
-            [currentVideo.id]: true
-          };
-          
-          // Also update store
-          likeVideo(currentVideo.id);
-          
-          return newState;
-        });
-      }
-    }
-    
-    lastTap.current = now;
+    return count.toString();
   };
   
   // Handle keyboard navigation
@@ -514,21 +524,24 @@ export default function FeedList() {
   }, [currentVideoIndex, videos.length]);
   
   return (
-    <div
-      ref={containerRef}
-      className="h-screen w-full overflow-hidden bg-black relative touch-none"
+    <div 
+      className="h-screen w-full overflow-hidden bg-black relative"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onClick={handleDoubleTap}
     >
-      {videos.length === 0 && !loading ? (
-        <div className="flex h-full w-full items-center justify-center text-white">
-          <p>No videos available.</p>
-        </div>
-      ) : (
-        <div className="relative w-full h-full">
+      {/* Videos container */}
+      <div className="w-full h-full flex justify-center">
+        <div 
+          className="relative"
+          style={{ 
+            width: "100%",
+            maxWidth: `${containerHeight * 9 / 16}px`,
+            height: "100%"
+          }}
+        >
           <div 
             className="absolute w-full transition-transform duration-300 ease-out"
             style={{ 
@@ -651,7 +664,7 @@ export default function FeedList() {
             })}
           </div>
         </div>
-      )}
+      </div>
       
       {/* Sound toggle button */}
       <button 
