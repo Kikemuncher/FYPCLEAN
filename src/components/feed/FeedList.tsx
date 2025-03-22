@@ -49,12 +49,13 @@ function FeedList() {
   // Video playing state
   const [isMuted, setIsMuted] = useState(false);
   
-  // For mouse wheel detection
-  const wheelTimer = useRef<any>(null);
-  const wheelDirection = useRef<'up' | 'down' | null>(null);
-  const isTrackpad = useRef(false);
+  // Scroll state tracking
+  const isScrolling = useRef(false);
+  const scrollTimeout = useRef<any>(null);
+  const scrollLockoutTimer = useRef<any>(null);
+  const scrollDirection = useRef<'up' | 'down' | null>(null);
   const lastWheelTime = useRef(0);
-  const wheelFinishedTimer = useRef<any>(null);
+  const totalDelta = useRef(0);
   const mouseWheelLockout = useRef(false);
   
   // Set up container height
@@ -68,8 +69,8 @@ function FeedList() {
     window.addEventListener('resize', updateHeight);
     return () => {
       window.removeEventListener('resize', updateHeight);
-      if (wheelTimer.current) clearTimeout(wheelTimer.current);
-      if (wheelFinishedTimer.current) clearTimeout(wheelFinishedTimer.current);
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+      if (scrollLockoutTimer.current) clearTimeout(scrollLockoutTimer.current);
     };
   }, []);
   
@@ -99,120 +100,128 @@ function FeedList() {
     }
   };
   
-  // Handle wheel events
+  // Completely new wheel handler focused on tactile experience
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
     const now = performance.now();
-    const timeSinceLastWheel = now - lastWheelTime.current;
+    const timeDelta = now - lastWheelTime.current;
     lastWheelTime.current = now;
     
-    // Detect direction
-    const direction = e.deltaY > 0 ? 'down' : 'up';
-    
-    // Detect if this is trackpad or mouse wheel
-    // Trackpads typically have smaller deltaY and continuous events
-    isTrackpad.current = Math.abs(e.deltaY) < 50 && timeSinceLastWheel < 100;
+    // IMPORTANT: Detect if this is a trackpad or mouse wheel
+    // 1. Trackpads typically have much smaller deltaY values
+    // 2. Trackpads often have non-zero deltaX values
+    // 3. Trackpad events come in rapid succession
+    const isTrackpad = (Math.abs(e.deltaY) < 50 || Math.abs(e.deltaX) > 0) && timeDelta < 100;
     
     // MOUSE WHEEL HANDLING
-    if (!isTrackpad.current) {
-      // Only process if not in lockout period (prevents double-fires)
+    if (!isTrackpad) {
       if (!mouseWheelLockout.current) {
-        // Mouse wheel - navigate immediately based on direction
+        const direction = e.deltaY > 0 ? 'down' : 'up';
+        
         if (direction === 'down' && currentVideoIndex < VIDEOS.length - 1) {
           goToNextVideo();
           
-          // Add lockout to prevent multiple rapid navigations
+          // Prevent multiple navigations
           mouseWheelLockout.current = true;
           setTimeout(() => {
             mouseWheelLockout.current = false;
-          }, 300);
+          }, 400);
         } else if (direction === 'up' && currentVideoIndex > 0) {
           goToPrevVideo();
           
-          // Add lockout to prevent multiple rapid navigations
+          // Prevent multiple navigations
           mouseWheelLockout.current = true;
           setTimeout(() => {
             mouseWheelLockout.current = false;
-          }, 300);
+          }, 400);
         }
       }
-      
-      return; // Skip the rest of processing for mouse wheel
+      return;
     }
     
     // TRACKPAD HANDLING
     
-    // Remember the overall direction for later
-    if (wheelDirection.current === null) {
-      wheelDirection.current = direction;
+    // Keep track of direction
+    const direction = e.deltaY > 0 ? 'down' : 'up';
+    
+    // Start scrolling if not already
+    if (!isScrolling.current) {
+      isScrolling.current = true;
+      scrollDirection.current = direction;
+      totalDelta.current = 0;
     }
     
-    // Apply visual feedback - move content while scrolling
-    let newOffset;
+    // Update total delta (for release decision)
+    totalDelta.current += e.deltaY;
     
-    if (direction === 'up' && currentVideoIndex > 0) {
-      // Going up (showing previous)
-      newOffset = offset + Math.abs(e.deltaY) * 0.8;
-      // Limit max pull
-      newOffset = Math.min(newOffset, containerHeight * 0.8);
-    } else if (direction === 'down' && currentVideoIndex < VIDEOS.length - 1) {
-      // Going down (showing next)
-      newOffset = offset - Math.abs(e.deltaY) * 0.8;
-      // Limit max pull
-      newOffset = Math.max(newOffset, -containerHeight * 0.8);
-    } else {
-      // Trying to go out of bounds - apply resistance
-      if (direction === 'up') {
-        // Elastic resistance when trying to go before first item
-        newOffset = offset + Math.abs(e.deltaY) * 0.2;
-        newOffset = Math.min(newOffset, containerHeight * 0.2);
+    // TACTILE MOVEMENT: Directly translate trackpad movement to visual offset
+    // This is the key part that makes it feel tactile
+    
+    // Calculate new offset based on current scroll delta
+    let sensitivity = 1.0;  // How responsive the scrolling feels
+    let newOffset = offset;
+    
+    if (direction === 'up') {
+      // Scrolling up
+      if (currentVideoIndex > 0) {
+        // We can go to previous video
+        newOffset = offset + Math.abs(e.deltaY) * sensitivity;
       } else {
-        // Elastic resistance when trying to go past last item
+        // Reached the top - elastic resistance
+        newOffset = offset + Math.abs(e.deltaY) * 0.2;
+      }
+    } else {
+      // Scrolling down
+      if (currentVideoIndex < VIDEOS.length - 1) {
+        // We can go to next video
+        newOffset = offset - Math.abs(e.deltaY) * sensitivity;
+      } else {
+        // Reached the bottom - elastic resistance
         newOffset = offset - Math.abs(e.deltaY) * 0.2;
-        newOffset = Math.max(newOffset, -containerHeight * 0.2);
       }
     }
+    
+    // Apply limits to prevent excessive scrolling
+    const maxOffset = containerHeight * 0.8;
+    newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
     
     // Update offset for visual feedback
     setOffset(newOffset);
     
-    // Clear any existing wheel timer
-    if (wheelTimer.current) {
-      clearTimeout(wheelTimer.current);
-    }
-    if (wheelFinishedTimer.current) {
-      clearTimeout(wheelFinishedTimer.current);
+    // Clear any existing scroll timeout
+    if (scrollTimeout.current) {
+      clearTimeout(scrollTimeout.current);
     }
     
-    // Set a new timer to check again in 50ms
-    // This keeps getting reset as long as wheel events are coming in
-    wheelTimer.current = setTimeout(() => {
-      // If we haven't received new wheel events for 50ms, 
-      // start a final timer for 100ms to confirm scrolling is finished
-      wheelFinishedTimer.current = setTimeout(() => {
-        // At this point, we should be done scrolling
-        // Decide whether to navigate based on the offset
-        if (Math.abs(offset) > containerHeight * 0.2) {
-          if (offset > 0 && currentVideoIndex > 0) {
-            // Scrolled up enough to go to previous
-            goToPrevVideo();
-          } else if (offset < 0 && currentVideoIndex < VIDEOS.length - 1) {
-            // Scrolled down enough to go to next
-            goToNextVideo();
-          } else {
-            // Reset if can't go that direction
-            setOffset(0);
-          }
+    // Set a timeout to detect when scrolling stops
+    // This timeout gets reset every time a new wheel event comes in
+    scrollTimeout.current = setTimeout(() => {
+      // Only execute if we were actively scrolling
+      if (isScrolling.current) {
+        // NAVIGATION DECISION - only happens when scrolling has stopped
+        
+        // Determine if we've scrolled enough to change videos
+        // More generous threshold (20% of screen height)
+        const threshold = containerHeight * 0.2;
+        
+        if (offset > threshold && currentVideoIndex > 0) {
+          // Scrolled up enough to go to previous
+          goToPrevVideo();
+        } else if (offset < -threshold && currentVideoIndex < VIDEOS.length - 1) {
+          // Scrolled down enough to go to next
+          goToNextVideo();
         } else {
-          // Not enough - snap back
+          // Not enough to change - snap back
           setOffset(0);
         }
         
         // Reset tracking state
-        wheelDirection.current = null;
-      }, 100);
-    }, 50);
+        isScrolling.current = false;
+        scrollDirection.current = null;
+        totalDelta.current = 0;
+      }
+    }, 150); // Wait 150ms after last wheel event to confirm scrolling has stopped
   };
   
   return (
