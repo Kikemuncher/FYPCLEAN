@@ -10,8 +10,6 @@ const VIDEOS = [
     username: "holiday_user",
     caption: "Christmas decorations with family #holidays",
     song: "Holiday Vibes",
-    likes: 45600,
-    comments: 1230,
   },
   {
     id: "video2",
@@ -19,8 +17,6 @@ const VIDEOS = [
     username: "nature_lover",
     caption: "Nature day with marshmallows 🌿 #outdoors #camping",
     song: "Nature Sounds",
-    likes: 34500,
-    comments: 980,
   },
   {
     id: "video3",
@@ -28,48 +24,30 @@ const VIDEOS = [
     username: "neon_vibes",
     caption: "Neon lights at night ✨ #aesthetic #nightlife",
     song: "Neon Dreams",
-    likes: 78900,
-    comments: 2340,
   }
 ];
 
 function FeedList() {
   // Current active video
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  
   // For visual feedback during scrolling
   const [offset, setOffset] = useState(0);
-  
   // Container height
   const [containerHeight, setContainerHeight] = useState(0);
-  
-  // Video element references
-  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
-  
   // Video playing state
   const [isMuted, setIsMuted] = useState(false);
   
-  // Wheel handling
-  const wheelLock = useRef(false);           // For mouse wheel lock
-  const lastScrollTime = useRef(0);         // Last time we got a scroll
-  const scrollTimer = useRef<any>(null);    // Timer to detect end of scrolling
+  // Simple mouse wheel handling
+  const wheelTimeout = useRef<any>(null);
+  const wheelLock = useRef(false);
   
-  // SUPER SIMPLE STRATEGY:
-  // 1. Always just set offset with a multiplier for visual feedback
-  // 2. Mouse wheel: navigate immediately 
-  // 3. Trackpad: only decide when scrolling completely stops
-  
+  // Set up container height
   useEffect(() => {
     setContainerHeight(window.innerHeight);
-    
-    const updateHeight = () => {
-      setContainerHeight(window.innerHeight);
-    };
-    
-    window.addEventListener('resize', updateHeight);
+    window.addEventListener('resize', () => setContainerHeight(window.innerHeight));
     return () => {
-      window.removeEventListener('resize', updateHeight);
-      if (scrollTimer.current) clearTimeout(scrollTimer.current);
+      window.removeEventListener('resize', () => setContainerHeight(window.innerHeight));
+      if (wheelTimeout.current) clearTimeout(wheelTimeout.current);
     };
   }, []);
   
@@ -79,7 +57,7 @@ function FeedList() {
     setIsMuted(!isMuted);
   };
   
-  // Go to next/prev
+  // Navigation functions
   const goToNextVideo = () => {
     if (currentVideoIndex < VIDEOS.length - 1) {
       setCurrentVideoIndex(prev => prev + 1);
@@ -98,83 +76,68 @@ function FeedList() {
     }
   };
   
+  // THE SIMPLEST POSSIBLE WHEEL HANDLER
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    const now = performance.now();
-    const timeSinceLastScroll = now - lastScrollTime.current;
-    lastScrollTime.current = now;
+    // Mouse wheel detection (large delta, not trackpad)
+    const isMouseWheel = Math.abs(e.deltaY) > 50;
     
-    // Better detection of trackpad:
-    // - Very small deltaY values
-    // - Presence of deltaX
-    // - Rapid succession of events
-    const isTrackpad = (Math.abs(e.deltaY) < 30 || Math.abs(e.deltaX) > 0) && timeSinceLastScroll < 50;
-    
-    // For mouse wheel
-    if (!isTrackpad) {
-      // Only trigger once per wheel "click"
-      if (!wheelLock.current) {
-        if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
-          goToNextVideo();
-        } else if (e.deltaY < 0 && currentVideoIndex > 0) {
-          goToPrevVideo();
-        }
-        
-        // Lock wheel and set timeout
-        wheelLock.current = true;
-        setTimeout(() => {
-          wheelLock.current = false;
-        }, 500);
+    // Handle mouse wheel differently
+    if (isMouseWheel && !wheelLock.current) {
+      // For mouse wheel, navigate immediately
+      if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
+        goToNextVideo();
+      } else if (e.deltaY < 0 && currentVideoIndex > 0) {
+        goToPrevVideo();
       }
+      
+      // Lock wheel briefly to prevent skipping
+      wheelLock.current = true;
+      setTimeout(() => {
+        wheelLock.current = false;
+      }, 500);
+      
       return;
     }
     
-    // For trackpad - ALWAYS maintain the visual offset while scrolling 
-    // Calculate new offset for visual feedback (not navigation)
-    const multiplier = 0.6; // Adjust sensitivity
-    let delta = e.deltaY * -multiplier;
+    // TRACKPAD HANDLING: Just update offset
+    // Apply a multiplier for sensitivity
+    let newOffset = offset - e.deltaY * 0.5;
     
-    // Apply limits & resistance at boundaries
-    if ((delta > 0 && currentVideoIndex === 0) || 
-        (delta < 0 && currentVideoIndex === VIDEOS.length - 1)) {
-      // At boundaries, apply resistance
-      delta *= 0.3;
+    // Limit maximum scroll distance
+    const maxScroll = containerHeight * 0.8;
+    newOffset = Math.max(Math.min(newOffset, maxScroll), -maxScroll);
+    
+    // Apply resistance at boundaries
+    if ((newOffset > 0 && currentVideoIndex === 0) || 
+        (newOffset < 0 && currentVideoIndex === VIDEOS.length - 1)) {
+      newOffset = newOffset * 0.3; // 70% resistance at edges
     }
     
-    // Update the visual offset
-    const newOffset = offset + delta;
+    // Update visual offset
+    setOffset(newOffset);
     
-    // Limit max offset
-    const maxOffset = containerHeight * 0.7;
-    const limitedOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
-    
-    // Update offset for visual feedback
-    setOffset(limitedOffset);
-    
-    // Reset the timer for scroll end detection
-    if (scrollTimer.current) {
-      clearTimeout(scrollTimer.current);
+    // Clear any existing timer
+    if (wheelTimeout.current) {
+      clearTimeout(wheelTimeout.current);
     }
     
-    // Set new timer - this keeps getting cleared as long as you're scrolling
-    scrollTimer.current = setTimeout(() => {
-      // Only make a decision when scrolling COMPLETELY stops
-      
-      // Check if we've pulled enough to change videos
-      const threshold = containerHeight * 0.22;
+    // Set a new timer for navigation decision
+    // This keeps getting reset as long as you're scrolling
+    wheelTimeout.current = setTimeout(() => {
+      // Only run when scrolling completely stops
+      const threshold = containerHeight * 0.2;
       
       if (offset > threshold && currentVideoIndex > 0) {
-        // Go to previous video
         goToPrevVideo();
       } else if (offset < -threshold && currentVideoIndex < VIDEOS.length - 1) {
-        // Go to next video
         goToNextVideo();
       } else {
-        // Not enough to change, snap back
+        // Snap back
         setOffset(0);
       }
-    }, 200);
+    }, 300); // Longer delay to ensure user is done scrolling
   };
   
   return (
@@ -213,7 +176,6 @@ function FeedList() {
                   {isVisible && (
                     <div className="relative w-full h-full overflow-hidden">
                       <video
-                        ref={(el) => { if (el) videoRefs.current[video.id] = el; }}
                         src={video.url}
                         className="absolute top-0 left-0 w-full h-full object-cover"
                         loop
@@ -236,11 +198,6 @@ function FeedList() {
         </div>
       </div>
       
-      {/* Video counter indicator */}
-      <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
-        <span className="text-white text-sm">{currentVideoIndex + 1} / {VIDEOS.length}</span>
-      </div>
-      
       {/* Sound toggle button */}
       <button 
         onClick={toggleMute}
@@ -257,6 +214,10 @@ function FeedList() {
           </svg>
         )}
       </button>
+
+      <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
+        <span className="text-white text-sm">{currentVideoIndex + 1} / {VIDEOS.length}</span>
+      </div>
     </div>
   );
 }
