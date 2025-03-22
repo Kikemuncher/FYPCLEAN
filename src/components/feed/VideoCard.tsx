@@ -514,7 +514,7 @@ export default function FeedList() {
   }, [currentVideoIndex, videos.length]);
   
   return (
-    <div 
+    <div
       ref={containerRef}
       className="h-screen w-full overflow-hidden bg-black relative touch-none"
       onWheel={handleWheel}
@@ -720,3 +720,15 @@ export default function FeedList() {
             className="absolute inset-0 flex items-center justify-center bg-black/30 z-50"
           >
             <div className="h-12 w-12">
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="rounded-full h-12 w-12 border-2 border-t-white border-r-white border-b-transparent border-l-transparent"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
