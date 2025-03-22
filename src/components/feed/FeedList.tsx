@@ -37,24 +37,20 @@ function FeedList() {
   // Video playing state
   const [isMuted, setIsMuted] = useState(false);
   
-  // Mouse wheel lock
-  const wheelLock = useRef(false);
+  // Detect trackpad vs mouse wheel
+  const totalDelta = useRef(0);
+  const isTouchpad = useRef(false);
+  const mouseWheelLock = useRef(false);
   
-  // For trackpad release detection
-  const isScrolling = useRef(false);
+  // For true touch detection
+  const touchActive = useRef(false);
   const lastWheelTime = useRef(0);
-  const wheelEvents = useRef<Array<{time: number, deltaY: number}>>([]);
-  const releaseCheckTimer = useRef<any>(null);
-  const releaseDetected = useRef(false);
   
   // Set up container height
   useEffect(() => {
     setContainerHeight(window.innerHeight);
     window.addEventListener('resize', () => setContainerHeight(window.innerHeight));
-    return () => {
-      window.removeEventListener('resize', () => setContainerHeight(window.innerHeight));
-      if (releaseCheckTimer.current) clearInterval(releaseCheckTimer.current);
-    };
+    return () => window.removeEventListener('resize', () => setContainerHeight(window.innerHeight));
   }, []);
   
   // Toggle mute
@@ -63,135 +59,163 @@ function FeedList() {
     setIsMuted(!isMuted);
   };
   
-  // Navigation functions
+  // Go to next video
   const goToNextVideo = () => {
     if (currentVideoIndex < VIDEOS.length - 1) {
       setCurrentVideoIndex(prev => prev + 1);
       setOffset(0);
+      totalDelta.current = 0;
     } else {
       setOffset(0);
+      totalDelta.current = 0;
     }
   };
   
+  // Go to previous video
   const goToPrevVideo = () => {
     if (currentVideoIndex > 0) {
       setCurrentVideoIndex(prev => prev - 1);
       setOffset(0);
+      totalDelta.current = 0;
     } else {
       setOffset(0);
+      totalDelta.current = 0;
     }
   };
   
-  // DETECT WHEN TRACKPAD IS RELEASED
-  // This starts a polling interval when scrolling begins
-  const startReleaseDetection = () => {
-    // If we already have a timer running, don't start another
-    if (releaseCheckTimer.current) return;
+  // Add trackpad touch detection
+  useEffect(() => {
+    // Trackpad "touch down" event - we need to rely on browser/OS specific events
+    const handleTouchStart = () => {
+      touchActive.current = true;
+      totalDelta.current = 0;
+    };
     
-    // Reset the release detected flag
-    releaseDetected.current = false;
-    
-    // Start checking for release every 100ms
-    releaseCheckTimer.current = setInterval(() => {
-      const now = performance.now();
-      const timeSinceLastWheel = now - lastWheelTime.current;
+    // Trackpad "touch up" event
+    const handleTouchEnd = () => {
+      touchActive.current = false;
       
-      // If it's been 200ms since the last wheel event, consider it a release
-      if (timeSinceLastWheel > 200 && isScrolling.current && !releaseDetected.current) {
-        // Mark as released so we don't trigger multiple times
-        releaseDetected.current = true;
-        
-        // Check if we should navigate
-        const threshold = containerHeight * 0.2;
-        
-        if (offset > threshold && currentVideoIndex > 0) {
-          // Go to previous
+      // Only now make navigation decisions
+      if (Math.abs(offset) > containerHeight * 0.2) {
+        if (offset > 0 && currentVideoIndex > 0) {
           goToPrevVideo();
-        } else if (offset < -threshold && currentVideoIndex < VIDEOS.length - 1) {
-          // Go to next
+        } else if (offset < 0 && currentVideoIndex < VIDEOS.length - 1) {
           goToNextVideo();
         } else {
-          // Not enough to navigate, snap back
           setOffset(0);
         }
-        
-        // Stop scrolling
-        isScrolling.current = false;
-        
-        // Clear the interval since we're done
-        clearInterval(releaseCheckTimer.current);
-        releaseCheckTimer.current = null;
+      } else {
+        setOffset(0);
       }
-    }, 100);
-  };
+    };
+    
+    // Try to detect touchpad gestures using pointer events
+    window.addEventListener('pointerdown', handleTouchStart);
+    window.addEventListener('pointerup', handleTouchEnd);
+    
+    return () => {
+      window.removeEventListener('pointerdown', handleTouchStart);
+      window.removeEventListener('pointerup', handleTouchEnd);
+    };
+  }, [containerHeight, currentVideoIndex, offset]);
   
-  // Handle wheel events
+  // The wheel handler now only updates visual position
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Record the time of this event
     const now = performance.now();
+    const timeSinceLastWheel = now - lastWheelTime.current;
     lastWheelTime.current = now;
     
-    // Store the wheel event
-    wheelEvents.current.push({time: now, deltaY: e.deltaY});
+    // Better mouse wheel detection
+    const isMouseWheel = Math.abs(e.deltaY) > 50 && timeSinceLastWheel > 100;
     
-    // Limit stored events to prevent memory issues
-    if (wheelEvents.current.length > 10) {
-      wheelEvents.current = wheelEvents.current.slice(-10);
-    }
-    
-    // Detect if this is mouse wheel or trackpad
-    const isMouseWheel = Math.abs(e.deltaY) > 40;
-    
-    // Handle mouse wheel
-    if (isMouseWheel && !wheelLock.current) {
-      // For mouse wheel, navigate immediately
+    // For mouse wheel, navigate immediately
+    if (isMouseWheel && !mouseWheelLock.current) {
       if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
         goToNextVideo();
       } else if (e.deltaY < 0 && currentVideoIndex > 0) {
         goToPrevVideo();
       }
       
-      // Lock wheel briefly to prevent skipping
-      wheelLock.current = true;
+      // Prevent multiple navigations
+      mouseWheelLock.current = true;
       setTimeout(() => {
-        wheelLock.current = false;
+        mouseWheelLock.current = false;
       }, 500);
       
       return;
     }
     
-    // Track that we're actively scrolling with trackpad
-    if (!isScrolling.current) {
-      isScrolling.current = true;
-      startReleaseDetection();
-    }
+    // Track total movement
+    totalDelta.current += e.deltaY;
     
-    // Update visual offset for trackpad
-    // Calculate new offset based on current wheel delta
-    const sensitivity = 0.6;
-    let newOffset = offset - e.deltaY * sensitivity;
+    // For trackpad, just update the visual position
+    const sensitivity = 0.7;
+    let newOffset = -totalDelta.current * sensitivity;
     
-    // Apply limits to prevent excessive scrolling
+    // Apply limits
     const maxOffset = containerHeight * 0.8;
     newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
     
     // Apply resistance at boundaries
     if ((newOffset > 0 && currentVideoIndex === 0) || 
         (newOffset < 0 && currentVideoIndex === VIDEOS.length - 1)) {
-      // 70% resistance at edges
-      newOffset = newOffset * 0.3;
+      newOffset = newOffset * 0.3; // 70% resistance
     }
     
-    // Update visual offset - always follow the trackpad
+    // Update visual position
     setOffset(newOffset);
+  };
+  
+  // Add direct touch event handlers for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchActive.current = true;
+    totalDelta.current = 0;
+  };
+  
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchActive.current) return;
+    
+    // Calculate touch movement
+    const touch = e.touches[0];
+    const sensitivity = 1.5;
+    
+    // For touch, update based on finger position
+    let newOffset = touch.clientY * sensitivity;
+    
+    // Apply limits
+    const maxOffset = containerHeight * 0.8;
+    newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
+    
+    // Update visual position
+    setOffset(newOffset);
+  };
+  
+  const handleTouchEnd = () => {
+    touchActive.current = false;
+    
+    // Make navigation decision
+    if (Math.abs(offset) > containerHeight * 0.2) {
+      if (offset > 0 && currentVideoIndex > 0) {
+        goToPrevVideo();
+      } else if (offset < 0 && currentVideoIndex < VIDEOS.length - 1) {
+        goToNextVideo();
+      } else {
+        setOffset(0);
+      }
+    } else {
+      setOffset(0);
+    }
   };
   
   return (
     <div 
       className="h-screen w-full overflow-hidden bg-black relative"
       onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       <div className="w-full h-full flex justify-center">
         <div 
