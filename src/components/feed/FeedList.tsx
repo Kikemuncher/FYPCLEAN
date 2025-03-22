@@ -41,6 +41,24 @@ const VIDEOS: Video[] = [
     song: "Neon Dreams",
     likes: 78900,
     comments: 2340,
+  },
+  {
+    id: "video4",
+    url: "https://assets.mixkit.co/videos/preview/mixkit-taking-photos-from-different-angles-of-a-model-34421-large.mp4",
+    username: "fashion_photo",
+    caption: "Fashion shoot BTS 📸 #fashion #photoshoot",
+    song: "Studio Vibes",
+    likes: 23400,
+    comments: 870,
+  },
+  {
+    id: "video5",
+    url: "https://assets.mixkit.co/videos/preview/mixkit-womans-feet-splashing-in-the-pool-1261-large.mp4",
+    username: "pool_vibes",
+    caption: "Pool day 💦 #summer #poolside #relax",
+    song: "Summer Splash",
+    likes: 67800,
+    comments: 1540,
   }
 ];
 
@@ -74,15 +92,13 @@ function FeedList() {
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   
-  // Wheel handling with improved tracking
-  const wheelEvents = useRef<WheelEvent[]>([]);
+  // Wheel event handling
   const isWheeling = useRef(false);
-  const wheelReleaseTimer = useRef<any>(null);
-  const inertiaFrameId = useRef<number | null>(null);
-  
-  // Track scroll velocity for dynamic sensitivity
-  const lastScrollTime = useRef(0);
-  const scrollVelocity = useRef(0);
+  const wheelTimeout = useRef<any>(null);
+  const wheelLockout = useRef(false);
+  const wheelDirection = useRef<'up' | 'down' | null>(null);
+  const wheelCount = useRef(0);
+  const lastWheelEvent = useRef<WheelEvent | null>(null);
   
   // Set up container height
   useEffect(() => {
@@ -95,11 +111,8 @@ function FeedList() {
     window.addEventListener('resize', updateHeight);
     return () => {
       window.removeEventListener('resize', updateHeight);
-      if (wheelReleaseTimer.current) {
-        clearTimeout(wheelReleaseTimer.current);
-      }
-      if (inertiaFrameId.current) {
-        cancelAnimationFrame(inertiaFrameId.current);
+      if (wheelTimeout.current) {
+        clearTimeout(wheelTimeout.current);
       }
     };
   }, []);
@@ -121,41 +134,11 @@ function FeedList() {
     }
   };
   
-  // Smooth snap back animation
-  const animateSnapBack = () => {
-    const startOffset = offset;
-    const startTime = performance.now();
-    const duration = 300;
-    
-    const animateFrame = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-      const newOffset = startOffset * (1 - easedProgress);
-      
-      setOffset(newOffset);
-      
-      if (progress < 1) {
-        inertiaFrameId.current = requestAnimationFrame(animateFrame);
-      } else {
-        setOffset(0);
-        inertiaFrameId.current = null;
-      }
-    };
-    
-    inertiaFrameId.current = requestAnimationFrame(animateFrame);
-  };
-  
   // Go to next video
   const goToNextVideo = () => {
     if (currentVideoIndex < VIDEOS.length - 1) {
-      if (inertiaFrameId.current) {
-        cancelAnimationFrame(inertiaFrameId.current);
-        inertiaFrameId.current = null;
-      }
-      
       setOffset(0);
-      setCurrentVideoIndex(prev => prev + 1);
+      setCurrentVideoIndex(currentVideoIndex + 1);
     } else {
       setOffset(0);
     }
@@ -164,135 +147,103 @@ function FeedList() {
   // Go to previous video
   const goToPrevVideo = () => {
     if (currentVideoIndex > 0) {
-      if (inertiaFrameId.current) {
-        cancelAnimationFrame(inertiaFrameId.current);
-        inertiaFrameId.current = null;
-      }
-      
       setOffset(0);
-      setCurrentVideoIndex(prev => prev - 1);
+      setCurrentVideoIndex(currentVideoIndex - 1);
     } else {
       setOffset(0);
     }
   };
-  
-  // Process wheel event when scrolling stops
-  const handleWheelRelease = () => {
-    if (wheelEvents.current.length === 0) return;
-    
-    if (inertiaFrameId.current) {
-      cancelAnimationFrame(inertiaFrameId.current);
-      inertiaFrameId.current = null;
-    }
-    
-    // Calculate average delta to determine direction and momentum
-    const recentEvents = wheelEvents.current.slice(-5);
-    const totalDelta = recentEvents.reduce((sum, event) => sum + event.deltaY, 0);
-    const avgDelta = totalDelta / recentEvents.length;
-    const direction = avgDelta > 0 ? 'down' : 'up';
-    
-    // Determine if we've scrolled enough to change videos
-    // For trackpad gestures, use momentum-based threshold
-    const isTrackpad = recentEvents.some(evt => Math.abs(evt.deltaY) < 30);
-    const threshold = containerHeight * (isTrackpad ? 0.2 : 0.1);
-    
-    if (Math.abs(offset) > threshold) {
-      if (offset > 0 && canScrollInDirection('up')) {
-        goToPrevVideo();
-      } else if (offset < 0 && canScrollInDirection('down')) {
-        goToNextVideo();
-      } else {
-        animateSnapBack();
-      }
-    } else {
-      animateSnapBack();
-    }
-    
-    // Reset wheel tracking
-    wheelEvents.current = [];
-    isWheeling.current = false;
-  };
-  
-  // Improved wheel handler for both trackpad and mouse wheel
+
+  // COMPLETELY REWRITTEN wheel handler
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Calculate time since last scroll event
-    const now = performance.now();
-    const timeSinceLastScroll = now - lastScrollTime.current;
-    lastScrollTime.current = now;
+    // Store the most recent event
+    lastWheelEvent.current = e.nativeEvent;
     
-    // Cancel any running animations
-    if (inertiaFrameId.current) {
-      cancelAnimationFrame(inertiaFrameId.current);
-      inertiaFrameId.current = null;
-    }
+    // Detect the input type
+    const isTrackpad = Math.abs(e.deltaY) < 40 || Math.abs(e.deltaX) > 0;
+    const currDirection = e.deltaY > 0 ? 'down' : 'up';
     
-    // Clear previous wheel release timer
-    if (wheelReleaseTimer.current) {
-      clearTimeout(wheelReleaseTimer.current);
-    }
-    
-    // Detect input type (trackpad vs mouse wheel)
-    const isTrackpad = Math.abs(e.deltaY) < 30 || Math.abs(e.deltaX) > 0;
-    const isFastWheel = Math.abs(e.deltaY) > 80;
-    const direction = e.deltaY > 0 ? 'down' : 'up';
-    
-    // For mouse wheel, navigate immediately on fast wheel clicks
-    if (!isTrackpad && isFastWheel) {
-      // Single wheel click = single navigation
-      if (direction === 'down' && canScrollInDirection('down')) {
-        goToNextVideo();
-        return;
-      } else if (direction === 'up' && canScrollInDirection('up')) {
-        goToPrevVideo();
-        return;
-      }
-    }
-    
-    // Store event for trackpad gesture accumulation
-    wheelEvents.current.push(e.nativeEvent);
-    if (wheelEvents.current.length > 30) {
-      wheelEvents.current = wheelEvents.current.slice(-30);
-    }
-    
-    // Mark as actively scrolling
-    isWheeling.current = true;
-    
-    // Apply movement - different handling for trackpad vs mouse wheel
-    if (!canScrollInDirection(direction)) {
-      // Edge case - elastic resistance
-      const elasticFactor = 0.15;
-      let elasticDelta = e.deltaY * -elasticFactor;
-      let newOffset = offset + elasticDelta;
-      
-      // Limit elastic pull
-      const maxElasticPull = containerHeight * 0.15;
-      if (direction === 'up') {
-        newOffset = Math.max(newOffset, -maxElasticPull);
-      } else {
-        newOffset = Math.min(newOffset, maxElasticPull);
+    // For mouse wheel (not trackpad), use a simpler approach that prevents skipping
+    if (!isTrackpad) {
+      // Only process wheel events if we're not in lockout period
+      if (!wheelLockout.current) {
+        // Process only one wheel tick at a time
+        if (currDirection === 'down' && canScrollInDirection('down')) {
+          goToNextVideo();
+          // Set a lockout to prevent multiple navigations
+          wheelLockout.current = true;
+          setTimeout(() => {
+            wheelLockout.current = false;
+          }, 500); // Half second lockout
+        } else if (currDirection === 'up' && canScrollInDirection('up')) {
+          goToPrevVideo();
+          // Set a lockout to prevent multiple navigations
+          wheelLockout.current = true;
+          setTimeout(() => {
+            wheelLockout.current = false;
+          }, 500); // Half second lockout
+        }
       }
       
-      setOffset(newOffset);
-    } else {
-      // Normal scrolling with appropriate sensitivity
-      let sensitivity = isTrackpad ? 1.5 : 5;
-      let newOffset = offset + e.deltaY * -sensitivity;
-      
-      // Apply limits
-      const maxOffset = containerHeight * 0.8;
-      newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
-      
-      setOffset(newOffset);
+      return; // Early return for mouse wheel - we don't need the trackpad logic
     }
     
-    // Set timer to detect when scrolling stops
-    wheelReleaseTimer.current = setTimeout(() => {
-      if (isWheeling.current) {
-        handleWheelRelease();
+    // For trackpad, track continuous movements for visual feedback
+    if (!isWheeling.current) {
+      isWheeling.current = true;
+      wheelDirection.current = currDirection;
+      wheelCount.current = 0;
+    }
+    
+    // Increment wheel count for trackpad sensitivity
+    wheelCount.current += 1;
+    
+    // Calculate visual offset for trackpad
+    let sensitivity = 0.8; // Lower sensitivity for trackpad
+    let newOffset = offset + e.deltaY * -sensitivity;
+    
+    // Apply limits to prevent excessive scrolling
+    const maxOffset = containerHeight * 0.6;
+    newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
+    
+    // Update offset for visual feedback
+    setOffset(newOffset);
+    
+    // Don't change videos during active scrolling - only decide at the end
+    // Clear any existing timeout
+    if (wheelTimeout.current) {
+      clearTimeout(wheelTimeout.current);
+    }
+    
+    // Set new timeout - only trigger navigation when scrolling stops
+    wheelTimeout.current = setTimeout(() => {
+      if (isWheeling.current && wheelDirection.current) {
+        // Decide if we should change videos based on offset
+        const thresholdPercentage = 0.2; // 20% of screen height
+        const threshold = containerHeight * thresholdPercentage;
+        
+        if (Math.abs(offset) > threshold) {
+          if (offset > 0 && canScrollInDirection('up')) {
+            goToPrevVideo();
+          } else if (offset < 0 && canScrollInDirection('down')) {
+            goToNextVideo();
+          } else {
+            // If we can't scroll further, just reset the offset
+            setOffset(0);
+          }
+        } else {
+          // Not enough to change, snap back
+          setOffset(0);
+        }
+        
+        // Reset tracking
+        isWheeling.current = false;
+        wheelDirection.current = null;
+        wheelCount.current = 0;
       }
-    }, isTrackpad ? 250 : 100); // Longer timeout for trackpad
+    }, 300); // Longer timeout for trackpad to allow complete gestures
   };
   
   // Handle keyboard navigation
