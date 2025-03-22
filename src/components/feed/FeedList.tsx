@@ -42,13 +42,11 @@ function FeedList() {
   
   // Trackpad tracking
   const trackpadActive = useRef(false);
+  const touchActive = useRef(false);
   const trackpadDelta = useRef(0);
-  const lastWheelTime = useRef(0);
-  const wheelEvents = useRef<{time: number, deltaY: number}[]>([]);
   
-  // Check if we need to decide navigation
-  const checkNavDecision = useRef(false);
-  const activeTimer = useRef<any>(null);
+  // Ref to the container div for tracking events
+  const containerRef = useRef<HTMLDivElement>(null);
   
   // Set up container height
   useEffect(() => {
@@ -57,23 +55,20 @@ function FeedList() {
     return () => window.removeEventListener('resize', () => setContainerHeight(window.innerHeight));
   }, []);
   
-  // Set up event listeners to detect when trackpad scrolling stops
+  // Set up touch detection
   useEffect(() => {
-    const detectScrollStop = () => {
-      if (!trackpadActive.current) return;
-      
-      // Get the current time
-      const now = performance.now();
-      // Check the time since the last wheel event
-      const timeSinceLastWheel = now - lastWheelTime.current;
-      
-      // If we haven't seen any wheel events for 200ms, consider it stopped
-      if (timeSinceLastWheel > 200) {
-        trackpadActive.current = false;
-        
-        // Make navigation decision
+    // Global handlers for trackpad touch detection
+    const handleTouchStart = () => {
+      touchActive.current = true;
+    };
+    
+    const handleTouchEnd = () => {
+      // Only make navigation decisions on actual touch release
+      if (touchActive.current && trackpadActive.current) {
+        // Calculate threshold for navigation
         const threshold = containerHeight * 0.2;
         
+        // Decide navigation based on offset position
         if (offset > threshold && currentVideoIndex > 0) {
           goToPrevVideo();
         } else if (offset < -threshold && currentVideoIndex < VIDEOS.length - 1) {
@@ -81,13 +76,26 @@ function FeedList() {
         } else {
           setOffset(0);
         }
+        
+        // Reset state
+        trackpadActive.current = false;
       }
+      
+      touchActive.current = false;
     };
     
-    // Check every 100ms
-    const interval = setInterval(detectScrollStop, 100);
+    // Add event listeners for touch detection
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('pointerdown', handleTouchStart);
+    window.addEventListener('pointerup', handleTouchEnd);
     
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('pointerdown', handleTouchStart);
+      window.removeEventListener('pointerup', handleTouchEnd);
+    };
   }, [containerHeight, currentVideoIndex, offset]);
   
   // Toggle mute
@@ -120,36 +128,23 @@ function FeedList() {
     }
   };
   
-  // Wheel handler with proper detection
+  // Wheel handler for both mouse wheel and trackpad
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Record time of this event
-    const now = performance.now();
-    const timeSinceLastWheel = now - lastWheelTime.current;
-    lastWheelTime.current = now;
+    // Detect if this is mouse wheel or trackpad
+    const isMouseWheel = Math.abs(e.deltaY) > 40 && Math.abs(e.deltaX) === 0;
     
-    // Store wheel event
-    wheelEvents.current.push({time: now, deltaY: e.deltaY});
-    if (wheelEvents.current.length > 10) {
-      wheelEvents.current = wheelEvents.current.slice(-10);
-    }
-    
-    // DETECT DEVICE TYPE
-    // Mouse wheel: Large deltaY values, spaced out events
-    // Trackpad: Small deltaY values, rapid succession, sometimes has deltaX
-    const isMouseWheel = Math.abs(e.deltaY) > 40 && Math.abs(e.deltaX) === 0 && timeSinceLastWheel > 100;
-    
-    // HANDLE MOUSE WHEEL
+    // Handle mouse wheel differently
     if (isMouseWheel && !wheelLock.current) {
-      // Navigate immediately for mouse wheel
+      // For mouse wheel, navigate immediately
       if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
         goToNextVideo();
       } else if (e.deltaY < 0 && currentVideoIndex > 0) {
         goToPrevVideo();
       }
       
-      // Lock to prevent skipping videos
+      // Prevent multiple rapid navigations
       wheelLock.current = true;
       setTimeout(() => {
         wheelLock.current = false;
@@ -158,16 +153,17 @@ function FeedList() {
       return;
     }
     
-    // HANDLE TRACKPAD
-    // Mark as active trackpad scrolling
+    // For trackpad, mark as active
     trackpadActive.current = true;
+    
+    // Accumulate movement delta
     trackpadDelta.current += e.deltaY;
     
-    // Calculate visual offset
-    const sensitivity = 0.8;
+    // Calculate visual offset - direct translation of movement
+    const sensitivity = 0.7;
     let newOffset = -trackpadDelta.current * sensitivity;
     
-    // Apply limits
+    // Apply limits to prevent excessive scrolling
     const maxOffset = containerHeight * 0.8;
     newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
     
@@ -177,31 +173,8 @@ function FeedList() {
       newOffset = newOffset * 0.3; // 70% resistance
     }
     
-    // Update visual offset - always follows fingers exactly
+    // Update visual offset - directly follows finger position
     setOffset(newOffset);
-    
-    // Reset any active timer
-    if (activeTimer.current) {
-      clearTimeout(activeTimer.current);
-    }
-    
-    // Set a new timer to double-check after wheel events stop
-    activeTimer.current = setTimeout(() => {
-      if (trackpadActive.current) {
-        // If we haven't seen any events for a while, make a decision
-        const threshold = containerHeight * 0.2;
-        
-        if (offset > threshold && currentVideoIndex > 0) {
-          goToPrevVideo();
-        } else if (offset < -threshold && currentVideoIndex < VIDEOS.length - 1) {
-          goToNextVideo();
-        } else {
-          setOffset(0);
-        }
-        
-        trackpadActive.current = false;
-      }
-    }, 300);
   };
   
   // Handle keyboard navigation
@@ -226,6 +199,7 @@ function FeedList() {
   
   return (
     <div 
+      ref={containerRef}
       className="h-screen w-full overflow-hidden bg-black relative"
       onWheel={handleWheel}
     >
