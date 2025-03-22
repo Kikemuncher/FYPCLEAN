@@ -92,13 +92,16 @@ function FeedList() {
   // Video element references
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   
-  // Wheel event handling
-  const isWheeling = useRef(false);
-  const wheelTimeout = useRef<any>(null);
+  // Track if user is actively scrolling
+  const isActivelyScrolling = useRef(false);
+  
+  // Mouse wheel lockout to prevent skipping
   const wheelLockout = useRef(false);
-  const wheelDirection = useRef<'up' | 'down' | null>(null);
-  const wheelCount = useRef(0);
-  const lastWheelEvent = useRef<WheelEvent | null>(null);
+  
+  // Detect trackpad - we only look for continuous small movements
+  const wheelEvents = useRef<number[]>([]);
+  const lastWheelTime = useRef(0);
+  const wheelTimer = useRef<any>(null);
   
   // Set up container height
   useEffect(() => {
@@ -111,8 +114,8 @@ function FeedList() {
     window.addEventListener('resize', updateHeight);
     return () => {
       window.removeEventListener('resize', updateHeight);
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
+      if (wheelTimer.current) {
+        clearTimeout(wheelTimer.current);
       }
     };
   }, []);
@@ -153,76 +156,88 @@ function FeedList() {
       setOffset(0);
     }
   };
-
-  // COMPLETELY REWRITTEN wheel handler
+  
+  // Key wheel event handler - detects trackpad vs mouse wheel
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Store the most recent event
-    lastWheelEvent.current = e.nativeEvent;
+    // Record this event time to detect gaps
+    const now = performance.now();
+    wheelEvents.current.push(now);
     
-    // Detect the input type
-    const isTrackpad = Math.abs(e.deltaY) < 40 || Math.abs(e.deltaX) > 0;
-    const currDirection = e.deltaY > 0 ? 'down' : 'up';
+    // Keep only recent events
+    if (wheelEvents.current.length > 10) {
+      wheelEvents.current = wheelEvents.current.slice(-10);
+    }
     
-    // For mouse wheel (not trackpad), use a simpler approach that prevents skipping
+    // Check for continuous events (trackpad) vs discrete events (mouse wheel)
+    const timeSinceLastEvent = now - lastWheelTime.current;
+    lastWheelTime.current = now;
+    
+    // Detect trackpad - rapid continuous events with small deltaY
+    const isTrackpad = timeSinceLastEvent < 50 && Math.abs(e.deltaY) < 40;
+    
+    // Mark as actively scrolling
+    isActivelyScrolling.current = true;
+    
+    // Handle mouse wheel differently from trackpad
     if (!isTrackpad) {
-      // Only process wheel events if we're not in lockout period
+      // For mouse wheel (not trackpad), we want to navigate on each distinct "click"
       if (!wheelLockout.current) {
-        // Process only one wheel tick at a time
-        if (currDirection === 'down' && canScrollInDirection('down')) {
+        const direction = e.deltaY > 0 ? 'down' : 'up';
+        
+        if (direction === 'down' && canScrollInDirection('down')) {
           goToNextVideo();
-          // Set a lockout to prevent multiple navigations
+          // Lock out briefly to prevent double-fires
           wheelLockout.current = true;
           setTimeout(() => {
             wheelLockout.current = false;
-          }, 500); // Half second lockout
-        } else if (currDirection === 'up' && canScrollInDirection('up')) {
+          }, 500);
+        } else if (direction === 'up' && canScrollInDirection('up')) {
           goToPrevVideo();
-          // Set a lockout to prevent multiple navigations
+          // Lock out briefly to prevent double-fires
           wheelLockout.current = true;
           setTimeout(() => {
             wheelLockout.current = false;
-          }, 500); // Half second lockout
+          }, 500);
         }
       }
+    } else {
+      // For trackpad, we want smooth following during gesture and only decide on release
       
-      return; // Early return for mouse wheel - we don't need the trackpad logic
-    }
-    
-    // For trackpad, track continuous movements for visual feedback
-    if (!isWheeling.current) {
-      isWheeling.current = true;
-      wheelDirection.current = currDirection;
-      wheelCount.current = 0;
-    }
-    
-    // Increment wheel count for trackpad sensitivity
-    wheelCount.current += 1;
-    
-    // Calculate visual offset for trackpad
-    let sensitivity = 0.8; // Lower sensitivity for trackpad
-    let newOffset = offset + e.deltaY * -sensitivity;
-    
-    // Apply limits to prevent excessive scrolling
-    const maxOffset = containerHeight * 0.6;
-    newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
-    
-    // Update offset for visual feedback
-    setOffset(newOffset);
-    
-    // Don't change videos during active scrolling - only decide at the end
-    // Clear any existing timeout
-    if (wheelTimeout.current) {
-      clearTimeout(wheelTimeout.current);
-    }
-    
-    // Set new timeout - only trigger navigation when scrolling stops
-    wheelTimeout.current = setTimeout(() => {
-      if (isWheeling.current && wheelDirection.current) {
-        // Decide if we should change videos based on offset
-        const thresholdPercentage = 0.2; // 20% of screen height
-        const threshold = containerHeight * thresholdPercentage;
+      // Calculate visual offset for feedback
+      const direction = e.deltaY > 0 ? 'down' : 'up';
+      let sensitivity = 1.0; // Adjust as needed
+      
+      // Apply different sensitivity when near boundaries
+      if (!canScrollInDirection(direction)) {
+        // Elastic resistance at boundaries
+        sensitivity = 0.2;
+      }
+      
+      // Calculate new offset
+      let newOffset = offset + (e.deltaY * -sensitivity);
+      
+      // Apply limits to prevent excessive scrolling
+      const maxOffset = containerHeight * 0.8;
+      newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
+      
+      // Update offset for visual feedback
+      setOffset(newOffset);
+      
+      // Clear any existing wheel timer
+      if (wheelTimer.current) {
+        clearTimeout(wheelTimer.current);
+      }
+      
+      // THE KEY CHANGE: Only decide navigation when user STOPS scrolling
+      // This timeout is reset every time a new wheel event comes in
+      wheelTimer.current = setTimeout(() => {
+        // This only executes when user has stopped scrolling for a while
+        isActivelyScrolling.current = false;
+        
+        // Only check for navigation once scrolling has completely stopped
+        const threshold = containerHeight * 0.25; // 25% of screen height
         
         if (Math.abs(offset) > threshold) {
           if (offset > 0 && canScrollInDirection('up')) {
@@ -230,20 +245,15 @@ function FeedList() {
           } else if (offset < 0 && canScrollInDirection('down')) {
             goToNextVideo();
           } else {
-            // If we can't scroll further, just reset the offset
+            // Reset offset if we can't scroll further
             setOffset(0);
           }
         } else {
-          // Not enough to change, snap back
+          // Not enough to navigate, reset the offset
           setOffset(0);
         }
-        
-        // Reset tracking
-        isWheeling.current = false;
-        wheelDirection.current = null;
-        wheelCount.current = 0;
-      }
-    }, 300); // Longer timeout for trackpad to allow complete gestures
+      }, 150); // This timer is reset if another wheel event happens
+    }
   };
   
   // Handle keyboard navigation
