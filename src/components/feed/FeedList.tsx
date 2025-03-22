@@ -62,17 +62,17 @@ const VIDEOS: Video[] = [
   }
 ];
 
-function FeedList(): JSX.Element {
-  // Format function for numbers
-  const formatCount = (count: number): string => {
-    if (count >= 1000000) {
-      return (count / 1000000).toFixed(1) + 'M';
-    } else if (count >= 1000) {
-      return (count / 1000).toFixed(1) + 'K';
-    }
-    return count.toString();
-  };
+// Format function for numbers
+const formatCount = (count: number): string => {
+  if (count >= 1000000) {
+    return (count / 1000000).toFixed(1) + 'M';
+  } else if (count >= 1000) {
+    return (count / 1000).toFixed(1) + 'K';
+  }
+  return count.toString();
+};
 
+function FeedList(): JSX.Element {
   // Current active video
   const [currentVideoIndex, setCurrentVideoIndex] = useState<number>(0);
   
@@ -102,9 +102,9 @@ function FeedList(): JSX.Element {
   // Wheel handling with improved tracking
   const wheelEvents = useRef<WheelEvent[]>([]);
   const isWheeling = useRef<boolean>(false);
-  const wheelDetectionTimer = useRef<any>(null);
-  const wheelReleaseTimer = useRef<any>(null);
-  const inertiaFrameId = useRef<any>(null);
+  const wheelDetectionTimer = useRef<NodeJS.Timeout | null>(null);
+  const wheelReleaseTimer = useRef<NodeJS.Timeout | null>(null);
+  const inertiaFrameId = useRef<number | null>(null);
   
   // Track scroll velocity for dynamic sensitivity
   const lastScrollTime = useRef<number>(0);
@@ -168,7 +168,10 @@ function FeedList(): JSX.Element {
         if (videoTimeRefs.current[videoId] !== undefined) {
           currentVideo.currentTime = videoTimeRefs.current[videoId];
         }
-        currentVideo.play();
+        currentVideo.play().catch(() => {
+          // Handle any autoplay restrictions
+          console.log("Autoplay prevented, user interaction needed");
+        });
         setIsPaused(false);
       } else {
         // Save the current position before pausing
@@ -229,6 +232,42 @@ function FeedList(): JSX.Element {
     }
   };
   
+  // Improved snap back animation with optimized timing
+  const animateSnapBack = () => {
+    const startOffset = offset;
+    const startTime = performance.now();
+    
+    // Adjust timing based on distance to make small adjustments feel snappier
+    const offsetRatio = Math.abs(startOffset) / containerHeight;
+    const duration = Math.max(150, Math.min(300, 300 * offsetRatio)); // Between 150-300ms
+    
+    const animateFrame = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Easing function - ease out cubic
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+      
+      // Calculate new offset
+      const newOffset = startOffset * (1 - easedProgress);
+      
+      // Update offset
+      setOffset(newOffset);
+      
+      // Continue animation if not complete
+      if (progress < 1) {
+        inertiaFrameId.current = requestAnimationFrame(animateFrame);
+      } else {
+        // Animation complete
+        setOffset(0);
+        inertiaFrameId.current = null;
+      }
+    };
+    
+    // Start animation
+    inertiaFrameId.current = requestAnimationFrame(animateFrame);
+  };
+  
   // Go to next video with improved immediate response
   const goToNextVideo = () => {
     if (currentVideoIndex < VIDEOS.length - 1) {
@@ -271,42 +310,6 @@ function FeedList(): JSX.Element {
       // Snap back to current video instantly without animation
       setOffset(0);
     }
-  };
-  
-  // Improved snap back animation with optimized timing
-  const animateSnapBack = () => {
-    const startOffset = offset;
-    const startTime = performance.now();
-    
-    // Adjust timing based on distance to make small adjustments feel snappier
-    const offsetRatio = Math.abs(startOffset) / containerHeight;
-    const duration = Math.max(150, Math.min(300, 300 * offsetRatio)); // Between 150-300ms
-    
-    const animateFrame = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      // Easing function - ease out cubic
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-      
-      // Calculate new offset
-      const newOffset = startOffset * (1 - easedProgress);
-      
-      // Update offset
-      setOffset(newOffset);
-      
-      // Continue animation if not complete
-      if (progress < 1) {
-        inertiaFrameId.current = requestAnimationFrame(animateFrame);
-      } else {
-        // Animation complete
-        setOffset(0);
-        inertiaFrameId.current = null;
-      }
-    };
-    
-    // Start animation
-    inertiaFrameId.current = requestAnimationFrame(animateFrame);
   };
   
   // Improved wheel release handler with better snap decision logic
@@ -377,9 +380,11 @@ function FeedList(): JSX.Element {
     // Clear previous timers
     if (wheelDetectionTimer.current) {
       clearTimeout(wheelDetectionTimer.current);
+      wheelDetectionTimer.current = null;
     }
     if (wheelReleaseTimer.current) {
       clearTimeout(wheelReleaseTimer.current);
+      wheelReleaseTimer.current = null;
     }
     
     // Store wheel event for later processing
@@ -721,6 +726,42 @@ function FeedList(): JSX.Element {
                           </div>
                           <span className="text-white text-xs mt-1">{formatCount(video.likes)}</span>
                         </button>
+
+      {/* Video counter indicator */}
+      <div className="absolute top-4 left-4 bg-black/30 rounded-full px-3 py-1 z-30">
+        <span className="text-white text-sm">{currentVideoIndex + 1} / {VIDEOS.length}</span>
+      </div>
+      
+      {/* Progress dots */}
+      <div className="absolute top-14 left-0 right-0 flex justify-center z-30">
+        <div className="flex space-x-1">
+          {VIDEOS.map((_, index) => (
+            <div 
+              key={index}
+              className={`rounded-full h-1.5 ${
+                index === currentVideoIndex 
+                  ? 'w-4 bg-white' 
+                  : 'w-1.5 bg-white/50'
+              } transition-all duration-150`}
+            />
+          ))}
+        </div>
+      </div>
+      
+      {/* Scroll guide indicator - only show if there are more videos below */}
+      {VIDEOS.length > 1 && currentVideoIndex === 0 && (
+        <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/30 px-3 py-1 rounded-full z-30 flex items-center">
+          <span className="mr-2">Swipe up for more</span>
+          <svg className="h-4 w-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default FeedList;
                         
                         <button className="flex flex-col items-center">
                           <div className="rounded-full bg-black/20 p-2">
@@ -747,10 +788,5 @@ function FeedList(): JSX.Element {
       >
         {isMuted ? (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-          </svg>h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-          </svg>
-        ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" className="
