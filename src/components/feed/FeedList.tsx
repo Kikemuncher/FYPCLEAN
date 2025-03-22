@@ -30,16 +30,22 @@ const VIDEOS = [
 function FeedList() {
   // Current active video
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  // For visual feedback during scrolling
+  // Visual offset
   const [offset, setOffset] = useState(0);
   // Container height
   const [containerHeight, setContainerHeight] = useState(0);
   // Video playing state
   const [isMuted, setIsMuted] = useState(false);
   
-  // Simple mouse wheel handling
-  const wheelTimeout = useRef<any>(null);
+  // Mouse wheel lock
   const wheelLock = useRef(false);
+  
+  // For trackpad release detection
+  const isScrolling = useRef(false);
+  const lastWheelTime = useRef(0);
+  const wheelEvents = useRef<Array<{time: number, deltaY: number}>>([]);
+  const releaseCheckTimer = useRef<any>(null);
+  const releaseDetected = useRef(false);
   
   // Set up container height
   useEffect(() => {
@@ -47,7 +53,7 @@ function FeedList() {
     window.addEventListener('resize', () => setContainerHeight(window.innerHeight));
     return () => {
       window.removeEventListener('resize', () => setContainerHeight(window.innerHeight));
-      if (wheelTimeout.current) clearTimeout(wheelTimeout.current);
+      if (releaseCheckTimer.current) clearInterval(releaseCheckTimer.current);
     };
   }, []);
   
@@ -76,14 +82,69 @@ function FeedList() {
     }
   };
   
-  // THE SIMPLEST POSSIBLE WHEEL HANDLER
+  // DETECT WHEN TRACKPAD IS RELEASED
+  // This starts a polling interval when scrolling begins
+  const startReleaseDetection = () => {
+    // If we already have a timer running, don't start another
+    if (releaseCheckTimer.current) return;
+    
+    // Reset the release detected flag
+    releaseDetected.current = false;
+    
+    // Start checking for release every 100ms
+    releaseCheckTimer.current = setInterval(() => {
+      const now = performance.now();
+      const timeSinceLastWheel = now - lastWheelTime.current;
+      
+      // If it's been 200ms since the last wheel event, consider it a release
+      if (timeSinceLastWheel > 200 && isScrolling.current && !releaseDetected.current) {
+        // Mark as released so we don't trigger multiple times
+        releaseDetected.current = true;
+        
+        // Check if we should navigate
+        const threshold = containerHeight * 0.2;
+        
+        if (offset > threshold && currentVideoIndex > 0) {
+          // Go to previous
+          goToPrevVideo();
+        } else if (offset < -threshold && currentVideoIndex < VIDEOS.length - 1) {
+          // Go to next
+          goToNextVideo();
+        } else {
+          // Not enough to navigate, snap back
+          setOffset(0);
+        }
+        
+        // Stop scrolling
+        isScrolling.current = false;
+        
+        // Clear the interval since we're done
+        clearInterval(releaseCheckTimer.current);
+        releaseCheckTimer.current = null;
+      }
+    }, 100);
+  };
+  
+  // Handle wheel events
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     
-    // Mouse wheel detection (large delta, not trackpad)
-    const isMouseWheel = Math.abs(e.deltaY) > 50;
+    // Record the time of this event
+    const now = performance.now();
+    lastWheelTime.current = now;
     
-    // Handle mouse wheel differently
+    // Store the wheel event
+    wheelEvents.current.push({time: now, deltaY: e.deltaY});
+    
+    // Limit stored events to prevent memory issues
+    if (wheelEvents.current.length > 10) {
+      wheelEvents.current = wheelEvents.current.slice(-10);
+    }
+    
+    // Detect if this is mouse wheel or trackpad
+    const isMouseWheel = Math.abs(e.deltaY) > 40;
+    
+    // Handle mouse wheel
     if (isMouseWheel && !wheelLock.current) {
       // For mouse wheel, navigate immediately
       if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
@@ -101,43 +162,30 @@ function FeedList() {
       return;
     }
     
-    // TRACKPAD HANDLING: Just update offset
-    // Apply a multiplier for sensitivity
-    let newOffset = offset - e.deltaY * 0.5;
+    // Track that we're actively scrolling with trackpad
+    if (!isScrolling.current) {
+      isScrolling.current = true;
+      startReleaseDetection();
+    }
     
-    // Limit maximum scroll distance
-    const maxScroll = containerHeight * 0.8;
-    newOffset = Math.max(Math.min(newOffset, maxScroll), -maxScroll);
+    // Update visual offset for trackpad
+    // Calculate new offset based on current wheel delta
+    const sensitivity = 0.6;
+    let newOffset = offset - e.deltaY * sensitivity;
+    
+    // Apply limits to prevent excessive scrolling
+    const maxOffset = containerHeight * 0.8;
+    newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
     
     // Apply resistance at boundaries
     if ((newOffset > 0 && currentVideoIndex === 0) || 
         (newOffset < 0 && currentVideoIndex === VIDEOS.length - 1)) {
-      newOffset = newOffset * 0.3; // 70% resistance at edges
+      // 70% resistance at edges
+      newOffset = newOffset * 0.3;
     }
     
-    // Update visual offset
+    // Update visual offset - always follow the trackpad
     setOffset(newOffset);
-    
-    // Clear any existing timer
-    if (wheelTimeout.current) {
-      clearTimeout(wheelTimeout.current);
-    }
-    
-    // Set a new timer for navigation decision
-    // This keeps getting reset as long as you're scrolling
-    wheelTimeout.current = setTimeout(() => {
-      // Only run when scrolling completely stops
-      const threshold = containerHeight * 0.2;
-      
-      if (offset > threshold && currentVideoIndex > 0) {
-        goToPrevVideo();
-      } else if (offset < -threshold && currentVideoIndex < VIDEOS.length - 1) {
-        goToNextVideo();
-      } else {
-        // Snap back
-        setOffset(0);
-      }
-    }, 300); // Longer delay to ensure user is done scrolling
   };
   
   return (
