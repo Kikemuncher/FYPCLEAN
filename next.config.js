@@ -2,6 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  // Disable static rendering for the entire app to avoid auth provider issues
+  output: 'standalone',
   images: {
     domains: [
       "placehold.co", 
