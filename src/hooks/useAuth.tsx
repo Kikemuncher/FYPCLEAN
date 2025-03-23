@@ -13,7 +13,8 @@ import {
   setDoc, 
   getDoc, 
   serverTimestamp, 
-  updateDoc 
+  updateDoc,
+  writeBatch
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User, UserProfile } from '@/types/user';
@@ -120,8 +121,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isCreator: false
       };
       
-      // Save user data to Firestore
-      const batch = db.batch();
+      // Save user data to Firestore using batch
+      const batch = writeBatch(db);
       
       // Save user record
       const userDocRef = doc(db, 'users', firebaseUser.uid);
