@@ -1,9 +1,10 @@
+// File: next.config.js (in the project root directory)
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  // Change standalone to export for static site generation
-  output: 'export',
+  // Remove the 'output: export' line
   images: {
     domains: [
       "placehold.co", 
@@ -11,7 +12,6 @@ const nextConfig = {
       "randomuser.me", 
       "assets.mixkit.co"
     ],
-    unoptimized: true, // Required for export
   },
   webpack: (config, { isServer }) => {
     // Fix for the private class fields syntax issue
@@ -24,6 +24,20 @@ const nextConfig = {
       };
     }
     return config;
+  },
+  // Add this to ensure videos can load from various sources
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
+        ],
+      },
+    ];
   },
 };
 
