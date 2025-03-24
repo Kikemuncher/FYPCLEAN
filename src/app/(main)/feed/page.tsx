@@ -1,4 +1,4 @@
-// src/app/feed/page.tsx
+// src/app/(main)/feed/page.tsx
 "use client";
 
 import { useEffect } from 'react';
