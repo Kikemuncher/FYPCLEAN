@@ -20,7 +20,7 @@ import {
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   
   const isActive = (path: string): boolean => {
     if (path === '/' && pathname === '/') return true;
@@ -81,7 +81,7 @@ export default function BottomNav() {
         </Link>
         
         <Link 
-          href={currentUser ? `/profile/${currentUser.username || currentUser.uid}` : "/auth/login"} 
+          href={currentUser ? `/profile/${userProfile?.username || currentUser.uid}` : "/auth/login"} 
           className="flex flex-col items-center justify-center w-full h-full"
         >
           <div className="flex flex-col items-center justify-center">
