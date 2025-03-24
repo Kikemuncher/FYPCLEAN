@@ -1,40 +1,41 @@
-// src/app/(main)/page.tsx
-"use client";
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  swcMinify: true,
+  images: {
+    domains: [
+      "placehold.co", 
+      "i.imgur.com", 
+      "randomuser.me", 
+      "assets.mixkit.co"
+    ],
+  },
+  webpack: (config, { isServer }) => {
+    // Fix for the private class fields syntax issue
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+      };
+    }
+    return config;
+  },
+  // Add this to ensure videos can load from various sources
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
+        ],
+      },
+    ];
+  },
+};
 
-import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
-
-// Import FeedList component with no SSR to prevent hydration issues
-const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-screen w-full bg-black">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
-    </div>
-  ),
-});
-
-export default function Home(): JSX.Element {
-  // Track whether we're in the browser
-  const [isMounted, setIsMounted] = useState<boolean>(false);
-
-  // Set mounted state after component mounts
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // Only render FeedList on the client to avoid hydration errors
-  return (
-    <main className="min-h-screen flex justify-center bg-black">
-      <div className="max-w-[500px] w-full">
-        {isMounted ? (
-          <FeedList />
-        ) : (
-          <div className="flex items-center justify-center h-screen w-full bg-black">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
+module.exports = nextConfig;
