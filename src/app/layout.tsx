@@ -1,3 +1,4 @@
+// src/app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
@@ -6,8 +7,8 @@ import Providers from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "TikTok FYP Clone",
-  description: "A clone of the TikTok For You Page feed",
+  title: "TikTok Clone",
+  description: "A TikTok-style social media app",
 };
 
 export default function RootLayout({
