@@ -9,13 +9,15 @@ type AuthWrapperProps = {
   requireAuth?: boolean;
   redirectIfAuthenticated?: boolean;
   redirectPath?: string;
+  loginPath?: string;
 };
 
 export function AuthWrapper({ 
   children, 
   requireAuth = false,
   redirectIfAuthenticated = false,
-  redirectPath = '/'
+  redirectPath = '/',
+  loginPath = '/auth/login'
 }: AuthWrapperProps) {
   const { currentUser, loading } = useAuth();
   const router = useRouter();
@@ -24,13 +26,13 @@ export function AuthWrapper({
     if (!loading) {
       if (requireAuth && !currentUser) {
         // Redirect to login if authentication is required but user is not logged in
-        router.push('/login');
+        router.push(loginPath);
       } else if (redirectIfAuthenticated && currentUser) {
         // Redirect away if user is authenticated but shouldn't be on this page
         router.push(redirectPath);
       }
     }
-  }, [currentUser, loading, requireAuth, redirectIfAuthenticated, redirectPath, router]);
+  }, [currentUser, loading, requireAuth, redirectIfAuthenticated, redirectPath, loginPath, router]);
 
   // Show loading state while checking auth
   if (loading) {
