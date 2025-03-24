@@ -1,4 +1,3 @@
-// src/components/layout/BottomNav.tsx
 "use client";
 
 import { usePathname } from 'next/navigation';
@@ -58,7 +57,7 @@ export default function BottomNav() {
           </div>
         </Link>
         
-        <Link href={currentUser ? "/upload" : "/login"} className="flex flex-col items-center justify-center w-full h-full">
+        <Link href={currentUser ? "/upload" : "/auth/login"} className="flex flex-col items-center justify-center w-full h-full">
           <div className="flex flex-col items-center justify-center">
             {isActive('/upload') ? (
               <PlusCircleIconSolid className="h-8 w-8 text-tiktok-pink" />
@@ -82,7 +81,7 @@ export default function BottomNav() {
         </Link>
         
         <Link 
-          href={currentUser ? `/profile/${currentUser.uid}` : "/login"} 
+          href={currentUser ? `/profile/${currentUser.uid}` : "/auth/login"} 
           className="flex flex-col items-center justify-center w-full h-full"
         >
           <div className="flex flex-col items-center justify-center">
