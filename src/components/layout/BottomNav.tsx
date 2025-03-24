@@ -81,7 +81,7 @@ export default function BottomNav() {
         </Link>
         
         <Link 
-          href={currentUser ? `/profile/${currentUser.uid}` : "/auth/login"} 
+          href={currentUser ? `/profile/${currentUser.username || currentUser.uid}` : "/auth/login"} 
           className="flex flex-col items-center justify-center w-full h-full"
         >
           <div className="flex flex-col items-center justify-center">
