@@ -33,7 +33,6 @@ export default function MainLayout({
   
   return (
     <div className="min-h-screen bg-black">
-      {/* Header */}
       {showHeader && (
         <header className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-zinc-800">
           <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
@@ -44,7 +43,9 @@ export default function MainLayout({
                 </svg>
               </Link>
             ) : (
-              <div className="w-10"></div> {/* Empty space for alignment */}
+              <div className="w-10">
+                {/* Spacer */}
+              </div>
             )}
             
             {title && <h1 className="text-white font-bold text-lg">{title}</h1>}
@@ -73,12 +74,10 @@ export default function MainLayout({
         </header>
       )}
       
-      {/* Main content */}
       <main className={`w-full max-w-md mx-auto ${showHeader ? 'pt-14' : ''} ${!hideBottomNav ? 'pb-14' : ''}`}>
         {children}
       </main>
       
-      {/* Bottom navigation */}
       {!hideBottomNav && <BottomNav />}
     </div>
   );
