@@ -1,16 +1,15 @@
-// File: next.config.js (in the project root directory)
-
+// next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  // Remove the 'output: export' line
   images: {
     domains: [
       "placehold.co", 
       "i.imgur.com", 
       "randomuser.me", 
-      "assets.mixkit.co"
+      "assets.mixkit.co",
+      "firebasestorage.googleapis.com" // Add Firebase Storage domain
     ],
   },
   webpack: (config, { isServer }) => {
@@ -25,7 +24,7 @@ const nextConfig = {
     }
     return config;
   },
-  // Add this to ensure videos can load from various sources
+  // CORS headers for video access
   async headers() {
     return [
       {
@@ -38,6 +37,10 @@ const nextConfig = {
         ],
       },
     ];
+  },
+  // Explicitly enable the App Router
+  experimental: {
+    appDir: true,
   },
 };
 
