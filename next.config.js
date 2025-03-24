@@ -38,10 +38,7 @@ const nextConfig = {
       },
     ];
   },
-  // Explicitly enable the App Router
-  experimental: {
-    appDir: true,
-  },
+  // Removed the experimental appDir flag as it's no longer needed
 };
 
 module.exports = nextConfig;
