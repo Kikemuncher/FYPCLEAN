@@ -1,270 +1,4 @@
-// src/lib/userService.ts
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  getDoc, 
-  doc, 
-  updateDoc, 
-  setDoc,
-  increment,
-  limit,
-  orderBy,
-  serverTimestamp,
-  Timestamp,
-  deleteDoc
-} from 'firebase/firestore';
-import { db } from './firebase';
-import { User, UserProfile, CreatorApplication, UserRelationship } from '@/types/user';
-
-// Get a user by ID
-export const getUserById = async (uid: string): Promise<User | null> => {
-  try {
-    const docRef = doc(db, 'users', uid);
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      return docSnap.data() as User;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Error getting user by ID:', error);
-    return null;
-  }
-};
-
-// Get a user profile by ID
-export const getUserProfileById = async (uid: string): Promise<UserProfile | null> => {
-  try {
-    const docRef = doc(db, 'userProfiles', uid);
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      return docSnap.data() as UserProfile;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Error getting user profile by ID:', error);
-    return null;
-  }
-};
-
-// Get a user profile by username
-export const getUserProfileByUsername = async (username: string): Promise<UserProfile | null> => {
-  try {
-    // First get UID from username
-    const usernameRef = doc(db, 'usernames', username);
-    const usernameSnap = await getDoc(usernameRef);
-    
-    if (!usernameSnap.exists()) {
-      return null;
-    }
-    
-    const uid = usernameSnap.data().uid;
-    
-    // Now get the profile
-    return await getUserProfileById(uid);
-  } catch (error) {
-    console.error('Error getting user profile by username:', error);
-    return null;
-  }
-};
-
-// Update a user profile
-export const updateUserProfile = async (uid: string, data: Partial<UserProfile>): Promise<boolean> => {
-  try {
-    const profileRef = doc(db, 'userProfiles', uid);
-    
-    await updateDoc(profileRef, {
-      ...data,
-      updatedAt: serverTimestamp()
-    });
-    
-    return true;
-  } catch (error) {
-    console.error('Error updating user profile:', error);
-    return false;
-  }
-};
-
-// Check if a username is available
-export const isUsernameAvailable = async (username: string): Promise<boolean> => {
-  try {
-    const usernameRef = doc(db, 'usernames', username);
-    const usernameSnap = await getDoc(usernameRef);
-    
-    return !usernameSnap.exists();
-  } catch (error) {
-    console.error('Error checking username availability:', error);
-    return false;
-  }
-};
-
-// Follow a user
-export const followUser = async (currentUserUid: string, targetUserUid: string): Promise<boolean> => {
-  try {
-    if (currentUserUid === targetUserUid) {
-      console.error('Cannot follow yourself');
-      return false;
-    }
-    
-    // Create relationship document
-    const relationshipId = `${currentUserUid}_${targetUserUid}`;
-    const relationshipRef = doc(db, 'relationships', relationshipId);
-    
-    // Check if already following
-    const relationshipSnap = await getDoc(relationshipRef);
-    if (relationshipSnap.exists()) {
-      console.error('Already following this user');
-      return false;
-    }
-    
-    // Create relationship
-    const relationship: UserRelationship = {
-      followerId: currentUserUid,
-      followingId: targetUserUid,
-      createdAt: Date.now()
-    };
-    
-    await setDoc(relationshipRef, relationship);
-    
-    // Update follower count for target user
-    const targetProfileRef = doc(db, 'userProfiles', targetUserUid);
-    await updateDoc(targetProfileRef, {
-      followerCount: increment(1)
-    });
-    
-    // Update following count for current user
-    const currentProfileRef = doc(db, 'userProfiles', currentUserUid);
-    await updateDoc(currentProfileRef, {
-      followingCount: increment(1)
-    });
-    
-    return true;
-  } catch (error) {
-    console.error('Error following user:', error);
-    return false;
-  }
-};
-
-// Unfollow a user
-export const unfollowUser = async (currentUserUid: string, targetUserUid: string): Promise<boolean> => {
-  try {
-    // Delete relationship document
-    const relationshipId = `${currentUserUid}_${targetUserUid}`;
-    const relationshipRef = doc(db, 'relationships', relationshipId);
-    
-    // Check if relationship exists
-    const relationshipSnap = await getDoc(relationshipRef);
-    if (!relationshipSnap.exists()) {
-      console.error('Not following this user');
-      return false;
-    }
-    
-    await deleteDoc(relationshipRef);
-    
-    // Update follower count for target user
-    const targetProfileRef = doc(db, 'userProfiles', targetUserUid);
-    await updateDoc(targetProfileRef, {
-      followerCount: increment(-1)
-    });
-    
-    // Update following count for current user
-    const currentProfileRef = doc(db, 'userProfiles', currentUserUid);
-    await updateDoc(currentProfileRef, {
-      followingCount: increment(-1)
-    });
-    
-    return true;
-  } catch (error) {
-    console.error('Error unfollowing user:', error);
-    return false;
-  }
-};
-
-// Check if user is following another user
-export const isFollowing = async (currentUserUid: string, targetUserUid: string): Promise<boolean> => {
-  try {
-    const relationshipId = `${currentUserUid}_${targetUserUid}`;
-    const relationshipRef = doc(db, 'relationships', relationshipId);
-    const relationshipSnap = await getDoc(relationshipRef);
-    
-    return relationshipSnap.exists();
-  } catch (error) {
-    console.error('Error checking follow status:', error);
-    return false;
-  }
-};
-
-// Get followers for a user
-export const getFollowers = async (uid: string, pageSize = 10): Promise<UserProfile[]> => {
-  try {
-    const q = query(
-      collection(db, 'relationships'),
-      where('followingId', '==', uid),
-      orderBy('createdAt', 'desc'),
-      limit(pageSize)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const followerIds = querySnapshot.docs.map(doc => doc.data().followerId);
-    
-    // Get profiles for all followers
-    const followers = await Promise.all(
-      followerIds.map(id => getUserProfileById(id))
-    );
-    
-    return followers.filter(profile => profile !== null) as UserProfile[];
-  } catch (error) {
-    console.error('Error getting followers:', error);
-    return [];
-  }
-};
-
-// Get users that a user is following
-export const getFollowing = async (uid: string, pageSize = 10): Promise<UserProfile[]> => {
-  try {
-    const q = query(
-      collection(db, 'relationships'),
-      where('followerId', '==', uid),
-      orderBy('createdAt', 'desc'),
-      limit(pageSize)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const followingIds = querySnapshot.docs.map(doc => doc.data().followingId);
-    
-    // Get profiles for all following
-    const following = await Promise.all(
-      followingIds.map(id => getUserProfileById(id))
-    );
-    
-    return following.filter(profile => profile !== null) as UserProfile[];
-  } catch (error) {
-    console.error('Error getting following:', error);
-    return [];
-  }
-};
-
-// Submit creator application
-export const submitCreatorApplication = async (application: Omit<CreatorApplication, 'status' | 'submittedAt'>): Promise<boolean> => {
-  try {
-    const appRef = doc(db, 'creatorApplications', application.uid);
-    
-    // Check if already applied
-    const appSnap = await getDoc(appRef);
-    if (appSnap.exists()) {
-      console.error('Application already submitted');
-      return false;
-    }
-    
-    // Create application
-    const creatorApp: CreatorApplication = {
-      ...application,
-      status: 'pending',
+status: 'pending',
       submittedAt: Date.now()
     };
     
@@ -350,6 +84,83 @@ export const processCreatorApplication = async (
 
 // Search for users by username or display name
 export const searchUsers = async (query: string, limit = 10): Promise<UserProfile[]> => {
+  // Mock implementation
+  if (USE_MOCK_AUTH && typeof window !== 'undefined') {
+    try {
+      if (!query || query.length < 2) return [];
+      
+      const searchTerm = query.toLowerCase();
+      const profiles: UserProfile[] = [];
+      
+      // Check current profile
+      const currentProfileStr = localStorage.getItem('mock-auth-profile');
+      if (currentProfileStr) {
+        const currentProfile = JSON.parse(currentProfileStr);
+        if (
+          currentProfile.username.toLowerCase().includes(searchTerm) || 
+          currentProfile.displayName.toLowerCase().includes(searchTerm)
+        ) {
+          profiles.push(currentProfile);
+        }
+      }
+      
+      // Check stored profiles
+      const mockProfilesStr = localStorage.getItem('mock-profiles');
+      if (mockProfilesStr) {
+        const mockProfiles = JSON.parse(mockProfilesStr);
+        mockProfiles.forEach((profile: UserProfile) => {
+          if (
+            profile.username.toLowerCase().includes(searchTerm) || 
+            profile.displayName.toLowerCase().includes(searchTerm)
+          ) {
+            // Avoid duplicates
+            if (!profiles.some(p => p.uid === profile.uid)) {
+              profiles.push(profile);
+            }
+          }
+        });
+      }
+      
+      // Always include test user in search results if it matches
+      const testUser = {
+        uid: 'mock-test-user',
+        username: 'testuser',
+        displayName: 'Test User',
+        bio: 'This is a test user for development',
+        photoURL: 'https://placehold.co/400/gray/white?text=User',
+        coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
+        followerCount: 250,
+        followingCount: 120,
+        videoCount: 15,
+        likeCount: 1800,
+        links: {
+          instagram: 'testuser',
+          twitter: 'testuser',
+          youtube: 'testuser',
+          website: 'https://example.com'
+        },
+        createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
+        isVerified: true,
+        isCreator: true
+      };
+      
+      if (
+        'testuser'.includes(searchTerm) || 
+        'test user'.includes(searchTerm)
+      ) {
+        if (!profiles.some(p => p.uid === 'mock-test-user')) {
+          profiles.push(testUser);
+        }
+      }
+      
+      return profiles.slice(0, limit);
+    } catch (error) {
+      console.error('Error in mock searchUsers:', error);
+      return [];
+    }
+  }
+  
+  // Original Firebase implementation
   try {
     if (!query || query.length < 2) return [];
     
