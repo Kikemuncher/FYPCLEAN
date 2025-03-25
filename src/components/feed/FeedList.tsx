@@ -13,7 +13,7 @@ const VIDEOS = [
     song: "Holiday Vibes",
     userAvatar: "https://randomuser.me/api/portraits/women/44.jpg",
     likes: 45600,
-    comments: 1230
+    comments: 1230,
   },
   {
     id: "video2",
@@ -23,7 +23,7 @@ const VIDEOS = [
     song: "Nature Sounds",
     userAvatar: "https://randomuser.me/api/portraits/women/65.jpg",
     likes: 34500,
-    comments: 980
+    comments: 980,
   },
   {
     id: "video3",
@@ -33,8 +33,8 @@ const VIDEOS = [
     song: "Neon Dreams",
     userAvatar: "https://randomuser.me/api/portraits/women/22.jpg",
     likes: 78900,
-    comments: 2340
-  }
+    comments: 2340,
+  },
 ];
 
 function FeedList() {
@@ -58,7 +58,7 @@ function FeedList() {
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (wheelLock.current) return;
-    
+
     wheelLock.current = true;
 
     if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
@@ -110,9 +110,15 @@ function FeedList() {
           {VIDEOS.map((video, index) => {
             const isVisible = index === currentVideoIndex;
             return (
-              <div key={video.id} className="absolute w-full h-full transition-opacity duration-300"
-                style={{ opacity: isVisible ? 1 : 0, zIndex: isVisible ? 1 : 0, pointerEvents: isVisible ? 'auto' : 'none' }}>
-                
+              <div
+                key={video.id}
+                className="absolute w-full h-full transition-opacity duration-300"
+                style={{
+                  opacity: isVisible ? 1 : 0,
+                  zIndex: isVisible ? 1 : 0,
+                  pointerEvents: isVisible ? "auto" : "none",
+                }}
+              >
                 {isVisible && (
                   <div className="relative w-full h-full overflow-hidden">
                     <video
@@ -124,7 +130,7 @@ function FeedList() {
                       preload="auto"
                       autoPlay
                     />
-                    
+
                     {/* Video Information */}
                     <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
                       <div className="flex items-center mb-2">
@@ -135,7 +141,9 @@ function FeedList() {
                         </Link>
                         <div className="ml-3 flex-1">
                           <Link href={`/profile/${video.username}`}>
-                            <p className="font-bold text-white hover:text-tiktok-pink transition-colors">@{video.username}</p>
+                            <p className="font-bold text-white hover:text-tiktok-pink transition-colors">
+                              @{video.username}
+                            </p>
                           </Link>
                           <p className="text-gray-300 text-sm">{video.song}</p>
                         </div>
@@ -154,12 +162,22 @@ function FeedList() {
       <button onClick={toggleMute} className="absolute top-4 right-4 bg-black/30 rounded-full p-2 z-30">
         {isMuted ? (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+            />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
           </svg>
         ) : (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+            />
           </svg>
         )}
       </button>
@@ -167,5 +185,5 @@ function FeedList() {
   );
 }
 
-// ✅ Correctly placed export statement!
+// ✅ **Properly placed export statement**
 export default FeedList;
