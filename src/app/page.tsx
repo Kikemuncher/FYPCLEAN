@@ -1,4 +1,3 @@
-// src/app/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -17,6 +16,18 @@ const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
   ),
 });
 
+// Auth buttons component (for users who are not logged in)
+const AuthButtons = () => (
+  <div className="absolute top-4 right-4 z-30 flex space-x-2">
+    <Link href="/auth/login" className="px-3 py-1.5 bg-zinc-800 rounded-full text-white text-sm font-medium hover:bg-zinc-700 transition-colors">
+      Log In
+    </Link>
+    <Link href="/auth/signup" className="px-3 py-1.5 bg-tiktok-pink rounded-full text-white text-sm font-medium hover:bg-pink-700 transition-colors">
+      Sign Up
+    </Link>
+  </div>
+);
+
 export default function Home(): JSX.Element {
   const { currentUser, loading: authLoading } = useAuth();
   const [isMounted, setIsMounted] = useState<boolean>(false);
@@ -26,24 +37,13 @@ export default function Home(): JSX.Element {
     setIsMounted(true);
   }, []);
 
-  // Auth buttons to show when user is not logged in
-  const AuthButtons = () => (
-    <div className="absolute top-4 right-4 z-30 flex space-x-2">
-      <Link href="/auth/login" className="px-3 py-1.5 bg-zinc-800 rounded-full text-white text-sm font-medium">
-        Log In
-      </Link>
-      <Link href="/auth/signup" className="px-3 py-1.5 bg-tiktok-pink rounded-full text-white text-sm font-medium">
-        Sign Up
-      </Link>
-    </div>
-  );
-
-  // Only render FeedList on the client to avoid hydration errors
   return (
     <MainLayout showHeader={true}>
       <div className="relative">
+        {/* Show Auth Buttons if user is not logged in */}
         {isMounted && !authLoading && !currentUser && <AuthButtons />}
-        
+
+        {/* Render FeedList only on the client */}
         {isMounted ? (
           <FeedList />
         ) : (
