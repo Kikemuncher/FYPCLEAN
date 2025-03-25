@@ -18,7 +18,7 @@ interface MainLayoutProps {
 
 export default function MainLayout({
   children,
-  hideBottomNav = true, // Default to true
+  hideBottomNav = true, // ✅ Default to TRUE (Bottom Nav hidden)
   showHeader = false,
   title = "",
   showBackButton = false,
@@ -28,11 +28,12 @@ export default function MainLayout({
   const pathname = usePathname();
   const { currentUser } = useAuth();
 
-  // Determine if we're on the home page
+  // ✅ Check if the page is the home page
   const isHomePage = pathname === "/";
 
   return (
     <div className="min-h-screen bg-black">
+      {/* ✅ Header Section */}
       {showHeader && (
         <header className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-zinc-800">
           <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
@@ -77,11 +78,12 @@ export default function MainLayout({
         </header>
       )}
 
-      <main className={`w-full max-w-md mx-auto ${showHeader ? "pt-14" : ""} ${!hideBottomNav ? "pb-14" : ""}`}>
+      {/* ✅ Main Content Section */}
+      <main className={`w-full max-w-md mx-auto ${showHeader ? "pt-14" : ""} ${hideBottomNav ? "" : "pb-14"}`}>
         {children}
       </main>
 
-      {/* Bottom Navigation - Only show if hideBottomNav is false */}
+      {/* ✅ Bottom Navigation (Only if `hideBottomNav` is `false`) */}
       {!hideBottomNav && <BottomNav />}
     </div>
   );
