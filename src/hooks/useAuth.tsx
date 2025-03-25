@@ -20,6 +20,9 @@ import { auth, db } from '@/lib/firebase';
 import { User, UserProfile } from '@/types/user';
 import { useRouter } from 'next/navigation';
 
+// Set this to true for offline/mock mode, false for real Firebase authentication
+const USE_MOCK_AUTH = true;
+
 interface AuthContextType {
   currentUser: User | null;
   userProfile: UserProfile | null;
@@ -33,7 +36,278 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Mock authentication implementation
+const useMockAuthState = () => {
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('mock-auth-user');
+      return saved ? JSON.parse(saved) : null;
+    }
+    return null;
+  });
+  
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('mock-auth-profile');
+      return saved ? JSON.parse(saved) : null;
+    }
+    return null;
+  });
+  
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Save data to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (currentUser) {
+        localStorage.setItem('mock-auth-user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('mock-auth-user');
+      }
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (userProfile) {
+        localStorage.setItem('mock-auth-profile', JSON.stringify(userProfile));
+      } else {
+        localStorage.removeItem('mock-auth-profile');
+      }
+    }
+  }, [userProfile]);
+
+  // Mock sign up
+  const signUp = async (email: string, password: string, username: string) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Create mock user
+      const newUser: User = {
+        uid: `mock-${Date.now()}`,
+        email: email,
+        displayName: username,
+        photoURL: null,
+        createdAt: Date.now(),
+        isVerified: false,
+        isCreator: false,
+        isAdmin: false
+      };
+      
+      // Create mock profile
+      const newProfile: UserProfile = {
+        uid: newUser.uid,
+        username: username,
+        displayName: username,
+        bio: '',
+        photoURL: 'https://placehold.co/400/gray/white?text=User',
+        coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
+        followerCount: 0,
+        followingCount: 0,
+        videoCount: 0,
+        likeCount: 0,
+        links: {},
+        createdAt: Date.now(),
+        isVerified: false,
+        isCreator: false
+      };
+      
+      setCurrentUser(newUser);
+      setUserProfile(newProfile);
+      
+      // Redirect to onboarding
+      router.push('/auth/onboarding');
+    } catch (error: any) {
+      setError('Failed to create account');
+      console.error('Mock sign up error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mock sign in
+  const signIn = async (email: string, password: string) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Mock credentials check (default test account)
+      if (email === 'test@example.com' && password === 'password') {
+        // Create mock user
+        const testUser: User = {
+          uid: 'mock-test-user',
+          email: 'test@example.com',
+          displayName: 'Test User',
+          photoURL: 'https://placehold.co/400/gray/white?text=User',
+          createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000, // 30 days ago
+          isVerified: true,
+          isCreator: true,
+          isAdmin: false
+        };
+        
+        // Create mock profile
+        const testProfile: UserProfile = {
+          uid: 'mock-test-user',
+          username: 'testuser',
+          displayName: 'Test User',
+          bio: 'This is a test user for development',
+          photoURL: 'https://placehold.co/400/gray/white?text=User',
+          coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
+          followerCount: 250,
+          followingCount: 120,
+          videoCount: 15,
+          likeCount: 1800,
+          links: {
+            instagram: 'testuser',
+            twitter: 'testuser',
+            youtube: 'testuser',
+            website: 'https://example.com'
+          },
+          createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
+          isVerified: true,
+          isCreator: true
+        };
+        
+        setCurrentUser(testUser);
+        setUserProfile(testProfile);
+        router.push('/');
+      } else {
+        // Check localStorage for any registered mock users
+        const existingUsers = localStorage.getItem('mock-users');
+        if (existingUsers) {
+          const users = JSON.parse(existingUsers);
+          const user = users.find((u: any) => u.email === email);
+          
+          if (user && user.password === password) {
+            setCurrentUser(user);
+            
+            // Get matching profile
+            const existingProfiles = localStorage.getItem('mock-profiles');
+            if (existingProfiles) {
+              const profiles = JSON.parse(existingProfiles);
+              const profile = profiles.find((p: any) => p.uid === user.uid);
+              if (profile) {
+                setUserProfile(profile);
+              }
+            }
+            
+            router.push('/');
+          } else {
+            setError('Invalid email or password');
+          }
+        } else {
+          setError('Invalid email or password');
+        }
+      }
+    } catch (error: any) {
+      setError('Failed to sign in');
+      console.error('Mock sign in error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mock sign out
+  const signOut = async () => {
+    setLoading(true);
+    
+    try {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setCurrentUser(null);
+      setUserProfile(null);
+      router.push('/auth/login');
+    } catch (error: any) {
+      setError('Failed to sign out');
+      console.error('Mock sign out error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mock update profile
+  const updateUserProfile = async (data: Partial<UserProfile>) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      if (!userProfile) {
+        throw new Error('No user profile found');
+      }
+      
+      // Update profile
+      const updatedProfile = {
+        ...userProfile,
+        ...data,
+        updatedAt: Date.now()
+      };
+      
+      setUserProfile(updatedProfile);
+      
+      // Store in mock users array
+      if (typeof window !== 'undefined') {
+        const existingProfiles = localStorage.getItem('mock-profiles');
+        if (existingProfiles) {
+          const profiles = JSON.parse(existingProfiles);
+          const profileIndex = profiles.findIndex((p: any) => p.uid === userProfile.uid);
+          
+          if (profileIndex >= 0) {
+            profiles[profileIndex] = updatedProfile;
+          } else {
+            profiles.push(updatedProfile);
+          }
+          
+          localStorage.setItem('mock-profiles', JSON.stringify(profiles));
+        } else {
+          localStorage.setItem('mock-profiles', JSON.stringify([updatedProfile]));
+        }
+      }
+    } catch (error: any) {
+      setError('Failed to update profile');
+      console.error('Mock update profile error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return {
+    currentUser,
+    userProfile,
+    loading,
+    error,
+    signUp,
+    signIn,
+    signOut,
+    updateUserProfile
+  };
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  // Use mock authentication if flag is set
+  if (USE_MOCK_AUTH) {
+    const mockAuth = useMockAuthState();
+    
+    return (
+      <AuthContext.Provider value={mockAuth}>
+        {children}
+      </AuthContext.Provider>
+    );
+  }
+
+  // Real Firebase authentication starts here
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -143,7 +417,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUserProfile(profileData);
       
       // Redirect to create profile page
-      router.push('/onboarding');
+      router.push('/auth/onboarding');
     } catch (error: any) {
       console.error('Sign up error:', error);
       setError(error.message || 'Failed to sign up');
@@ -180,7 +454,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await firebaseSignOut(auth);
       setCurrentUser(null);
       setUserProfile(null);
-      router.push('/login');
+      router.push('/auth/login');
     } catch (error: any) {
       console.error('Sign out error:', error);
       setError(error.message || 'Failed to sign out');
