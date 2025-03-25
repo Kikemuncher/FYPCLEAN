@@ -6,7 +6,6 @@ import { getUserProfileByUsername } from '@/lib/userService';
 import { UserProfile } from '@/types/user';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
-import MainLayout from '@/components/layout/MainLayout';
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -40,18 +39,18 @@ export default function ProfilePage() {
   // Loading state
   if (loading) {
     return (
-      <MainLayout>
+      <div className="min-h-screen bg-black">
         <div className="flex items-center justify-center h-screen">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
         </div>
-      </MainLayout>
+      </div>
     );
   }
   
   // Profile not found
   if (!profile) {
     return (
-      <MainLayout>
+      <div className="min-h-screen bg-black">
         <div className="flex flex-col items-center justify-center h-screen">
           <h1 className="text-2xl font-bold text-white mb-4">User Not Found</h1>
           <p className="text-gray-400 mb-8">The user you're looking for doesn't exist.</p>
@@ -62,15 +61,30 @@ export default function ProfilePage() {
             Go Home
           </button>
         </div>
-      </MainLayout>
+      </div>
     );
   }
   
   const isCurrentUser = currentUser && currentUser.uid === profile.uid;
   
   return (
-    <MainLayout showHeader={true} title={`@${profile.username}`} showBackButton={true}>
-      <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black">
+      {/* Header */}
+      <div className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-zinc-800">
+        <div className="max-w-md mx-auto px-4 h-14 flex items-center">
+          <button 
+            onClick={() => router.back()}
+            className="text-white p-2 -ml-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+          <h1 className="text-white font-bold text-lg ml-4">{`@${profile.username}`}</h1>
+        </div>
+      </div>
+
+      <div className="pt-14">
         {/* Cover photo */}
         <div className="relative h-36 w-full bg-zinc-800">
           {profile.coverPhotoURL && (
@@ -198,7 +212,7 @@ export default function ProfilePage() {
                   className="text-gray-400 hover:text-white"
                 >
                   <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                 <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
                 </a>
               )}
@@ -215,8 +229,7 @@ export default function ProfilePage() {
             >
               Videos
             </button>
-            <button
-              <button 
+            <button 
               className={`flex-1 py-3 text-center font-medium ${activeTab === 'likes' ? 'text-white border-b-2 border-white' : 'text-gray-400'}`}
               onClick={() => setActiveTab('likes')}
             >
@@ -267,6 +280,55 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
-    </MainLayout>
+      
+      {/* Bottom Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-black z-40">
+        <div className="flex justify-around items-center max-w-lg mx-auto h-14">
+          <a href="/" className="flex flex-col items-center justify-center w-full h-full">
+            <div className="flex flex-col items-center justify-center">
+              <svg className="h-6 w-6 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              <span className="text-xs mt-1 text-gray-400">Home</span>
+            </div>
+          </a>
+          
+          <a href="/discover" className="flex flex-col items-center justify-center w-full h-full">
+            <div className="flex flex-col items-center justify-center">
+              <svg className="h-6 w-6 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <span className="text-xs mt-1 text-gray-400">Discover</span>
+            </div>
+          </a>
+          
+          <a href="/upload" className="flex flex-col items-center justify-center w-full h-full">
+            <div className="flex flex-col items-center justify-center">
+              <svg className="h-8 w-8 text-tiktok-pink" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </a>
+          
+          <a href="/inbox" className="flex flex-col items-center justify-center w-full h-full">
+            <div className="flex flex-col items-center justify-center">
+              <svg className="h-6 w-6 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              <span className="text-xs mt-1 text-gray-400">Inbox</span>
+            </div>
+          </a>
+          
+          <a href="/profile" className="flex flex-col items-center justify-center w-full h-full">
+            <div className="flex flex-col items-center justify-center">
+              <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              </svg>
+              <span className="text-xs mt-1 text-white">Profile</span>
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
   );
 }
