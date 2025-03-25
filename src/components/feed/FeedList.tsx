@@ -40,11 +40,19 @@ const VIDEOS = [
 function FeedList() {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [windowHeight, setWindowHeight] = useState(0);
   const wheelLock = useRef(false);
   const touchStartY = useRef<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Prevent body scrolling while component is active
+  // Track window height for full-screen adjustments
+  useEffect(() => {
+    setWindowHeight(window.innerHeight);
+    const handleResize = () => setWindowHeight(window.innerHeight);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Prevent body scrolling
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => {
@@ -54,11 +62,10 @@ function FeedList() {
 
   const toggleMute = () => setIsMuted((prev) => !prev);
 
-  // Handle wheel scrolling with a short delay to prevent rapid navigation
+  // Handle scroll navigation
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (wheelLock.current) return;
-
     wheelLock.current = true;
 
     if (e.deltaY > 0 && currentVideoIndex < VIDEOS.length - 1) {
@@ -72,13 +79,13 @@ function FeedList() {
     }, 800);
   };
 
-  // Touch event handlers for mobile swipe navigation
+  // Handle touch gestures for mobile
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    e.preventDefault(); // Prevent default scrolling behavior
+    e.preventDefault(); // Prevent default scrolling
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -98,92 +105,82 @@ function FeedList() {
 
   return (
     <div
-      ref={containerRef}
-      className="h-screen w-full overflow-hidden bg-black relative"
+      className="fixed inset-0 bg-black"
+      style={{ height: `${windowHeight}px` }}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Side Navigation */}
+      <div className="fixed left-4 top-1/2 transform -translate-y-1/2 z-50 flex flex-col space-y-6">
+        <button className="flex flex-col items-center">
+          <div className="rounded-full bg-black/30 p-2">
+            <svg className="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2c5.514 0 10 4.486 10 10s-4.486 10-10 10-10-4.486-10-10 4.486-10 10-10zm0-2c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm-3 17v-10l9 5-9 5z"/>
+            </svg>
+          </div>
+          <span className="text-white text-xs mt-1">For You</span>
+        </button>
+      </div>
+
+      {/* Video Container */}
       <div className="w-full h-full flex justify-center">
         <div className="relative w-full max-w-md h-full">
-          {VIDEOS.map((video, index) => {
-            const isVisible = index === currentVideoIndex;
-            return (
-              <div
-                key={video.id}
-                className="absolute w-full h-full transition-opacity duration-300"
-                style={{
-                  opacity: isVisible ? 1 : 0,
-                  zIndex: isVisible ? 1 : 0,
-                  pointerEvents: isVisible ? "auto" : "none",
-                }}
-              >
-                {isVisible && (
-                  <div className="relative w-full h-full overflow-hidden">
-                    <video
-                      src={video.url}
-                      className="absolute top-0 left-0 w-full h-full object-cover"
-                      loop
-                      playsInline
-                      muted={isMuted}
-                      preload="auto"
-                      autoPlay
-                    />
+          {VIDEOS.map((video, index) => (
+            <div
+              key={video.id}
+              className="absolute w-full h-full transition-opacity duration-300"
+              style={{
+                opacity: index === currentVideoIndex ? 1 : 0,
+                zIndex: index === currentVideoIndex ? 1 : 0,
+                pointerEvents: index === currentVideoIndex ? "auto" : "none",
+              }}
+            >
+              {index === currentVideoIndex && (
+                <div className="relative w-full h-full overflow-hidden">
+                  <video
+                    src={video.url}
+                    className="absolute top-0 left-0 w-full h-full object-contain"
+                    loop
+                    playsInline
+                    muted={isMuted}
+                    autoPlay
+                  />
 
-                    {/* Video Information */}
-                    <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
-                      <div className="flex items-center mb-2">
-                        <Link href={`/profile/${video.username}`} className="flex-shrink-0">
-                          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white hover:border-tiktok-pink transition-colors">
-                            <img src={video.userAvatar} alt={video.username} className="w-full h-full object-cover" />
-                          </div>
-                        </Link>
-                        <div className="ml-3 flex-1">
-                          <Link href={`/profile/${video.username}`}>
-                            <p className="font-bold text-white hover:text-tiktok-pink transition-colors">
-                              @{video.username}
-                            </p>
-                          </Link>
-                          <p className="text-gray-300 text-sm">{video.song}</p>
+                  {/* Video Info */}
+                  <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
+                    <div className="flex items-center mb-2">
+                      <Link href={`/profile/${video.username}`} className="flex-shrink-0">
+                        <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white hover:border-tiktok-pink transition-colors">
+                          <img src={video.userAvatar} alt={video.username} className="w-full h-full object-cover" />
                         </div>
+                      </Link>
+                      <div className="ml-3 flex-1">
+                        <Link href={`/profile/${video.username}`}>
+                          <p className="font-bold text-white hover:text-tiktok-pink transition-colors">
+                            @{video.username}
+                          </p>
+                        </Link>
+                        <p className="text-gray-300 text-sm">{video.song}</p>
                       </div>
-                      <p className="text-white text-sm mb-4">{video.caption}</p>
                     </div>
+                    <p className="text-white text-sm mb-4">{video.caption}</p>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Mute Toggle Button */}
+      {/* Mute Button */}
       <button onClick={toggleMute} className="absolute top-4 right-4 bg-black/30 rounded-full p-2 z-30">
-        {isMuted ? (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-            />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-          </svg>
-        ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-            />
-          </svg>
-        )}
+        {isMuted ? "🔇" : "🔊"}
       </button>
     </div>
   );
 }
 
-// ✅ **Properly placed export statement**
+// ✅ Exporting correctly
 export default FeedList;
