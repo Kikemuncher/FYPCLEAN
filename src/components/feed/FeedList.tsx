@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useVideoStore } from "@/store/videoStore";
-import Link from "next/link";
 
 function FeedList() {
   const { videos, currentVideoIndex, setCurrentVideoIndex, fetchVideos } = useVideoStore();
@@ -42,27 +41,6 @@ function FeedList() {
 
   return (
     <div className="fixed inset-0 bg-black" style={{ height: `${windowHeight}px` }} onWheel={handleWheel}>
-      {/* 📌 Side Navigation (Retained) */}
-      <div className="fixed left-6 top-1/2 transform -translate-y-1/2 z-50 flex flex-col space-y-8">
-        <Link href="/" className="flex flex-col items-center group">
-          <div className="rounded-full bg-black/50 p-3 group-hover:bg-black/70 transition-colors">
-            <svg className="h-8 w-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2c5.514 0 10 4.486 10 10s-4.486 10-10 10-10-4.486-10-10 4.486-10 10-10-10 4.486-10 10-10-10 4.486-10-10zm-3 17v-10l9 5-9 5z"/>
-            </svg>
-          </div>
-          <span className="text-white text-sm font-medium mt-2">For You</span>
-        </Link>
-
-        <Link href="/explore" className="flex flex-col items-center group">
-          <div className="rounded-full bg-black/50 p-3 group-hover:bg-black/70 transition-colors">
-            <svg className="h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <span className="text-gray-300 text-sm font-medium mt-2">Explore</span>
-        </Link>
-      </div>
-
       {/* 📹 Video Player Container */}
       <div className="w-full h-full flex justify-center">
         <div 
