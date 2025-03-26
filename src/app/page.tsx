@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import MainLayout from "@/components/layout/MainLayout";
+import SideNav from "@/components/layout/SideNav";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 
@@ -42,6 +43,9 @@ export default function Home(): JSX.Element {
       <div className="relative">
         {/* Show Auth Buttons if user is not logged in */}
         {isMounted && !authLoading && !currentUser && <AuthButtons />}
+
+        {/* Side Navigation */}
+        <SideNav />
 
         {/* Render FeedList only on the client */}
         {isMounted ? (
