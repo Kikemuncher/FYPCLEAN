@@ -13,30 +13,43 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<'videos' | 'likes' | 'favorites'>('videos');
   const { username } = useParams();
   const router = useRouter();
-  const { currentUser } = useAuth();
-  
+  const { currentUser, userProfile } = useAuth();
+
   // Fetch user profile data
   useEffect(() => {
     const fetchProfileData = async () => {
       if (!username) return;
-      
+
       setLoading(true);
       try {
-        // Convert username from array to string if needed
         const usernameStr = Array.isArray(username) ? username[0] : username;
+
+        // First check if this is the current user by comparing with auth state
+        if (currentUser && (currentUser.uid === usernameStr || currentUser.displayName === usernameStr)) {
+          if (userProfile) {
+            setProfile(userProfile);
+            setLoading(false);
+            return;
+          }
+        }
+
         const profileData = await getUserProfileByUsername(usernameStr as string);
-        setProfile(profileData);
+
+        if (profileData) {
+          setProfile(profileData);
+        } else {
+          console.error('Profile not found for username:', usernameStr);
+        }
       } catch (error) {
         console.error('Error fetching profile:', error);
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchProfileData();
-  }, [username]);
-  
-  // Loading state
+  }, [username, currentUser, userProfile]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black">
@@ -46,8 +59,7 @@ export default function ProfilePage() {
       </div>
     );
   }
-  
-  // Profile not found
+
   if (!profile) {
     return (
       <div className="min-h-screen bg-black">
@@ -64,9 +76,9 @@ export default function ProfilePage() {
       </div>
     );
   }
-  
+
   const isCurrentUser = currentUser && currentUser.uid === profile.uid;
-  
+
   return (
     <div className="min-h-screen bg-black">
       {/* Header */}
@@ -85,7 +97,7 @@ export default function ProfilePage() {
       </div>
 
       <div className="pt-14">
-        {/* Cover photo */}
+        {/* Cover Photo */}
         <div className="relative h-36 w-full bg-zinc-800">
           {profile.coverPhotoURL && (
             <Image 
@@ -96,8 +108,8 @@ export default function ProfilePage() {
             />
           )}
         </div>
-        
-        {/* Profile info */}
+
+        {/* Profile Info */}
         <div className="relative px-4 pb-4 -mt-14">
           <div className="flex items-end">
             <div className="relative h-24 w-24 rounded-full border-4 border-black overflow-hidden bg-zinc-800">
@@ -108,7 +120,7 @@ export default function ProfilePage() {
                 className="object-cover"
               />
             </div>
-            
+
             <div className="ml-4 flex-1">
               <h1 className="text-xl font-bold text-white flex items-center">
                 @{profile.username}
@@ -122,7 +134,7 @@ export default function ProfilePage() {
               </h1>
               <p className="text-white">{profile.displayName}</p>
             </div>
-            
+
             <div>
               {isCurrentUser ? (
                 <button 
@@ -138,7 +150,7 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
-          
+
           {/* Stats */}
           <div className="flex mt-4 space-x-4">
             <div className="text-center">
@@ -154,180 +166,14 @@ export default function ProfilePage() {
               <p className="text-gray-400 text-sm">Likes</p>
             </div>
           </div>
-          
+
           {/* Bio */}
           {profile.bio && (
-            <p className="text-white mt-4">
-              {profile.bio}
-            </p>
-          )}
-          
-          {/* Social links */}
-          {profile.links && Object.keys(profile.links).length > 0 && (
-            <div className="flex mt-2 space-x-2">
-              {profile.links.instagram && (
-                <a 
-                  href={`https://instagram.com/${profile.links.instagram}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-gray-400 hover:text-white"
-                >
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                  </svg>
-                </a>
-              )}
-              
-              {profile.links.twitter && (
-                <a 
-                  href={`https://twitter.com/${profile.links.twitter}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-gray-400 hover:text-white"
-                >
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84"/>
-                  </svg>
-                </a>
-              )}
-              
-              {profile.links.youtube && (
-                <a 
-                  href={`https://youtube.com/${profile.links.youtube}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-gray-400 hover:text-white"
-                >
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                  </svg>
-                </a>
-              )}
-              
-              {profile.links.website && (
-                <a 
-                  href={profile.links.website} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-gray-400 hover:text-white"
-                >
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                 <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </a>
-              )}
-            </div>
+            <p className="text-white mt-4">{profile.bio}</p>
           )}
         </div>
-        
-        {/* Tabs */}
-        <div className="border-t border-zinc-800 mt-4">
-          <div className="flex">
-            <button 
-              className={`flex-1 py-3 text-center font-medium ${activeTab === 'videos' ? 'text-white border-b-2 border-white' : 'text-gray-400'}`}
-              onClick={() => setActiveTab('videos')}
-            >
-              Videos
-            </button>
-            <button 
-              className={`flex-1 py-3 text-center font-medium ${activeTab === 'likes' ? 'text-white border-b-2 border-white' : 'text-gray-400'}`}
-              onClick={() => setActiveTab('likes')}
-            >
-              Likes
-            </button>
-            <button 
-              className={`flex-1 py-3 text-center font-medium ${activeTab === 'favorites' ? 'text-white border-b-2 border-white' : 'text-gray-400'}`}
-              onClick={() => setActiveTab('favorites')}
-            >
-              Favorites
-            </button>
-          </div>
-        </div>
-        
-        {/* Content based on active tab */}
-        <div className="p-4">
-          {activeTab === 'videos' && (
-            <div className="grid grid-cols-3 gap-1">
-              {/* Replace with actual video grid when implemented */}
-              <div className="aspect-[9/16] bg-zinc-800 rounded-md flex items-center justify-center">
-                <p className="text-white text-xs">No videos yet</p>
-              </div>
-            </div>
-          )}
-          
-          {activeTab === 'likes' && (
-            <div className="flex flex-col items-center justify-center py-8">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
-              <p className="text-white font-bold text-lg">No liked videos yet</p>
-              <p className="text-gray-400 text-center mt-2">
-                Videos liked by {isCurrentUser ? 'you' : profile.username} will appear here
-              </p>
-            </div>
-          )}
-          
-          {activeTab === 'favorites' && (
-            <div className="flex flex-col items-center justify-center py-8">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-              </svg>
-              <p className="text-white font-bold text-lg">No favorite videos yet</p>
-              <p className="text-gray-400 text-center mt-2">
-                Videos marked as favorites by {isCurrentUser ? 'you' : profile.username} will appear here
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-black z-40">
-        <div className="flex justify-around items-center max-w-lg mx-auto h-14">
-          <a href="/" className="flex flex-col items-center justify-center w-full h-full">
-            <div className="flex flex-col items-center justify-center">
-              <svg className="h-6 w-6 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              <span className="text-xs mt-1 text-gray-400">Home</span>
-            </div>
-          </a>
-          
-          <a href="/discover" className="flex flex-col items-center justify-center w-full h-full">
-            <div className="flex flex-col items-center justify-center">
-              <svg className="h-6 w-6 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <span className="text-xs mt-1 text-gray-400">Discover</span>
-            </div>
-          </a>
-          
-          <a href="/upload" className="flex flex-col items-center justify-center w-full h-full">
-            <div className="flex flex-col items-center justify-center">
-              <svg className="h-8 w-8 text-tiktok-pink" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </a>
-          
-          <a href="/inbox" className="flex flex-col items-center justify-center w-full h-full">
-            <div className="flex flex-col items-center justify-center">
-              <svg className="h-6 w-6 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-              <span className="text-xs mt-1 text-gray-400">Inbox</span>
-            </div>
-          </a>
-          
-          <a href="/profile" className="flex flex-col items-center justify-center w-full h-full">
-            <div className="flex flex-col items-center justify-center">
-              <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-              </svg>
-              <span className="text-xs mt-1 text-white">Profile</span>
-            </div>
-          </a>
-        </div>
+
+        {/* Add more sections here like video tabs, content, etc. */}
       </div>
     </div>
   );
