@@ -1,4 +1,3 @@
-// src/lib/mockUserService.ts
 import { UserProfile, User } from "@/types/user";
 
 // Check if we're in a browser environment
@@ -70,13 +69,7 @@ const SAMPLE_CREATORS: UserProfile[] = [
 export const getUserProfileByUsername = async (usernameOrUid: string): Promise<UserProfile | null> => {
   if (!isBrowser) return null;
 
-  // First, check if this is one of our sample creators
-  const sampleCreator = SAMPLE_CREATORS.find(
-    (creator) => creator.username === usernameOrUid || creator.uid === usernameOrUid
-  );
-  if (sampleCreator) return sampleCreator;
-
-  // Check localStorage mock auth
+  // First, check localStorage for the current user
   const currentUserStr = localStorage.getItem("mock-auth-user");
   const currentProfileStr = localStorage.getItem("mock-auth-profile");
 
@@ -88,6 +81,12 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
       return currentProfile;
     }
   }
+
+  // Then check if this is one of our sample creators
+  const sampleCreator = SAMPLE_CREATORS.find(
+    (creator) => creator.username === usernameOrUid || creator.uid === usernameOrUid
+  );
+  if (sampleCreator) return sampleCreator;
 
   // Check localStorage mock profiles
   const mockProfilesStr = localStorage.getItem("mock-profiles");
