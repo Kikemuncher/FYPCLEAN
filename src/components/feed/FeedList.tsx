@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useVideoStore } from "@/stores/videoStore"; // ✅ Importing video store
+import { useVideoStore } from "@/store/videoStore"; // ✅ Importing video store
 
 function FeedList() {
   // ✅ Using video store for state management
