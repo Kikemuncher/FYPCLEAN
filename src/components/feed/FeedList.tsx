@@ -51,7 +51,7 @@ function FeedList() {
                 ref={(el) => {
                   if (el) videoRefs.current[video.id] = el;
                 }}
-                src={video.videoUrl || video.url} // ✅ Ensuring correct video URL
+                src={video.videoUrl} // Only use videoUrl which exists in the type
                 className="absolute top-0 left-0 w-full h-full object-cover"
                 loop
                 playsInline
