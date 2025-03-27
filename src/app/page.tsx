@@ -1,3 +1,4 @@
+// Ensure FeedList is being imported and rendered correctly
 "use client";
 
 import { useState, useEffect } from "react";
