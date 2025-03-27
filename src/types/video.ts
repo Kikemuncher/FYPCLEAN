@@ -12,6 +12,7 @@ export interface VideoData {
   userAvatar: string;
   hashtags?: string[];
   createdAt?: number; // Timestamp
+  creatorUid?: string; // Added optional creatorUid
 }
 
 export interface Comment {
