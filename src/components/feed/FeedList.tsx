@@ -68,12 +68,7 @@ function FeedList() {
               {/* 🎭 Video Info Overlay */}
               <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
                 <div className="flex items-center mb-2">
-                  <Link 
-                    href={video.creatorUid ? 
-                      `/profile/${video.creatorUid}` : 
-                      `/profile/${video.username}`} 
-                    className="flex items-center"
-                  >
+                  <Link href={`/profile/${video.username}`} className="flex items-center">
                     <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
                       <img 
                         src={video.userAvatar}
