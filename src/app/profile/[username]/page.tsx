@@ -1,4 +1,5 @@
-// Imports
+"use client";
+
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { getUserProfileByUsername } from '@/lib/userService';
@@ -16,7 +17,6 @@ export default function ProfilePage() {
   const router = useRouter();
   const { currentUser, userProfile, followUser, unfollowUser, isFollowing } = useAuth();
 
-  // Fetch profile data
   useEffect(() => {
     const fetchProfileData = async () => {
       if (!username) return;
@@ -47,7 +47,6 @@ export default function ProfilePage() {
     fetchProfileData();
   }, [username, currentUser, userProfile]);
 
-  // Sync follow state
   useEffect(() => {
     if (profile && currentUser) {
       setFollowing(isFollowing(profile.uid));
