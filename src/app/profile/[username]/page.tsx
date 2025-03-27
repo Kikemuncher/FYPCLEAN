@@ -15,7 +15,8 @@ export default function ProfilePage() {
   const router = useRouter();
   const { currentUser, userProfile } = useAuth();
 
-  // Fetch user profile data
+  console.log("Profile page - username param:", username); // ✅ Debug username param
+
   useEffect(() => {
     const fetchProfileData = async () => {
       if (!username) return;
@@ -23,8 +24,8 @@ export default function ProfilePage() {
       setLoading(true);
       try {
         const usernameStr = Array.isArray(username) ? username[0] : username;
+        console.log("Looking for profile with username/uid:", usernameStr); // ✅ Debug fetch lookup
 
-        // First check if this is the current user by comparing with auth state
         if (currentUser && (currentUser.uid === usernameStr || currentUser.displayName === usernameStr)) {
           if (userProfile) {
             setProfile(userProfile);
@@ -173,7 +174,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Add more sections here like video tabs, content, etc. */}
+        {/* TODO: Add video tabs and gallery */}
       </div>
     </div>
   );
