@@ -1,10 +1,8 @@
-import { UserProfile, User } from "@/types/user";
-
-// Check if we're in a browser environment
-const isBrowser = typeof window !== "undefined";
-
-// Sample creator profiles that match our video sample data
+// Make sure the SAMPLE_CREATORS array includes all the usernames from your sample videos
 const SAMPLE_CREATORS: UserProfile[] = [
+  // Existing creators...
+  
+  // Add these entries for each video username in your sample videos
   {
     uid: "creator-mixkit_user",
     username: "mixkit_user",
@@ -64,12 +62,20 @@ const SAMPLE_CREATORS: UserProfile[] = [
     isVerified: true,
     isCreator: true,
   },
+  // Add any other video creators from your sample videos
 ];
 
+// Update getUserProfileByUsername to handle dynamic creator generation
 export const getUserProfileByUsername = async (usernameOrUid: string): Promise<UserProfile | null> => {
   if (!isBrowser) return null;
 
-  // First, check localStorage for the current user
+  // First, check if this is one of our sample creators
+  const sampleCreator = SAMPLE_CREATORS.find(
+    (creator) => creator.username === usernameOrUid || creator.uid === usernameOrUid
+  );
+  if (sampleCreator) return sampleCreator;
+
+  // Check localStorage mock auth
   const currentUserStr = localStorage.getItem("mock-auth-user");
   const currentProfileStr = localStorage.getItem("mock-auth-profile");
 
@@ -82,12 +88,6 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
     }
   }
 
-  // Then check if this is one of our sample creators
-  const sampleCreator = SAMPLE_CREATORS.find(
-    (creator) => creator.username === usernameOrUid || creator.uid === usernameOrUid
-  );
-  if (sampleCreator) return sampleCreator;
-
   // Check localStorage mock profiles
   const mockProfilesStr = localStorage.getItem("mock-profiles");
   if (mockProfilesStr) {
@@ -97,6 +97,41 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
     );
 
     if (foundProfile) return foundProfile;
+  }
+
+  // If username isn't found, but it looks like a username from a video, generate a profile
+  if (usernameOrUid && !usernameOrUid.includes(' ')) {
+    // Generate a random profile for this username to ensure it always works
+    const generatedProfile: UserProfile = {
+      uid: `generated-${usernameOrUid}`,
+      username: usernameOrUid,
+      displayName: usernameOrUid.split('_').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+      ).join(' '),
+      bio: `Creator of amazing content`,
+      photoURL: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? 'women' : 'men'}/${Math.floor(Math.random() * 99)}.jpg`,
+      coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Creator",
+      followerCount: Math.floor(Math.random() * 10000),
+      followingCount: Math.floor(Math.random() * 500),
+      videoCount: Math.floor(Math.random() * 50) + 1,
+      likeCount: Math.floor(Math.random() * 100000),
+      links: {},
+      createdAt: Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000,
+      isVerified: Math.random() > 0.7,
+      isCreator: true
+    };
+    
+    // Store this profile for future use
+    try {
+      const mockProfilesStr = localStorage.getItem("mock-profiles");
+      const mockProfiles = mockProfilesStr ? JSON.parse(mockProfilesStr) : [];
+      mockProfiles.push(generatedProfile);
+      localStorage.setItem("mock-profiles", JSON.stringify(mockProfiles));
+    } catch (err) {
+      console.error("Failed to save generated profile", err);
+    }
+    
+    return generatedProfile;
   }
 
   // Default test profile for demo purposes
