@@ -33,56 +33,84 @@ try {
   console.error('Error checking Firebase availability:', error);
 }
 
-const sampleVideos: VideoData[] = [/* ... sample videos ... */];
-const moreVideoSets: VideoData[] = [/* ... more videos ... */];
-const fallbackVideos: VideoData[] = [/* ... fallback videos ... */];
-
-const ensureCreatorProfiles = async (videos: VideoData[]): Promise<VideoData[]> => {
-  try {
-    if (typeof window === 'undefined') return videos;
-    const mockProfilesStr = localStorage.getItem("mock-profiles") || '[]';
-    const mockProfiles = JSON.parse(mockProfilesStr);
-
-    return videos.map(video => {
-      if (!video.creatorUid) {
-        const matchingProfile = mockProfiles.find(
-          (profile: any) => profile.username === video.username
-        );
-
-        if (matchingProfile) {
-          return { ...video, creatorUid: matchingProfile.uid };
-        } else {
-          const defaultUid = `creator-${video.username}`;
-          const newProfile = {
-            uid: defaultUid,
-            username: video.username,
-            displayName: video.username,
-            bio: `Creator of amazing videos`,
-            photoURL: video.userAvatar,
-            coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Cover",
-            followerCount: Math.floor(Math.random() * 10000),
-            followingCount: Math.floor(Math.random() * 500),
-            videoCount: Math.floor(Math.random() * 50) + 1,
-            likeCount: Math.floor(Math.random() * 100000),
-            links: {},
-            createdAt: Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000,
-            isVerified: Math.random() > 0.7,
-            isCreator: true
-          };
-
-          const allProfiles = [...mockProfiles, newProfile];
-          localStorage.setItem("mock-profiles", JSON.stringify(allProfiles));
-
-          return { ...video, creatorUid: defaultUid };
-        }
-      }
-      return video;
-    });
-  } catch (error) {
-    console.error("Error ensuring creator profiles:", error);
-    return videos;
+const sampleVideos: VideoData[] = [
+  {
+    id: "vid-1",
+    username: "neon_vibes",
+    caption: "Late night city walk 🌃 #neon",
+    song: "Synthwave Dreams",
+    likes: 1032,
+    comments: 183,
+    saves: 88,
+    shares: 45,
+    views: 19230,
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4",
+    userAvatar: "https://randomuser.me/api/portraits/women/85.jpg",
+    hashtags: ["neon", "nightlife"]
+  },
+  {
+    id: "vid-2",
+    username: "nature_lover",
+    caption: "Camping under the stars ✨🏕️",
+    song: "Acoustic Calm",
+    likes: 875,
+    comments: 120,
+    saves: 64,
+    shares: 32,
+    views: 15400,
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-mountain-landscape-1434-large.mp4",
+    userAvatar: "https://randomuser.me/api/portraits/women/65.jpg",
+    hashtags: ["camping", "nature"]
   }
-};
+];
+
+const moreVideoSets: VideoData[] = [
+  {
+    id: "vid-3",
+    username: "mixkit_user",
+    caption: "Holiday vibes incoming 🎄❄️",
+    song: "Jingle Beat",
+    likes: 1540,
+    comments: 220,
+    saves: 112,
+    shares: 76,
+    views: 22100,
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-snowy-winter-scene-1568-large.mp4",
+    userAvatar: "https://randomuser.me/api/portraits/women/44.jpg",
+    hashtags: ["holiday", "christmas"]
+  },
+  {
+    id: "vid-4",
+    username: "user_skater",
+    caption: "Sunset skating session 🛹🔥",
+    song: "Urban Flow",
+    likes: 2000,
+    comments: 330,
+    saves: 150,
+    shares: 90,
+    views: 31000,
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-a-young-woman-skating-at-sunset-4517-large.mp4",
+    userAvatar: "https://randomuser.me/api/portraits/women/29.jpg",
+    hashtags: ["skate", "sunset"]
+  }
+];
+
+const fallbackVideos: VideoData[] = [
+  {
+    id: "vid-5",
+    username: "default_creator",
+    caption: "Fallback clip in case of errors",
+    song: "Default Beat",
+    likes: 500,
+    comments: 50,
+    saves: 20,
+    shares: 10,
+    views: 8500,
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-fallback-video-1250-large.mp4",
+    userAvatar: "https://randomuser.me/api/portraits/men/45.jpg",
+    hashtags: ["fallback", "video"]
+  }
+];
 
 export const useVideoStore = create<VideoState>((set, get) => ({
   currentVideoIndex: 0,
@@ -101,6 +129,7 @@ export const useVideoStore = create<VideoState>((set, get) => ({
 
   fetchVideos: async () => {
     set({ loading: true, error: null });
+
     try {
       await new Promise(resolve => setTimeout(resolve, 800));
       const { videos } = get();
@@ -108,19 +137,18 @@ export const useVideoStore = create<VideoState>((set, get) => ({
         set({ loading: false });
         return;
       }
-      const videosWithProfiles = await ensureCreatorProfiles(sampleVideos);
       set({ 
-        videos: videosWithProfiles,
+        videos: sampleVideos,
         loading: false,
         hasMore: true,
-        lastVisible: { id: videosWithProfiles[videosWithProfiles.length - 1].id }
+        lastVisible: { id: sampleVideos[sampleVideos.length - 1].id }
       });
     } catch (error) {
       console.error("Error fetching videos:", error);
       set({ 
-        videos: sampleVideos,
+        videos: fallbackVideos,
         loading: false,
-        error: "Using sample videos due to connection issues.",
+        error: "Using fallback videos due to connection issues.",
         hasMore: true 
       });
     }
