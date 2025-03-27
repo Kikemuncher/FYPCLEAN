@@ -11,19 +11,16 @@ function FeedList() {
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const wheelLock = useRef(false);
 
-  // Track window height for full-screen adjustments
   useEffect(() => {
     setWindowHeight(window.innerHeight);
     const handleResize = () => setWindowHeight(window.innerHeight);
     window.addEventListener("resize", handleResize);
 
-    // Fetch videos on component mount
     fetchVideos();
 
     return () => window.removeEventListener("resize", handleResize);
   }, [fetchVideos]);
 
-  // Handle video navigation on scroll
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (wheelLock.current) return;
@@ -40,7 +37,11 @@ function FeedList() {
     }, 800);
   };
 
-  return (
+  return videos.length === 0 ? (
+    <div className="flex items-center justify-center h-screen w-full bg-black">
+      <p className="text-white">Loading videos...</p>
+    </div>
+  ) : (
     <div className="fixed inset-0 bg-black" style={{ height: `${windowHeight}px` }} onWheel={handleWheel}>
       {/* 📹 Video Player Container */}
       <div className="w-full h-full flex justify-center">
