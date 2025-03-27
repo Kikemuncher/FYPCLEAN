@@ -45,19 +45,21 @@ function FeedList() {
     <div className="fixed inset-0 bg-black" style={{ height: `${windowHeight}px` }} onWheel={handleWheel}>
       {/* 📹 Video Player Container */}
       <div className="w-full h-full flex justify-center">
-        <div 
+        <div
           className="relative"
           style={{ width: "100%", maxWidth: `${windowHeight * 9 / 16}px`, height: "100%" }}
         >
           {videos.map((video, index) => (
-            <div 
-              key={video.id} 
+            <div
+              key={video.id}
               className={`absolute top-0 left-0 w-full h-full transition-opacity duration-300 ${
                 index === currentVideoIndex ? "opacity-100 z-10" : "opacity-0 z-0"
               }`}
             >
               <video
-                ref={(el) => { if (el) videoRefs.current[video.id] = el; }}
+                ref={(el) => {
+                  if (el) videoRefs.current[video.id] = el;
+                }}
                 src={video.videoUrl}
                 className="w-full h-full object-cover"
                 loop
@@ -68,8 +70,8 @@ function FeedList() {
 
               {/* 🎭 Video Info Overlay */}
               <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
-                <Link 
-                  href={`/profile/${video.creatorUid || video.username}`} 
+                <Link
+                  href={`/profile/${video.username}`}
                   className="flex items-center mb-2"
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -98,8 +100,8 @@ function FeedList() {
       </div>
 
       {/* 🔇 Mute Button */}
-      <button 
-        onClick={() => setIsMuted(!isMuted)} 
+      <button
+        onClick={() => setIsMuted(!isMuted)}
         className="absolute top-4 right-4 bg-black/30 rounded-full p-2 z-30"
       >
         {isMuted ? "🔇" : "🔊"}
