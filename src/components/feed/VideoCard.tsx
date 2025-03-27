@@ -26,7 +26,6 @@ export default function FeedList() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(true);
   const lastTap = useRef<number>(0);
-  const touchStartY = useRef<number | null>(null);
   const wheelEvents = useRef<WheelEvent[]>([]);
   const isWheeling = useRef<boolean>(false);
   const wheelDetectionTimer = useRef<any>(null);
@@ -43,9 +42,6 @@ export default function FeedList() {
     window.addEventListener("resize", updateHeight);
     return () => {
       window.removeEventListener("resize", updateHeight);
-      if (wheelDetectionTimer.current) clearTimeout(wheelDetectionTimer.current);
-      if (wheelReleaseTimer.current) clearTimeout(wheelReleaseTimer.current);
-      if (inertiaFrameId.current) cancelAnimationFrame(inertiaFrameId.current);
     };
   }, []);
 
@@ -58,7 +54,6 @@ export default function FeedList() {
   }, [loadMoreInView, fetchMoreVideos, videos.length, hasMore, loading]);
 
   const toggleMute = () => setIsMuted(!isMuted);
-
   const togglePlayPause = () => {
     const videoId = videos[currentVideoIndex]?.id;
     if (!videoId) return;
@@ -94,6 +89,7 @@ export default function FeedList() {
         videoRef.pause();
       }
     });
+
     const videoId = videos[currentVideoIndex]?.id;
     const currentVideo = videoRefs.current[videoId];
     if (currentVideo) {
@@ -104,97 +100,8 @@ export default function FeedList() {
     }
   }, [currentVideoIndex, videos, isPaused]);
 
-  const canScrollInDirection = (dir: "up" | "down"): boolean =>
-    dir === "up" ? currentVideoIndex > 0 : currentVideoIndex < videos.length - 1;
-
-  const goToNextVideo = () => {
-    if (currentVideoIndex < videos.length - 1) {
-      setCurrentVideoIndex(currentVideoIndex + 1);
-      setOffset(0);
-    } else {
-      setOffset(0);
-    }
-  };
-
-  const goToPrevVideo = () => {
-    if (currentVideoIndex > 0) {
-      setCurrentVideoIndex(currentVideoIndex - 1);
-      setOffset(0);
-    } else {
-      setOffset(0);
-    }
-  };
-
-  const animateSnapBack = () => {
-    const startOffset = offset;
-    const startTime = performance.now();
-    const duration = 300;
-    const animateFrame = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-      const newOffset = startOffset * (1 - easedProgress);
-      setOffset(newOffset);
-      if (progress < 1) {
-        inertiaFrameId.current = requestAnimationFrame(animateFrame);
-      } else {
-        setOffset(0);
-        inertiaFrameId.current = null;
-      }
-    };
-    inertiaFrameId.current = requestAnimationFrame(animateFrame);
-  };
-
-  const handleWheelRelease = () => {
-    if (wheelEvents.current.length === 0) return;
-    if (Math.abs(offset) > containerHeight * 0.25) {
-      if (offset > 0 && canScrollInDirection("up")) {
-        goToPrevVideo();
-      } else if (offset < 0 && canScrollInDirection("down")) {
-        goToNextVideo();
-      } else {
-        animateSnapBack();
-      }
-    } else {
-      animateSnapBack();
-    }
-    wheelEvents.current = [];
-    isWheeling.current = false;
-  };
-
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    if (inertiaFrameId.current) cancelAnimationFrame(inertiaFrameId.current);
-    if (wheelDetectionTimer.current) clearTimeout(wheelDetectionTimer.current);
-    if (wheelReleaseTimer.current) clearTimeout(wheelReleaseTimer.current);
-
-    wheelEvents.current.push(e.nativeEvent);
-    isWheeling.current = true;
-
-    const direction = e.deltaY > 0 ? "down" : "up";
-    let newOffset = offset + (direction === "down" ? -20 : 20);
-    const maxOffset = containerHeight * 0.8;
-    newOffset = Math.max(Math.min(newOffset, maxOffset), -maxOffset);
-    setOffset(newOffset);
-
-    wheelReleaseTimer.current = setTimeout(() => {
-      if (isWheeling.current) handleWheelRelease();
-    }, 200);
-  };
-
-  const handleVideoClick = () => {
-    if (Date.now() - lastTap.current < 300) return;
-    togglePlayPause();
-  };
-
-  const formatCount = (count: number): string => {
-    if (count >= 1_000_000) return (count / 1_000_000).toFixed(1) + "M";
-    if (count >= 1_000) return (count / 1_000).toFixed(1) + "K";
-    return count.toString();
-  };
-
   return (
-    <div className="h-screen w-full overflow-hidden bg-black relative" onWheel={handleWheel}>
+    <div className="h-screen w-full overflow-hidden bg-black relative">
       <div className="w-full h-full flex justify-center">
         <div
           className="relative"
@@ -204,12 +111,11 @@ export default function FeedList() {
             className="absolute w-full transition-transform duration-300 ease-out"
             style={{
               height: containerHeight * videos.length,
-              transform: `translateY(${-currentVideoIndex * containerHeight + offset}px)`,
+              transform: `translateY(${-currentVideoIndex * containerHeight}px)`,
             }}
           >
             {videos.map((video, index) => {
               const isVisible = Math.abs(index - currentVideoIndex) <= 1;
-              const isCurrentVideo = index === currentVideoIndex;
               return (
                 <div
                   key={video.id}
@@ -217,10 +123,7 @@ export default function FeedList() {
                   style={{ height: containerHeight, top: index * containerHeight }}
                 >
                   {isVisible && (
-                    <div
-                      className="relative w-full h-full overflow-hidden"
-                      onClick={isCurrentVideo ? handleVideoClick : undefined}
-                    >
+                    <div className="relative w-full h-full overflow-hidden">
                       <video
                         ref={(el) => {
                           if (el) videoRefs.current[video.id] = el;
@@ -233,8 +136,13 @@ export default function FeedList() {
                         preload="auto"
                       />
 
+                      {/* 🎭 Video Info Overlay */}
                       <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
-                        <Link href={`/profile/${video.username}`} className="flex items-center mb-2">
+                        {/* 📌 Clickable Username & Avatar */}
+                        <Link 
+                          href={video.creatorUid ? `/profile/${video.creatorUid}` : `/profile/${video.username}`} 
+                          className="flex items-center mb-2"
+                        >
                           <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
                             <img
                               src={video.userAvatar}
