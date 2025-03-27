@@ -1,4 +1,3 @@
-// Ensure FeedList is being imported and rendered correctly
 "use client";
 
 import { useState, useEffect } from "react";
@@ -8,7 +7,7 @@ import SideNav from "@/components/layout/SideNav";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 
-// Import FeedList component with no SSR to prevent hydration issues
+// Dynamically load FeedList to avoid SSR hydration mismatch
 const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
   ssr: false,
   loading: () => (
@@ -18,13 +17,19 @@ const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
   ),
 });
 
-// Auth buttons component (for users who are not logged in)
+// 🔐 Auth buttons shown to guests (not signed in)
 const AuthButtons = () => (
   <div className="absolute top-4 right-4 z-30 flex space-x-2">
-    <Link href="/auth/login" className="px-3 py-1.5 bg-zinc-800 rounded-full text-white text-sm font-medium hover:bg-zinc-700 transition-colors">
+    <Link
+      href="/auth/login"
+      className="px-3 py-1.5 bg-zinc-800 rounded-full text-white text-sm font-medium hover:bg-zinc-700 transition-colors"
+    >
       Log In
     </Link>
-    <Link href="/auth/signup" className="px-3 py-1.5 bg-tiktok-pink rounded-full text-white text-sm font-medium hover:bg-pink-700 transition-colors">
+    <Link
+      href="/auth/signup"
+      className="px-3 py-1.5 bg-tiktok-pink rounded-full text-white text-sm font-medium hover:bg-pink-700 transition-colors"
+    >
       Sign Up
     </Link>
   </div>
@@ -32,9 +37,8 @@ const AuthButtons = () => (
 
 export default function Home(): JSX.Element {
   const { currentUser, loading: authLoading } = useAuth();
-  const [isMounted, setIsMounted] = useState<boolean>(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Set mounted state after component mounts
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -42,13 +46,13 @@ export default function Home(): JSX.Element {
   return (
     <MainLayout showHeader={true}>
       <div className="relative">
-        {/* Show Auth Buttons if user is not logged in */}
+        {/* 🔓 Show login/signup buttons if user is not authenticated */}
         {isMounted && !authLoading && !currentUser && <AuthButtons />}
 
-        {/* Side Navigation */}
+        {/* 🧭 Left Side Navigation */}
         <SideNav />
 
-        {/* Render FeedList only on the client */}
+        {/* 📺 Feed Display */}
         {isMounted ? (
           <FeedList />
         ) : (
