@@ -19,16 +19,16 @@ const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
 
 // 🔐 Auth buttons shown to guests (not signed in)
 const AuthButtons = () => (
-  <div className="absolute top-4 right-4 z-30 flex space-x-2">
+  <div className="fixed top-4 right-4 z-50 flex space-x-3">
     <Link
       href="/auth/login"
-      className="px-3 py-1.5 bg-zinc-800 rounded-full text-white text-sm font-medium hover:bg-zinc-700 transition-colors"
+      className="px-4 py-2 bg-zinc-800 rounded-md text-white text-sm font-medium hover:bg-zinc-700 transition-colors"
     >
       Log In
     </Link>
     <Link
       href="/auth/signup"
-      className="px-3 py-1.5 bg-tiktok-pink rounded-full text-white text-sm font-medium hover:bg-pink-700 transition-colors"
+      className="px-4 py-2 bg-tiktok-pink rounded-md text-white text-sm font-medium hover:bg-pink-700 transition-colors"
     >
       Sign Up
     </Link>
