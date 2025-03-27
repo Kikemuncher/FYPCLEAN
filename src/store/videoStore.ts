@@ -18,7 +18,6 @@ interface VideoState {
   incrementView: (videoId: string) => void;
 }
 
-// Try loading Firebase
 let firebaseEnabled = false;
 try {
   const isFirebaseAvailable = typeof window !== 'undefined' && 
