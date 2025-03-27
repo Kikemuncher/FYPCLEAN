@@ -1,4 +1,3 @@
-// src/lib/mockUserService.ts
 import { UserProfile, User } from "@/types/user";
 
 // Check if we're in a browser environment
@@ -65,20 +64,34 @@ const SAMPLE_CREATORS: UserProfile[] = [
     isVerified: true,
     isCreator: true,
   },
-  // Add any other video creators from your sample videos
+  {
+    uid: "creator-user1",
+    username: "user1",
+    displayName: "User One",
+    bio: "Sample creator bio",
+    photoURL: "https://randomuser.me/api/portraits/women/85.jpg",
+    coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Cover",
+    followerCount: 25000,
+    followingCount: 120,
+    videoCount: 15,
+    likeCount: 87000,
+    links: {},
+    createdAt: Date.now() - 90 * 24 * 60 * 60 * 1000,
+    isVerified: true,
+    isCreator: true,
+  }
 ];
 
-// Update getUserProfileByUsername to handle dynamic creator generation
+// Updated getUserProfileByUsername
 export const getUserProfileByUsername = async (usernameOrUid: string): Promise<UserProfile | null> => {
   if (!isBrowser) return null;
 
   // First, check if this is one of our sample creators
   const sampleCreator = SAMPLE_CREATORS.find(
-    (creator) => creator.username === usernameOrUid || creator.uid === usernameOrUid
+    creator => creator.username === usernameOrUid || creator.uid === usernameOrUid
   );
   if (sampleCreator) return sampleCreator;
 
-  // Check localStorage mock auth
   const currentUserStr = localStorage.getItem("mock-auth-user");
   const currentProfileStr = localStorage.getItem("mock-auth-profile");
 
@@ -91,26 +104,20 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
     }
   }
 
-  // Check localStorage mock profiles
   const mockProfilesStr = localStorage.getItem("mock-profiles");
   if (mockProfilesStr) {
     const mockProfiles = JSON.parse(mockProfilesStr) as UserProfile[];
     const foundProfile = mockProfiles.find(
       (profile) => profile.username === usernameOrUid || profile.uid === usernameOrUid
     );
-
     if (foundProfile) return foundProfile;
   }
 
-  // If username isn't found, but it looks like a username from a video, generate a profile
   if (usernameOrUid && !usernameOrUid.includes(' ')) {
-    // Generate a random profile for this username to ensure it always works
     const generatedProfile: UserProfile = {
       uid: `generated-${usernameOrUid}`,
       username: usernameOrUid,
-      displayName: usernameOrUid.split('_').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-      ).join(' '),
+      displayName: usernameOrUid.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
       bio: `Creator of amazing content`,
       photoURL: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? 'women' : 'men'}/${Math.floor(Math.random() * 99)}.jpg`,
       coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Creator",
@@ -123,8 +130,7 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
       isVerified: Math.random() > 0.7,
       isCreator: true
     };
-    
-    // Store this profile for future use
+
     try {
       const mockProfilesStr = localStorage.getItem("mock-profiles");
       const mockProfiles = mockProfilesStr ? JSON.parse(mockProfilesStr) : [];
@@ -133,11 +139,10 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
     } catch (err) {
       console.error("Failed to save generated profile", err);
     }
-    
+
     return generatedProfile;
   }
 
-  // Default test profile for demo purposes
   if (usernameOrUid === "testuser" || usernameOrUid === "mock-test-user") {
     return {
       uid: "mock-test-user",
