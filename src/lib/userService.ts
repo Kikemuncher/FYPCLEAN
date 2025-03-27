@@ -18,8 +18,12 @@ const USE_MOCK_AUTH = true;
 export const getUserProfileByUsername = async (usernameOrUid: string): Promise<UserProfile | null> => {
   // Mock mode
   if (USE_MOCK_AUTH) {
+    const cleanUsername = usernameOrUid.startsWith('creator-')
+      ? usernameOrUid.substring(8)
+      : usernameOrUid;
+
     // Test user shortcut
-    if (usernameOrUid === "testuser" || usernameOrUid === "mock-test-user") {
+    if (cleanUsername === "testuser" || cleanUsername === "mock-test-user") {
       return {
         uid: "mock-test-user",
         username: "testuser",
@@ -38,12 +42,12 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
       };
     }
 
-    // Generate mock if user not found
-    if (usernameOrUid && !usernameOrUid.includes(' ')) {
+    // Generate mock profile if user not found
+    if (cleanUsername && !cleanUsername.includes(' ')) {
       return {
-        uid: `generated-${usernameOrUid}`,
-        username: usernameOrUid,
-        displayName: usernameOrUid,
+        uid: `generated-${cleanUsername}`,
+        username: cleanUsername,
+        displayName: cleanUsername,
         bio: `Creator of amazing content`,
         photoURL: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? 'women' : 'men'}/${Math.floor(Math.random() * 99)}.jpg`,
         coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Cover",
