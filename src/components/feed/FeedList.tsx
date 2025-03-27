@@ -68,19 +68,17 @@ function FeedList() {
               {/* 🎭 Video Info Overlay */}
               <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
                 <div className="flex items-center mb-2">
-                  <Link href={`/profile/${video.username}`} className="flex items-center">
-                    <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
-                      <img 
-                        src={video.userAvatar}
-                        alt={video.username} 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div>
-                      <p className="font-bold text-white">@{video.username}</p>
-                      <p className="text-white text-xs opacity-80">{video.song}</p>
-                    </div>
-                  </Link>
+                  <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
+                    <img 
+                      src={video.userAvatar}
+                      alt={video.username} 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-bold text-white">@{video.username}</p>
+                    <p className="text-white text-xs opacity-80">{video.song}</p>
+                  </div>
                 </div>
                 <p className="text-white text-sm mb-4">{video.caption}</p>
               </div>
