@@ -20,8 +20,8 @@ interface VideoState {
 
 let firebaseEnabled = false;
 try {
-  const isFirebaseAvailable = typeof window !== 'undefined' && 
-    window.location.hostname !== 'localhost' && 
+  const isFirebaseAvailable = typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
     process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   if (isFirebaseAvailable) {
     firebaseEnabled = true;
@@ -137,19 +137,44 @@ export const useVideoStore = create<VideoState>((set, get) => ({
         set({ loading: false });
         return;
       }
-      set({ 
-        videos: sampleVideos,
-        loading: false,
-        hasMore: true,
-        lastVisible: { id: sampleVideos[sampleVideos.length - 1].id }
-      });
+
+      // Generate creator profiles + tag videos with creatorUid
+      if (typeof window !== 'undefined') {
+        const mockProfiles = sampleVideos.map(video => ({
+          uid: `creator-${video.username}`,
+          username: video.username,
+          displayName: video.username,
+          bio: "Creator of amazing videos",
+          photoURL: video.userAvatar,
+          coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Cover",
+          followerCount: Math.floor(Math.random() * 10000),
+          followingCount: Math.floor(Math.random() * 500),
+          videoCount: Math.floor(Math.random() * 50) + 1,
+          likeCount: Math.floor(Math.random() * 100000),
+          links: {},
+          createdAt: Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000,
+          isVerified: Math.random() > 0.7,
+          isCreator: true
+        }));
+
+        localStorage.setItem("mock-profiles", JSON.stringify(mockProfiles));
+
+        const videosWithCreatorIds = sampleVideos.map(video => ({
+          ...video,
+          creatorUid: `creator-${video.username}`
+        }));
+
+        set({ videos: videosWithCreatorIds, loading: false, hasMore: true });
+      } else {
+        set({ videos: sampleVideos, loading: false, hasMore: true });
+      }
     } catch (error) {
       console.error("Error fetching videos:", error);
       set({ 
         videos: fallbackVideos,
         loading: false,
         error: "Using fallback videos due to connection issues.",
-        hasMore: true 
+        hasMore: true
       });
     }
   },
@@ -158,6 +183,7 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     const { loading, hasMore } = get();
     if (loading || !hasMore) return;
     set({ loading: true, error: null });
+
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
       const { videos } = get();
@@ -165,15 +191,17 @@ export const useVideoStore = create<VideoState>((set, get) => ({
         set({ hasMore: false, loading: false });
         return;
       }
+
       const additionalVideos = moreVideoSets.map((video, index) => ({
         ...video,
-        id: `more-${Date.now()}-${index}`,
+        id: `more-${Date.now()}-${index}`
       }));
+
       set({ 
         videos: [...videos, ...additionalVideos],
         loading: false,
         hasMore: videos.length + additionalVideos.length < 15,
-        lastVisible: additionalVideos.length > 0 
+        lastVisible: additionalVideos.length > 0
           ? { id: additionalVideos[additionalVideos.length - 1].id }
           : get().lastVisible
       });
