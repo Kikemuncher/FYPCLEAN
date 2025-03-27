@@ -1,8 +1,11 @@
-// Make sure the SAMPLE_CREATORS array includes all the usernames from your sample videos
+// src/lib/mockUserService.ts
+import { UserProfile, User } from "@/types/user";
+
+// Check if we're in a browser environment
+const isBrowser = typeof window !== "undefined";
+
+// Sample creator profiles that match our video sample data
 const SAMPLE_CREATORS: UserProfile[] = [
-  // Existing creators...
-  
-  // Add these entries for each video username in your sample videos
   {
     uid: "creator-mixkit_user",
     username: "mixkit_user",
