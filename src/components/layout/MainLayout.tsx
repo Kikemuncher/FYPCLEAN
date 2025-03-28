@@ -25,7 +25,6 @@ export default function MainLayout({
   const pathname = usePathname();
   const { currentUser } = useAuth();
 
-  // Check if the page is the home page
   const isHomePage = pathname === "/";
 
   return (
@@ -55,21 +54,7 @@ export default function MainLayout({
 
             {title && <h1 className="text-white font-bold text-lg">{title}</h1>}
 
-            {isHomePage && (
-              <div className="flex items-center">
-                <div className="bg-tiktok-pink rounded-full p-1 mr-0.5">
-                  <div className="bg-white rounded-full p-0.5">
-                    <div className="bg-tiktok-pink rounded-full w-3 h-3"></div>
-                  </div>
-                </div>
-                <div className="bg-tiktok-blue rounded-full p-1">
-                  <div className="bg-white rounded-full p-0.5">
-                    <div className="bg-tiktok-blue rounded-full w-3 h-3"></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
+            {/* Removed TikTok logo dots */}
             {rightAction && <div className="ml-auto">{rightAction}</div>}
           </div>
         </header>
