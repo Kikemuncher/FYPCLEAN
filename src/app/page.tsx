@@ -7,7 +7,7 @@ import SideNav from "@/components/layout/SideNav";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 
-// Dynamically load FeedList to avoid SSR hydration mismatch
+// Dynamically import FeedList to prevent SSR issues
 const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
   ssr: false,
   loading: () => (
@@ -17,26 +17,40 @@ const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
   ),
 });
 
-// 🔐 Auth buttons shown to guests (not signed in)
-const AuthButtons = () => (
-  <div className="fixed top-4 right-4 z-50 flex space-x-3">
-    <Link
-      href="/auth/login"
-      className="px-4 py-2 bg-zinc-800 rounded-md text-white text-sm font-medium hover:bg-zinc-700 transition-colors"
-    >
-      Log In
-    </Link>
-    <Link
-      href="/auth/signup"
-      className="px-4 py-2 bg-tiktok-pink rounded-md text-white text-sm font-medium hover:bg-pink-700 transition-colors"
-    >
-      Sign Up
-    </Link>
-  </div>
-);
+// 🔐 Auth buttons component
+const AuthButtons = () => {
+  const { currentUser, signOut } = useAuth();
+
+  return (
+    <div className="fixed top-4 right-4 z-50">
+      {currentUser ? (
+        <button
+          onClick={() => signOut()}
+          className="px-4 py-2 bg-zinc-800 rounded-md text-white text-sm font-medium hover:bg-zinc-700 transition-colors"
+        >
+          Log Out
+        </button>
+      ) : (
+        <div className="flex space-x-3">
+          <Link
+            href="/auth/login"
+            className="px-4 py-2 bg-zinc-800 rounded-md text-white text-sm font-medium hover:bg-zinc-700 transition-colors"
+          >
+            Log In
+          </Link>
+          <Link
+            href="/auth/signup"
+            className="px-4 py-2 bg-tiktok-pink rounded-md text-white text-sm font-medium hover:bg-pink-700 transition-colors"
+          >
+            Sign Up
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function Home(): JSX.Element {
-  const { currentUser, loading: authLoading } = useAuth();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -46,13 +60,13 @@ export default function Home(): JSX.Element {
   return (
     <MainLayout showHeader={true}>
       <div className="relative">
-        {/* 🔓 Show login/signup buttons if user is not authenticated */}
-        {isMounted && !authLoading && !currentUser && <AuthButtons />}
+        {/* Always render AuthButtons */}
+        <AuthButtons />
 
-        {/* 🧭 Left Side Navigation */}
+        {/* 🧭 Side Navigation */}
         <SideNav />
 
-        {/* 📺 Feed Display */}
+        {/* 🎬 Video Feed */}
         {isMounted ? (
           <FeedList />
         ) : (
