@@ -1,4 +1,6 @@
 // src/hooks/useAuth.tsx
+"use client";
+
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, UserProfile } from '@/types/user';
@@ -25,6 +27,11 @@ interface AuthContextType {
   isPostSaved: (postId: string) => boolean;
   getFollowing: () => string[];
   getFollowers: () => string[];
+  upgradeToCreator: (creatorData: {
+    creatorBio: string;
+    creatorCategory: string;
+    portfolioLinks: string[];
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -140,7 +147,8 @@ const useMockAuthState = (): AuthContextType => {
       createdAt: Date.now(),
       isVerified: false,
       isCreator: false,
-      isAdmin: false
+      isAdmin: false,
+      accountType: 'user'
     };
 
     const newProfile: UserProfile = {
@@ -157,12 +165,37 @@ const useMockAuthState = (): AuthContextType => {
       links: {},
       createdAt: Date.now(),
       isVerified: false,
-      isCreator: false
+      isCreator: false,
+      accountType: 'user'
     };
 
     setCurrentUser(newUser);
     setUserProfile(newProfile);
     router.push('/auth/onboarding');
+  };
+
+  const upgradeToCreator = async (creatorData: {
+    creatorBio: string;
+    creatorCategory: string;
+    portfolioLinks: string[];
+  }) => {
+    if (!userProfile || !currentUser) return;
+
+    const updatedUser = {
+      ...currentUser,
+      isCreator: true,
+      accountType: 'creator'
+    };
+
+    const updatedProfile = {
+      ...userProfile,
+      isCreator: true,
+      accountType: 'creator',
+      ...creatorData
+    };
+
+    setCurrentUser(updatedUser);
+    setUserProfile(updatedProfile);
   };
 
   const signIn = async (email: string, password: string) => {
@@ -175,7 +208,8 @@ const useMockAuthState = (): AuthContextType => {
         createdAt: Date.now(),
         isVerified: true,
         isCreator: true,
-        isAdmin: false
+        isAdmin: false,
+        accountType: 'creator'
       };
       const testProfile: UserProfile = {
         uid: 'mock-test-user',
@@ -191,7 +225,8 @@ const useMockAuthState = (): AuthContextType => {
         links: {},
         createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
         isVerified: true,
-        isCreator: true
+        isCreator: true,
+        accountType: 'creator'
       };
 
       setCurrentUser(testUser);
@@ -231,7 +266,8 @@ const useMockAuthState = (): AuthContextType => {
     unsavePost,
     isPostSaved,
     getFollowing,
-    getFollowers
+    getFollowers,
+    upgradeToCreator
   };
 };
 
