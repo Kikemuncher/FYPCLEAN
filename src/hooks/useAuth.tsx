@@ -4,7 +4,7 @@ import { useState, useEffect, createContext, useContext, ReactNode } from 'react
 import { useRouter } from 'next/navigation';
 import { User, UserProfile } from '@/types/user';
 
-const USE_MOCK_AUTH = true;
+const USE_MOCK_AUTH = false;
 
 interface AuthContextType {
   currentUser: User | null;
