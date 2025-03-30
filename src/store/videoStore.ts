@@ -47,7 +47,7 @@ export const useVideoStore = create<VideoState>((set, get) => ({
       
       if (result.items && result.items.length > 0) {
         const videoUrls = await Promise.all(
-          result.items.map(async (item: { name: string }) => {
+          result.items.map(async (item) => {
             try {
               const url = await getDownloadURL(item);
               console.log(`Got download URL for ${item.name}`);
