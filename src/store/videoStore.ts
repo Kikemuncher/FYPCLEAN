@@ -138,7 +138,6 @@ export const useVideoStore = create<VideoState>((set, get) => ({
         return;
       }
 
-      // Generate creator profiles + tag videos with creatorUid
       if (typeof window !== 'undefined') {
         const mockProfiles = sampleVideos.map(video => ({
           uid: `creator-${video.username}`,
@@ -154,7 +153,8 @@ export const useVideoStore = create<VideoState>((set, get) => ({
           links: {},
           createdAt: Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000,
           isVerified: Math.random() > 0.7,
-          isCreator: true
+          isCreator: true,
+          accountType: 'creator' // ✅ Add this line
         }));
 
         localStorage.setItem("mock-profiles", JSON.stringify(mockProfiles));
