@@ -1,4 +1,3 @@
-// src/store/mockAuthStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { User, UserProfile } from '@/types/user';
@@ -9,8 +8,7 @@ interface MockAuthState {
   isAuthenticated: boolean;
   loading: boolean;
   error: string | null;
-  
-  // Auth actions
+
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, username: string) => Promise<void>;
   signOut: () => void;
@@ -25,26 +23,25 @@ export const useMockAuth = create<MockAuthState>()(
       isAuthenticated: false,
       loading: false,
       error: null,
-      
+
       signIn: async (email, password) => {
         set({ loading: true, error: null });
-        
-        // Simulate network delay
+
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mock validation logic
+
         if (email === 'test@example.com' && password === 'password') {
           const mockUser: User = {
             uid: 'mock-user-1',
-            email: email,
+            email,
             displayName: 'Test User',
             photoURL: 'https://placehold.co/400/gray/white?text=User',
             createdAt: Date.now(),
             isVerified: false,
             isCreator: false,
             isAdmin: false,
+            accountType: 'user' // ✅ Added
           };
-          
+
           const mockProfile: UserProfile = {
             uid: 'mock-user-1',
             username: 'testuser',
@@ -62,44 +59,44 @@ export const useMockAuth = create<MockAuthState>()(
             },
             createdAt: Date.now(),
             isVerified: false,
-            isCreator: false
+            isCreator: false,
+            accountType: 'user' // ✅ Added
           };
-          
-          set({ 
-            currentUser: mockUser, 
+
+          set({
+            currentUser: mockUser,
             userProfile: mockProfile,
             isAuthenticated: true,
-            loading: false 
+            loading: false
           });
         } else {
-          set({ 
+          set({
             error: 'Invalid email or password',
             loading: false
           });
         }
       },
-      
+
       signUp: async (email, password, username) => {
         set({ loading: true, error: null });
-        
-        // Simulate network delay
+
         await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        // Always succeed in mock mode
+
         const mockUser: User = {
           uid: 'mock-user-2',
-          email: email,
+          email,
           displayName: username,
           photoURL: null,
           createdAt: Date.now(),
           isVerified: false,
           isCreator: false,
           isAdmin: false,
+          accountType: 'user' // ✅ Added
         };
-        
+
         const mockProfile: UserProfile = {
           uid: 'mock-user-2',
-          username: username,
+          username,
           displayName: username,
           bio: '',
           photoURL: 'https://placehold.co/400/gray/white?text=User',
@@ -111,56 +108,54 @@ export const useMockAuth = create<MockAuthState>()(
           links: {},
           createdAt: Date.now(),
           isVerified: false,
-          isCreator: false
+          isCreator: false,
+          accountType: 'user' // ✅ Added
         };
-        
-        set({ 
+
+        set({
           currentUser: mockUser,
           userProfile: mockProfile,
           isAuthenticated: true,
-          loading: false 
+          loading: false
         });
       },
-      
+
       signOut: () => {
-        set({ 
+        set({
           currentUser: null,
           userProfile: null,
-          isAuthenticated: false 
+          isAuthenticated: false
         });
       },
-      
+
       updateUserProfile: async (data) => {
         set({ loading: true, error: null });
-        
-        // Simulate network delay
+
         await new Promise(resolve => setTimeout(resolve, 800));
-        
+
         const { userProfile } = get();
-        
         if (!userProfile) {
-          set({ 
+          set({
             error: 'No user profile found',
             loading: false
           });
           return;
         }
-        
-        // Update profile
+
         const updatedProfile = {
           ...userProfile,
           ...data,
           updatedAt: Date.now()
         };
-        
-        set({ 
+
+        set({
           userProfile: updatedProfile,
-          loading: false 
+          loading: false
         });
       }
     }),
     {
-      name: 'tiktok-auth-storage', // unique name for localStorage
+      name: 'tiktok-auth-storage',
       storage: createJSONStorage(() => localStorage),
     }
   )
