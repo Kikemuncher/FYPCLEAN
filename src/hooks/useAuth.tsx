@@ -1,4 +1,3 @@
-// src/hooks/useAuth.tsx
 "use client";
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -55,53 +54,15 @@ const useMockAuthState = (): AuthContextType => {
     return null;
   });
 
-  const [following, setFollowing] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('mock-auth-following');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
+  const [following, setFollowing] = useState<string[]>(() => JSON.parse(localStorage.getItem('mock-auth-following') || '[]'));
+  const [followers, setFollowers] = useState<string[]>(() => JSON.parse(localStorage.getItem('mock-auth-followers') || '[]'));
+  const [likedPosts, setLikedPosts] = useState<string[]>(() => JSON.parse(localStorage.getItem('mock-auth-liked-posts') || '[]'));
+  const [savedPosts, setSavedPosts] = useState<string[]>(() => JSON.parse(localStorage.getItem('mock-auth-saved-posts') || '[]'));
 
-  const [followers, setFollowers] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('mock-auth-followers');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
-
-  const [likedPosts, setLikedPosts] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('mock-auth-liked-posts');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
-
-  const [savedPosts, setSavedPosts] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('mock-auth-saved-posts');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('mock-auth-following', JSON.stringify(following));
-  }, [following]);
-
-  useEffect(() => {
-    localStorage.setItem('mock-auth-followers', JSON.stringify(followers));
-  }, [followers]);
-
-  useEffect(() => {
-    localStorage.setItem('mock-auth-liked-posts', JSON.stringify(likedPosts));
-  }, [likedPosts]);
-
-  useEffect(() => {
-    localStorage.setItem('mock-auth-saved-posts', JSON.stringify(savedPosts));
-  }, [savedPosts]);
+  useEffect(() => localStorage.setItem('mock-auth-following', JSON.stringify(following)), [following]);
+  useEffect(() => localStorage.setItem('mock-auth-followers', JSON.stringify(followers)), [followers]);
+  useEffect(() => localStorage.setItem('mock-auth-liked-posts', JSON.stringify(likedPosts)), [likedPosts]);
+  useEffect(() => localStorage.setItem('mock-auth-saved-posts', JSON.stringify(savedPosts)), [savedPosts]);
 
   const followUser = async (targetUid: string) => {
     if (!currentUser || following.includes(targetUid)) return;
@@ -133,7 +94,6 @@ const useMockAuthState = (): AuthContextType => {
   };
 
   const isPostSaved = (postId: string) => savedPosts.includes(postId);
-
   const getFollowing = () => following;
   const getFollowers = () => followers;
 
@@ -178,19 +138,19 @@ const useMockAuthState = (): AuthContextType => {
     creatorBio: string;
     creatorCategory: string;
     portfolioLinks: string[];
-  }) => {
+  }): Promise<void> => {
     if (!userProfile || !currentUser) return;
 
-    const updatedUser = {
+    const updatedUser: User = {
       ...currentUser,
       isCreator: true,
-      accountType: 'creator'
+      accountType: 'creator' as 'user' | 'creator'
     };
 
-    const updatedProfile = {
+    const updatedProfile: UserProfile = {
       ...userProfile,
       isCreator: true,
-      accountType: 'creator',
+      accountType: 'creator' as 'user' | 'creator',
       ...creatorData
     };
 
