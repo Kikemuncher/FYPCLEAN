@@ -38,31 +38,55 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const useMockAuthState = (): AuthContextType => {
   const router = useRouter();
 
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('mock-auth-user');
-      return saved ? JSON.parse(saved) : null;
+  const safeParse = (key: string, fallback: any) => {
+    if (typeof window === 'undefined') return fallback;
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : fallback;
+    } catch {
+      return fallback;
     }
-    return null;
-  });
+  };
 
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('mock-auth-profile');
-      return saved ? JSON.parse(saved) : null;
-    }
-    return null;
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(() =>
+    safeParse('mock-auth-user', null)
+  );
 
-  const [following, setFollowing] = useState<string[]>(() => JSON.parse(localStorage.getItem('mock-auth-following') || '[]'));
-  const [followers, setFollowers] = useState<string[]>(() => JSON.parse(localStorage.getItem('mock-auth-followers') || '[]'));
-  const [likedPosts, setLikedPosts] = useState<string[]>(() => JSON.parse(localStorage.getItem('mock-auth-liked-posts') || '[]'));
-  const [savedPosts, setSavedPosts] = useState<string[]>(() => JSON.parse(localStorage.getItem('mock-auth-saved-posts') || '[]'));
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() =>
+    safeParse('mock-auth-profile', null)
+  );
 
-  useEffect(() => localStorage.setItem('mock-auth-following', JSON.stringify(following)), [following]);
-  useEffect(() => localStorage.setItem('mock-auth-followers', JSON.stringify(followers)), [followers]);
-  useEffect(() => localStorage.setItem('mock-auth-liked-posts', JSON.stringify(likedPosts)), [likedPosts]);
-  useEffect(() => localStorage.setItem('mock-auth-saved-posts', JSON.stringify(savedPosts)), [savedPosts]);
+  const [following, setFollowing] = useState<string[]>(() =>
+    safeParse('mock-auth-following', [])
+  );
+
+  const [followers, setFollowers] = useState<string[]>(() =>
+    safeParse('mock-auth-followers', [])
+  );
+
+  const [likedPosts, setLikedPosts] = useState<string[]>(() =>
+    safeParse('mock-auth-liked-posts', [])
+  );
+
+  const [savedPosts, setSavedPosts] = useState<string[]>(() =>
+    safeParse('mock-auth-saved-posts', [])
+  );
+
+  useEffect(() => {
+    localStorage.setItem('mock-auth-following', JSON.stringify(following));
+  }, [following]);
+
+  useEffect(() => {
+    localStorage.setItem('mock-auth-followers', JSON.stringify(followers));
+  }, [followers]);
+
+  useEffect(() => {
+    localStorage.setItem('mock-auth-liked-posts', JSON.stringify(likedPosts));
+  }, [likedPosts]);
+
+  useEffect(() => {
+    localStorage.setItem('mock-auth-saved-posts', JSON.stringify(savedPosts));
+  }, [savedPosts]);
 
   const followUser = async (targetUid: string) => {
     if (!currentUser || following.includes(targetUid)) return;
@@ -74,6 +98,10 @@ const useMockAuthState = (): AuthContextType => {
   };
 
   const isFollowing = (targetUid: string) => following.includes(targetUid);
+  const isPostLiked = (postId: string) => likedPosts.includes(postId);
+  const isPostSaved = (postId: string) => savedPosts.includes(postId);
+  const getFollowing = () => following;
+  const getFollowers = () => followers;
 
   const likePost = async (postId: string) => {
     if (!likedPosts.includes(postId)) setLikedPosts([...likedPosts, postId]);
@@ -83,8 +111,6 @@ const useMockAuthState = (): AuthContextType => {
     setLikedPosts(likedPosts.filter(id => id !== postId));
   };
 
-  const isPostLiked = (postId: string) => likedPosts.includes(postId);
-
   const savePost = async (postId: string) => {
     if (!savedPosts.includes(postId)) setSavedPosts([...savedPosts, postId]);
   };
@@ -92,10 +118,6 @@ const useMockAuthState = (): AuthContextType => {
   const unsavePost = async (postId: string) => {
     setSavedPosts(savedPosts.filter(id => id !== postId));
   };
-
-  const isPostSaved = (postId: string) => savedPosts.includes(postId);
-  const getFollowing = () => following;
-  const getFollowers = () => followers;
 
   const signUp = async (email: string, password: string, username: string) => {
     const uid = `mock-${Date.now()}`;
@@ -132,30 +154,6 @@ const useMockAuthState = (): AuthContextType => {
     setCurrentUser(newUser);
     setUserProfile(newProfile);
     router.push('/auth/onboarding');
-  };
-
-  const upgradeToCreator = async (creatorData: {
-    creatorBio: string;
-    creatorCategory: string;
-    portfolioLinks: string[];
-  }): Promise<void> => {
-    if (!userProfile || !currentUser) return;
-
-    const updatedUser: User = {
-      ...currentUser,
-      isCreator: true,
-      accountType: 'creator' as 'user' | 'creator'
-    };
-
-    const updatedProfile: UserProfile = {
-      ...userProfile,
-      isCreator: true,
-      accountType: 'creator' as 'user' | 'creator',
-      ...creatorData
-    };
-
-    setCurrentUser(updatedUser);
-    setUserProfile(updatedProfile);
   };
 
   const signIn = async (email: string, password: string) => {
@@ -205,6 +203,36 @@ const useMockAuthState = (): AuthContextType => {
     if (!userProfile) return;
     const updated = { ...userProfile, ...data };
     setUserProfile(updated);
+  };
+
+  const upgradeToCreator = async ({
+    creatorBio,
+    creatorCategory,
+    portfolioLinks
+  }: {
+    creatorBio: string;
+    creatorCategory: string;
+    portfolioLinks: string[];
+  }): Promise<void> => {
+    if (!userProfile || !currentUser) return;
+
+    const updatedUser = {
+      ...currentUser,
+      isCreator: true,
+      accountType: 'creator' as const
+    };
+
+    const updatedProfile = {
+      ...userProfile,
+      isCreator: true,
+      accountType: 'creator' as const,
+      creatorBio,
+      creatorCategory,
+      portfolioLinks
+    };
+
+    setCurrentUser(updatedUser);
+    setUserProfile(updatedProfile);
   };
 
   return {
