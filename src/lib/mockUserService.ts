@@ -1,7 +1,10 @@
+// src/lib/mockUserService.ts
 import { UserProfile, User } from "@/types/user";
 
+// Check if we're in a browser environment
 const isBrowser = typeof window !== "undefined";
 
+// Sample creator profiles
 const SAMPLE_CREATORS: UserProfile[] = [
   {
     uid: "creator-mixkit_user",
@@ -98,6 +101,7 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
   if (currentUserStr && currentProfileStr) {
     const currentUser = JSON.parse(currentUserStr) as User;
     const currentProfile = JSON.parse(currentProfileStr) as UserProfile;
+
     if (currentProfile.username === usernameOrUid || currentUser.uid === usernameOrUid) {
       return currentProfile;
     }
@@ -171,4 +175,6 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
     };
   }
 
- 
+  // 🚨 Final fallback
+  return null;
+};
