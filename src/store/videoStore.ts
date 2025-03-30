@@ -1,5 +1,9 @@
+// src/store/videoStore.ts - Update this file
+
 import { create } from 'zustand';
 import { VideoData } from '@/types/video';
+import { storage } from '@/lib/firebase';
+import { ref, listAll, getDownloadURL } from 'firebase/storage';
 
 interface VideoState {
   currentVideoIndex: number;
@@ -17,100 +21,6 @@ interface VideoState {
   saveVideo: (videoId: string) => void;
   incrementView: (videoId: string) => void;
 }
-
-let firebaseEnabled = false;
-try {
-  const isFirebaseAvailable = typeof window !== 'undefined' &&
-    window.location.hostname !== 'localhost' &&
-    process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  if (isFirebaseAvailable) {
-    firebaseEnabled = true;
-    console.log('Firebase mode enabled');
-  } else {
-    console.log('Sample video mode enabled');
-  }
-} catch (error) {
-  console.error('Error checking Firebase availability:', error);
-}
-
-const sampleVideos: VideoData[] = [
-  {
-    id: "vid-1",
-    username: "neon_vibes",
-    caption: "Late night city walk 🌃 #neon",
-    song: "Synthwave Dreams",
-    likes: 1032,
-    comments: 183,
-    saves: 88,
-    shares: 45,
-    views: 19230,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4",
-    userAvatar: "https://randomuser.me/api/portraits/women/85.jpg",
-    hashtags: ["neon", "nightlife"]
-  },
-  {
-    id: "vid-2",
-    username: "nature_lover",
-    caption: "Camping under the stars ✨🏕️",
-    song: "Acoustic Calm",
-    likes: 875,
-    comments: 120,
-    saves: 64,
-    shares: 32,
-    views: 15400,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-mountain-landscape-1434-large.mp4",
-    userAvatar: "https://randomuser.me/api/portraits/women/65.jpg",
-    hashtags: ["camping", "nature"]
-  }
-];
-
-const moreVideoSets: VideoData[] = [
-  {
-    id: "vid-3",
-    username: "mixkit_user",
-    caption: "Holiday vibes incoming 🎄❄️",
-    song: "Jingle Beat",
-    likes: 1540,
-    comments: 220,
-    saves: 112,
-    shares: 76,
-    views: 22100,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-snowy-winter-scene-1568-large.mp4",
-    userAvatar: "https://randomuser.me/api/portraits/women/44.jpg",
-    hashtags: ["holiday", "christmas"]
-  },
-  {
-    id: "vid-4",
-    username: "user_skater",
-    caption: "Sunset skating session 🛹🔥",
-    song: "Urban Flow",
-    likes: 2000,
-    comments: 330,
-    saves: 150,
-    shares: 90,
-    views: 31000,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-a-young-woman-skating-at-sunset-4517-large.mp4",
-    userAvatar: "https://randomuser.me/api/portraits/women/29.jpg",
-    hashtags: ["skate", "sunset"]
-  }
-];
-
-const fallbackVideos: VideoData[] = [
-  {
-    id: "vid-5",
-    username: "default_creator",
-    caption: "Fallback clip in case of errors",
-    song: "Default Beat",
-    likes: 500,
-    comments: 50,
-    saves: 20,
-    shares: 10,
-    views: 8500,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-fallback-video-1250-large.mp4",
-    userAvatar: "https://randomuser.me/api/portraits/men/45.jpg",
-    hashtags: ["fallback", "video"]
-  }
-];
 
 export const useVideoStore = create<VideoState>((set, get) => ({
   currentVideoIndex: 0,
@@ -131,50 +41,90 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const { videos } = get();
-      if (videos.length > 0) {
-        set({ loading: false });
-        return;
+      console.log("Fetching videos from Firebase Storage...");
+      const videosRef = ref(storage, 'videos/');
+      
+      const result = await listAll(videosRef);
+      console.log(`Found ${result.items.length} videos in storage`);
+      
+      if (result.items.length > 0) {
+        const videoUrls = await Promise.all(
+          result.items.map(async (item) => {
+            try {
+              const url = await getDownloadURL(item);
+              console.log(`Got download URL for ${item.name}`);
+              return {
+                id: item.name,
+                username: "TikTok User",
+                caption: "Video from Firebase Storage",
+                song: "Original Sound",
+                likes: Math.floor(Math.random() * 1000),
+                comments: Math.floor(Math.random() * 100),
+                saves: Math.floor(Math.random() * 50),
+                shares: Math.floor(Math.random() * 30),
+                views: Math.floor(Math.random() * 10000),
+                videoUrl: url,
+                userAvatar: "https://randomuser.me/api/portraits/lego/1.jpg",
+              };
+            } catch (err) {
+              console.error(`Error getting download URL for ${item.name}:`, err);
+              return null;
+            }
+          })
+        );
+        
+        const validVideos = videoUrls.filter(v => v !== null) as VideoData[];
+        
+        if (validVideos.length > 0) {
+          console.log(`Successfully loaded ${validVideos.length} videos from Firebase`);
+          set({ videos: validVideos, loading: false, hasMore: false });
+          return;
+        }
       }
-
-      if (typeof window !== 'undefined') {
-        const mockProfiles = sampleVideos.map(video => ({
-          uid: `creator-${video.username}`,
-          username: video.username,
-          displayName: video.username,
-          bio: "Creator of amazing videos",
-          photoURL: video.userAvatar,
-          coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Cover",
-          followerCount: Math.floor(Math.random() * 10000),
-          followingCount: Math.floor(Math.random() * 500),
-          videoCount: Math.floor(Math.random() * 50) + 1,
-          likeCount: Math.floor(Math.random() * 100000),
-          links: {},
-          createdAt: Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000,
-          isVerified: Math.random() > 0.7,
-          isCreator: true,
-          accountType: 'creator' // ✅ Add this line
-        }));
-
-        localStorage.setItem("mock-profiles", JSON.stringify(mockProfiles));
-
-        const videosWithCreatorIds = sampleVideos.map(video => ({
-          ...video,
-          creatorUid: `creator-${video.username}`
-        }));
-
-        set({ videos: videosWithCreatorIds, loading: false, hasMore: true });
-      } else {
-        set({ videos: sampleVideos, loading: false, hasMore: true });
-      }
+      
+      // If we get here, either no videos were found or all download URLs failed
+      console.log("No videos found in Firebase, using sample videos");
+      
+      // Use sample videos as fallback
+      const sampleVideos: VideoData[] = [
+        {
+          id: "vid-1",
+          username: "neon_vibes",
+          caption: "Late night city walk 🌃 #neon",
+          song: "Synthwave Dreams",
+          likes: 1032,
+          comments: 183,
+          saves: 88,
+          shares: 45,
+          views: 19230,
+          videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4",
+          userAvatar: "https://randomuser.me/api/portraits/women/85.jpg",
+          hashtags: ["neon", "nightlife"]
+        },
+        {
+          id: "vid-2",
+          username: "nature_lover",
+          caption: "Camping under the stars ✨🏕️",
+          song: "Acoustic Calm",
+          likes: 875,
+          comments: 120,
+          saves: 64,
+          shares: 32,
+          views: 15400,
+          videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-mountain-landscape-1434-large.mp4",
+          userAvatar: "https://randomuser.me/api/portraits/women/65.jpg",
+          hashtags: ["camping", "nature"]
+        }
+      ];
+      
+      set({ videos: sampleVideos, loading: false, hasMore: true });
     } catch (error) {
       console.error("Error fetching videos:", error);
       set({ 
-        videos: fallbackVideos,
+        videos: get().videos.length > 0 ? get().videos : getSampleVideos(),
         loading: false,
-        error: "Using fallback videos due to connection issues.",
-        hasMore: true
+        error: "Error fetching videos from Firebase Storage.",
+        hasMore: false
       });
     }
   },
@@ -187,32 +137,49 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
       const { videos } = get();
-      if (videos.length >= 15) {
-        set({ hasMore: false, loading: false });
-        return;
-      }
-
-      const additionalVideos = moreVideoSets.map((video, index) => ({
-        ...video,
-        id: `more-${Date.now()}-${index}`
-      }));
+      
+      // For now, just append more sample videos
+      const moreVideos: VideoData[] = [
+        {
+          id: `more-${Date.now()}-1`,
+          username: "mixkit_user",
+          caption: "Holiday vibes incoming 🎄❄️",
+          song: "Jingle Beat",
+          likes: 1540,
+          comments: 220,
+          saves: 112,
+          shares: 76,
+          views: 22100,
+          videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-snowy-winter-scene-1568-large.mp4",
+          userAvatar: "https://randomuser.me/api/portraits/women/44.jpg",
+          hashtags: ["holiday", "christmas"]
+        },
+        {
+          id: `more-${Date.now()}-2`,
+          username: "user_skater",
+          caption: "Sunset skating session 🛹🔥",
+          song: "Urban Flow",
+          likes: 2000,
+          comments: 330,
+          saves: 150,
+          shares: 90,
+          views: 31000,
+          videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-a-young-woman-skating-at-sunset-4517-large.mp4",
+          userAvatar: "https://randomuser.me/api/portraits/women/29.jpg",
+          hashtags: ["skate", "sunset"]
+        }
+      ];
 
       set({ 
-        videos: [...videos, ...additionalVideos],
+        videos: [...videos, ...moreVideos],
         loading: false,
-        hasMore: videos.length + additionalVideos.length < 15,
-        lastVisible: additionalVideos.length > 0
-          ? { id: additionalVideos[additionalVideos.length - 1].id }
-          : get().lastVisible
+        hasMore: videos.length + moreVideos.length < 15,
       });
     } catch (error) {
       console.error("Error fetching more videos:", error);
-      const { videos } = get();
       set({ 
-        videos: [...videos, ...fallbackVideos],
         loading: false,
-        hasMore: false,
-        error: "Using fallback videos due to connection issues."
+        error: "Error loading more videos."
       });
     }
   },
@@ -272,3 +239,21 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     set({ videos: updatedVideos });
   }
 }));
+
+function getSampleVideos(): VideoData[] {
+  return [
+    {
+      id: "sample-1",
+      username: "sample_user",
+      caption: "Sample video (Firebase connection failed)",
+      song: "Original Sound",
+      likes: 500,
+      comments: 50,
+      saves: 25,
+      shares: 10,
+      views: 5000,
+      videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4",
+      userAvatar: "https://randomuser.me/api/portraits/lego/1.jpg",
+    }
+  ];
+}
