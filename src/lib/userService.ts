@@ -1,3 +1,4 @@
+// src/lib/userService.ts
 import { auth, db } from './firebase';
 import {
   doc,
@@ -12,17 +13,14 @@ import {
 } from 'firebase/firestore';
 import { UserProfile, CreatorApplication } from '@/types/user';
 
-// Flag to use mock auth (same as in your useAuth.tsx)
 const USE_MOCK_AUTH = true;
 
 export const getUserProfileByUsername = async (usernameOrUid: string): Promise<UserProfile | null> => {
-  // Mock mode
   if (USE_MOCK_AUTH) {
     const cleanUsername = usernameOrUid.startsWith('creator-')
       ? usernameOrUid.substring(8)
       : usernameOrUid;
 
-    // Test user shortcut
     if (cleanUsername === "testuser" || cleanUsername === "mock-test-user") {
       return {
         uid: "mock-test-user",
@@ -38,11 +36,11 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
         links: {},
         createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
         isVerified: true,
-        isCreator: true
+        isCreator: true,
+        accountType: 'creator'
       };
     }
 
-    // Generate mock profile if user not found
     if (cleanUsername && !cleanUsername.includes(' ')) {
       return {
         uid: `generated-${cleanUsername}`,
@@ -58,12 +56,12 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
         links: {},
         createdAt: Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000,
         isVerified: Math.random() > 0.7,
-        isCreator: true
+        isCreator: true,
+        accountType: 'creator'
       };
     }
   }
 
-  // Firebase fallback
   try {
     let userDoc;
     const usernameQuery = query(
@@ -208,7 +206,7 @@ export const searchUsers = async (queryStr: string, limit = 10): Promise<UserPro
         });
       }
 
-      const testUser = {
+      const testUser: UserProfile = {
         uid: 'mock-test-user',
         username: 'testuser',
         displayName: 'Test User',
@@ -227,7 +225,8 @@ export const searchUsers = async (queryStr: string, limit = 10): Promise<UserPro
         },
         createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
         isVerified: true,
-        isCreator: true
+        isCreator: true,
+        accountType: 'creator'
       };
 
       if (
