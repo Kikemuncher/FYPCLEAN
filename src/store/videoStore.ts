@@ -1,5 +1,3 @@
-// src/store/videoStore.ts - Update this file
-
 import { create } from 'zustand';
 import { VideoData } from '@/types/video';
 import { storage } from '@/lib/firebase';
@@ -43,11 +41,25 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     try {
       console.log("Fetching videos from Firebase Storage...");
       const videosRef = ref(storage, 'videos/');
-      
-      const result = await listAll(videosRef);
+
+      // Add a timeout to prevent endless loading
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout fetching videos")), 10000)
+      );
+
+      const listPromise = listAll(videosRef);
+
+      // Race between the actual fetch and the timeout
+      const result = await Promise.race([listPromise, timeoutPromise]) as any;
+
       console.log(`Found ${result.items.length} videos in storage`);
-      
-      if (result.items.length > 0) {
+
+      // Immediately set sample videos to prevent endless loading
+      const sampleVideos = getSampleVideos();
+      set({ videos: sampleVideos, loading: false, hasMore: false });
+
+      if (result.items && result.items.length > 0) {
+        // Continue fetching real videos in background
         const videoUrls = await Promise.all(
           result.items.map(async (item) => {
             try {
@@ -72,58 +84,22 @@ export const useVideoStore = create<VideoState>((set, get) => ({
             }
           })
         );
-        
+
         const validVideos = videoUrls.filter(v => v !== null) as VideoData[];
-        
+
         if (validVideos.length > 0) {
           console.log(`Successfully loaded ${validVideos.length} videos from Firebase`);
           set({ videos: validVideos, loading: false, hasMore: false });
           return;
         }
       }
-      
-      // If we get here, either no videos were found or all download URLs failed
-      console.log("No videos found in Firebase, using sample videos");
-      
-      // Use sample videos as fallback
-      const sampleVideos: VideoData[] = [
-        {
-          id: "vid-1",
-          username: "neon_vibes",
-          caption: "Late night city walk 🌃 #neon",
-          song: "Synthwave Dreams",
-          likes: 1032,
-          comments: 183,
-          saves: 88,
-          shares: 45,
-          views: 19230,
-          videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4",
-          userAvatar: "https://randomuser.me/api/portraits/women/85.jpg",
-          hashtags: ["neon", "nightlife"]
-        },
-        {
-          id: "vid-2",
-          username: "nature_lover",
-          caption: "Camping under the stars ✨🏕️",
-          song: "Acoustic Calm",
-          likes: 875,
-          comments: 120,
-          saves: 64,
-          shares: 32,
-          views: 15400,
-          videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-mountain-landscape-1434-large.mp4",
-          userAvatar: "https://randomuser.me/api/portraits/women/65.jpg",
-          hashtags: ["camping", "nature"]
-        }
-      ];
-      
-      set({ videos: sampleVideos, loading: false, hasMore: true });
     } catch (error) {
       console.error("Error fetching videos:", error);
-      set({ 
-        videos: get().videos.length > 0 ? get().videos : getSampleVideos(),
+      const sampleVideos = getSampleVideos();
+      set({
+        videos: sampleVideos,
         loading: false,
-        error: "Error fetching videos from Firebase Storage.",
+        error: "Error fetching videos. Using sample videos instead.",
         hasMore: false
       });
     }
@@ -137,7 +113,7 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
       const { videos } = get();
-      
+
       // For now, just append more sample videos
       const moreVideos: VideoData[] = [
         {
@@ -170,14 +146,14 @@ export const useVideoStore = create<VideoState>((set, get) => ({
         }
       ];
 
-      set({ 
+      set({
         videos: [...videos, ...moreVideos],
         loading: false,
         hasMore: videos.length + moreVideos.length < 15,
       });
     } catch (error) {
       console.error("Error fetching more videos:", error);
-      set({ 
+      set({
         loading: false,
         error: "Error loading more videos."
       });
@@ -187,9 +163,9 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   likeVideo: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, likes: video.likes + 1 } 
+    const updatedVideos = videos.map(video =>
+      video.id === videoId
+        ? { ...video, likes: video.likes + 1 }
         : video
     );
     set({ videos: updatedVideos });
@@ -198,9 +174,9 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   unlikeVideo: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, likes: Math.max(0, video.likes - 1) } 
+    const updatedVideos = videos.map(video =>
+      video.id === videoId
+        ? { ...video, likes: Math.max(0, video.likes - 1) }
         : video
     );
     set({ videos: updatedVideos });
@@ -209,9 +185,9 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   shareVideo: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, shares: video.shares + 1 } 
+    const updatedVideos = videos.map(video =>
+      video.id === videoId
+        ? { ...video, shares: video.shares + 1 }
         : video
     );
     set({ videos: updatedVideos });
@@ -220,9 +196,9 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   saveVideo: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, saves: video.saves + 1 } 
+    const updatedVideos = videos.map(video =>
+      video.id === videoId
+        ? { ...video, saves: video.saves + 1 }
         : video
     );
     set({ videos: updatedVideos });
@@ -231,9 +207,9 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   incrementView: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, views: video.views + 1 } 
+    const updatedVideos = videos.map(video =>
+      video.id === videoId
+        ? { ...video, views: video.views + 1 }
         : video
     );
     set({ videos: updatedVideos });
