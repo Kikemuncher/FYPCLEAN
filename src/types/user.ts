@@ -8,6 +8,7 @@ export interface User {
   isVerified: boolean;
   isCreator: boolean;
   isAdmin: boolean;
+  accountType: 'user' | 'creator';
 }
 
 export interface UserProfile {
@@ -30,6 +31,10 @@ export interface UserProfile {
   createdAt: number;
   isVerified: boolean;
   isCreator: boolean;
+  accountType: 'user' | 'creator';
+  creatorBio?: string;
+  creatorCategory?: string;
+  portfolioLinks?: string[];
 }
 
 export interface CreatorApplication {
