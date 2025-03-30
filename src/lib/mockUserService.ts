@@ -1,9 +1,7 @@
 import { UserProfile, User } from "@/types/user";
 
-// Check if we're in a browser environment
 const isBrowser = typeof window !== "undefined";
 
-// Sample creator profiles that match our video sample data
 const SAMPLE_CREATORS: UserProfile[] = [
   {
     uid: "creator-mixkit_user",
@@ -23,6 +21,7 @@ const SAMPLE_CREATORS: UserProfile[] = [
     createdAt: Date.now() - 190 * 24 * 60 * 60 * 1000,
     isVerified: true,
     isCreator: true,
+    accountType: 'creator'
   },
   {
     uid: "creator-nature_lover",
@@ -43,6 +42,7 @@ const SAMPLE_CREATORS: UserProfile[] = [
     createdAt: Date.now() - 280 * 24 * 60 * 60 * 1000,
     isVerified: true,
     isCreator: true,
+    accountType: 'creator'
   },
   {
     uid: "creator-neon_vibes",
@@ -63,6 +63,7 @@ const SAMPLE_CREATORS: UserProfile[] = [
     createdAt: Date.now() - 360 * 24 * 60 * 60 * 1000,
     isVerified: true,
     isCreator: true,
+    accountType: 'creator'
   },
   {
     uid: "creator-user1",
@@ -79,14 +80,13 @@ const SAMPLE_CREATORS: UserProfile[] = [
     createdAt: Date.now() - 90 * 24 * 60 * 60 * 1000,
     isVerified: true,
     isCreator: true,
+    accountType: 'creator'
   }
 ];
 
-// Updated getUserProfileByUsername
 export const getUserProfileByUsername = async (usernameOrUid: string): Promise<UserProfile | null> => {
   if (!isBrowser) return null;
 
-  // First, check if this is one of our sample creators
   const sampleCreator = SAMPLE_CREATORS.find(
     creator => creator.username === usernameOrUid || creator.uid === usernameOrUid
   );
@@ -98,7 +98,6 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
   if (currentUserStr && currentProfileStr) {
     const currentUser = JSON.parse(currentUserStr) as User;
     const currentProfile = JSON.parse(currentProfileStr) as UserProfile;
-
     if (currentProfile.username === usernameOrUid || currentUser.uid === usernameOrUid) {
       return currentProfile;
     }
@@ -113,13 +112,16 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
     if (foundProfile) return foundProfile;
   }
 
-  if (usernameOrUid && !usernameOrUid.includes(' ')) {
+  if (usernameOrUid && !usernameOrUid.includes(" ")) {
     const generatedProfile: UserProfile = {
       uid: `generated-${usernameOrUid}`,
       username: usernameOrUid,
-      displayName: usernameOrUid.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-      bio: `Creator of amazing content`,
-      photoURL: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? 'women' : 'men'}/${Math.floor(Math.random() * 99)}.jpg`,
+      displayName: usernameOrUid
+        .split("_")
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" "),
+      bio: "Creator of amazing content",
+      photoURL: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? "women" : "men"}/${Math.floor(Math.random() * 99)}.jpg`,
       coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Creator",
       followerCount: Math.floor(Math.random() * 10000),
       followingCount: Math.floor(Math.random() * 500),
@@ -128,7 +130,8 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
       links: {},
       createdAt: Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000,
       isVerified: Math.random() > 0.7,
-      isCreator: true
+      isCreator: true,
+      accountType: 'creator'
     };
 
     try {
@@ -164,8 +167,8 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
       createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
       isVerified: true,
       isCreator: true,
+      accountType: 'creator'
     };
   }
 
-  return null;
-};
+ 
