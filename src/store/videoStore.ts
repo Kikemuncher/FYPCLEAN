@@ -24,7 +24,7 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   currentVideoIndex: 0,
   videos: [],
   loading: false,
-  hasMore: true,
+  hasMore: false,
   lastVisible: null,
   error: null,
 
@@ -41,27 +41,13 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     try {
       console.log("Fetching videos from Firebase Storage...");
       const videosRef = ref(storage, 'videos/');
-
-      // Add a timeout to prevent endless loading
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout fetching videos")), 10000)
-      );
-
-      const listPromise = listAll(videosRef);
-
-      // Race between the actual fetch and the timeout
-      const result = await Promise.race([listPromise, timeoutPromise]) as any;
-
+      
+      const result = await listAll(videosRef);
       console.log(`Found ${result.items.length} videos in storage`);
-
-      // Immediately set sample videos to prevent endless loading
-      const sampleVideos = getSampleVideos();
-      set({ videos: sampleVideos, loading: false, hasMore: false });
-
+      
       if (result.items && result.items.length > 0) {
-        // Continue fetching real videos in background
         const videoUrls = await Promise.all(
-          result.items.map(async (item) => {
+          result.items.map(async (item: { name: string }) => {
             try {
               const url = await getDownloadURL(item);
               console.log(`Got download URL for ${item.name}`);
@@ -84,88 +70,41 @@ export const useVideoStore = create<VideoState>((set, get) => ({
             }
           })
         );
-
+        
         const validVideos = videoUrls.filter(v => v !== null) as VideoData[];
-
+        
         if (validVideos.length > 0) {
           console.log(`Successfully loaded ${validVideos.length} videos from Firebase`);
           set({ videos: validVideos, loading: false, hasMore: false });
-          return;
+        } else {
+          console.log("No valid videos found in Firebase");
+          set({ loading: false, error: "No valid videos found in Firebase Storage" });
         }
+      } else {
+        console.log("No videos found in Firebase Storage");
+        set({ loading: false, error: "No videos found in Firebase Storage" });
       }
     } catch (error) {
       console.error("Error fetching videos:", error);
-      const sampleVideos = getSampleVideos();
-      set({
-        videos: sampleVideos,
+      set({ 
         loading: false,
-        error: "Error fetching videos. Using sample videos instead.",
-        hasMore: false
+        error: "Error fetching videos from Firebase Storage."
       });
     }
   },
 
   fetchMoreVideos: async () => {
-    const { loading, hasMore } = get();
-    if (loading || !hasMore) return;
-    set({ loading: true, error: null });
-
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const { videos } = get();
-
-      // For now, just append more sample videos
-      const moreVideos: VideoData[] = [
-        {
-          id: `more-${Date.now()}-1`,
-          username: "mixkit_user",
-          caption: "Holiday vibes incoming 🎄❄️",
-          song: "Jingle Beat",
-          likes: 1540,
-          comments: 220,
-          saves: 112,
-          shares: 76,
-          views: 22100,
-          videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-snowy-winter-scene-1568-large.mp4",
-          userAvatar: "https://randomuser.me/api/portraits/women/44.jpg",
-          hashtags: ["holiday", "christmas"]
-        },
-        {
-          id: `more-${Date.now()}-2`,
-          username: "user_skater",
-          caption: "Sunset skating session 🛹🔥",
-          song: "Urban Flow",
-          likes: 2000,
-          comments: 330,
-          saves: 150,
-          shares: 90,
-          views: 31000,
-          videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-a-young-woman-skating-at-sunset-4517-large.mp4",
-          userAvatar: "https://randomuser.me/api/portraits/women/29.jpg",
-          hashtags: ["skate", "sunset"]
-        }
-      ];
-
-      set({
-        videos: [...videos, ...moreVideos],
-        loading: false,
-        hasMore: videos.length + moreVideos.length < 15,
-      });
-    } catch (error) {
-      console.error("Error fetching more videos:", error);
-      set({
-        loading: false,
-        error: "Error loading more videos."
-      });
-    }
+    // Since we're not implementing pagination for Firebase Storage,
+    // this function won't do anything for now
+    set({ hasMore: false });
   },
 
   likeVideo: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video =>
-      video.id === videoId
-        ? { ...video, likes: video.likes + 1 }
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, likes: video.likes + 1 } 
         : video
     );
     set({ videos: updatedVideos });
@@ -174,9 +113,9 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   unlikeVideo: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video =>
-      video.id === videoId
-        ? { ...video, likes: Math.max(0, video.likes - 1) }
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, likes: Math.max(0, video.likes - 1) } 
         : video
     );
     set({ videos: updatedVideos });
@@ -185,9 +124,9 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   shareVideo: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video =>
-      video.id === videoId
-        ? { ...video, shares: video.shares + 1 }
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, shares: video.shares + 1 } 
         : video
     );
     set({ videos: updatedVideos });
@@ -196,9 +135,9 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   saveVideo: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video =>
-      video.id === videoId
-        ? { ...video, saves: video.saves + 1 }
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, saves: video.saves + 1 } 
         : video
     );
     set({ videos: updatedVideos });
@@ -207,29 +146,11 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   incrementView: (videoId) => {
     const { videos } = get();
     if (!videoId) return;
-    const updatedVideos = videos.map(video =>
-      video.id === videoId
-        ? { ...video, views: video.views + 1 }
+    const updatedVideos = videos.map(video => 
+      video.id === videoId 
+        ? { ...video, views: video.views + 1 } 
         : video
     );
     set({ videos: updatedVideos });
   }
 }));
-
-function getSampleVideos(): VideoData[] {
-  return [
-    {
-      id: "sample-1",
-      username: "sample_user",
-      caption: "Sample video (Firebase connection failed)",
-      song: "Original Sound",
-      likes: 500,
-      comments: 50,
-      saves: 25,
-      shares: 10,
-      views: 5000,
-      videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4",
-      userAvatar: "https://randomuser.me/api/portraits/lego/1.jpg",
-    }
-  ];
-}
