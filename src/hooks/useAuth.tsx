@@ -153,6 +153,14 @@ const useMockAuthState = (): AuthContextType => {
 
     setCurrentUser(newUser);
     setUserProfile(newProfile);
+
+    if (typeof window !== 'undefined') {
+      const registeredUsersStr = localStorage.getItem('mock-registered-users');
+      const registeredUsers = registeredUsersStr ? JSON.parse(registeredUsersStr) : [];
+      registeredUsers.push(newProfile);
+      localStorage.setItem('mock-registered-users', JSON.stringify(registeredUsers));
+    }
+
     router.push('/auth/onboarding');
   };
 
@@ -233,6 +241,15 @@ const useMockAuthState = (): AuthContextType => {
 
     setCurrentUser(updatedUser);
     setUserProfile(updatedProfile);
+
+    if (typeof window !== 'undefined') {
+      const registeredUsersStr = localStorage.getItem('mock-registered-users');
+      const registeredUsers = registeredUsersStr ? JSON.parse(registeredUsersStr) : [];
+      const updatedUsers = registeredUsers.map((user: UserProfile) =>
+        user.uid === updatedProfile.uid ? updatedProfile : user
+      );
+      localStorage.setItem('mock-registered-users', JSON.stringify(updatedUsers));
+    }
   };
 
   return {
@@ -268,4 +285,11 @@ export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
+};
+
+// Utility to get all registered users from localStorage
+export const getAllRegisteredUsers = () => {
+  if (typeof window === 'undefined') return [];
+  const registeredUsersStr = localStorage.getItem('mock-registered-users');
+  return registeredUsersStr ? JSON.parse(registeredUsersStr) : [];
 };
