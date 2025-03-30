@@ -4,15 +4,14 @@ import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
-// Firebase configuration
+// Firebase configuration with hardcoded values
 const firebaseConfig = {
   apiKey: "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
   authDomain: "tiktok-a7af5.firebaseapp.com",
   projectId: "tiktok-a7af5",
-  storageBucket: "tiktok-a7af5.appspot.com",
+  storageBucket: "tiktok-a7af5.appspot.com", // Fixed: removed the .firebasestorage.app
   messagingSenderId: "609721475346",
-  appId: "1:609721475346:web:c80084600ed104b6b153cb",
-  measurementId: "G-3Z96CKXW1W"
+  appId: "1:609721475346:web:c80084600ed104b6b153cb"
 };
 
 // Initialize Firebase
@@ -39,7 +38,6 @@ try {
 } catch (error) {
   console.error('Firebase initialization failed:', error);
   // Provide default instances to prevent app crashes
-  // This way the app can still render, even if Firebase features won't work
   firebaseApp = {} as FirebaseApp;
   auth = {} as Auth;
   db = {} as Firestore; 
