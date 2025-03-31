@@ -10,7 +10,7 @@ export default function SideNav() {
   
   const isActive = (path: string): boolean => {
     if (path === '/' && pathname === '/') return true;
-    if (path !== '/' && pathname.startsWith(path)) return true;
+    if (path !== '/' && pathname && pathname.startsWith(path)) return true;
     return false;
   };
   
