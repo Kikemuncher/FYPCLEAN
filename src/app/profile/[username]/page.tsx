@@ -13,7 +13,8 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<'videos' | 'likes' | 'favorites'>('videos');
   const [following, setFollowing] = useState(false);
 
-  const { username } = useParams();
+  const params = useParams();
+  const username = params ? (Array.isArray(params.username) ? params.username[0] : params.username) : '';
   const router = useRouter();
   const { currentUser, userProfile, followUser, unfollowUser, isFollowing } = useAuth();
 
