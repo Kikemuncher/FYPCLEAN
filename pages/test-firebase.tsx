@@ -1,102 +1,70 @@
-// pages/test-firebase.tsx
-import { useEffect, useState } from 'react';
-import { storage } from '@/lib/firebase';
-import { ref, listAll, getDownloadURL } from 'firebase/storage';
+"use client";
 
-export default function TestFirebase() {
-  const [status, setStatus] = useState<string>('Testing connection to Firebase...');
-  const [videos, setVideos] = useState<{name: string, url: string}[]>([]);
-  const [error, setError] = useState<string | null>(null);
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
 
-  useEffect(() => {
-    async function testFirebaseConnection() {
-      try {
-        setStatus('Initializing Firebase connection test...');
-        
-        // Test basic reference creation
-        const testRef = ref(storage, 'test');
-        setStatus('Firebase Storage reference created successfully');
-        
-        // Try to list contents of videos folder
-        const videosRef = ref(storage, 'videos/');
-        setStatus('Attempting to list videos folder contents...');
-        
-        const result = await listAll(videosRef);
-        setStatus(`Found ${result.items.length} items in videos folder`);
-        
-        if (result.items.length > 0) {
-          // Try to get download URLs
-          const videosList = await Promise.all(
-            result.items.map(async (item) => {
-              try {
-                const url = await getDownloadURL(item);
-                return { name: item.name, url };
-              } catch (urlError: any) {
-                console.error(`Error getting URL for ${item.name}:`, urlError);
-                return { name: item.name, url: `Error: ${urlError.message}` };
-              }
-            })
-          );
-          
-          setVideos(videosList);
-          setStatus('Firebase connection successful');
-        }
-      } catch (err: any) {
-        console.error('Firebase test error:', err);
-        setError(err.message || 'Unknown error occurred');
-        setStatus('Firebase connection test failed');
-      }
-    }
-    
-    testFirebaseConnection();
-  }, []);
-
+export default function SideNav() {
+  const pathname = usePathname();
+  const { currentUser, userProfile } = useAuth();
+  
+  const isActive = (path: string): boolean => {
+    if (path === '/' && pathname === '/') return true;
+    if (path !== '/' && pathname && pathname.startsWith(path)) return true;
+    return false;
+  };
+  
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Firebase Connection Test</h1>
-      
-      <div className="bg-gray-100 p-4 rounded-md mb-6">
-        <h2 className="text-lg font-semibold mb-2">Status:</h2>
-        <p className="text-blue-600">{status}</p>
-        
-        {error && (
-          <div className="mt-4 p-4 bg-red-100 text-red-700 rounded-md">
-            <h3 className="font-bold">Error:</h3>
-            <p>{error}</p>
-          </div>
-        )}
-      </div>
-      
-      {videos.length > 0 ? (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Found {videos.length} videos:</h2>
-          <ul className="space-y-6">
-            {videos.map((video, index) => (
-              <li key={index} className="border p-4 rounded-md">
-                <h3 className="font-bold mb-2">{video.name}</h3>
-                <p className="mb-2 text-sm break-all">
-                  <span className="font-semibold">URL:</span> {video.url}
-                </p>
-                {!video.url.startsWith('Error:') && (
-                  <video 
-                    controls 
-                    width="320" 
-                    className="mt-2 rounded-md border"
-                  >
-                    <source src={video.url} type="video/mp4" />
-                    Your browser does not support video playback
-                  </video>
-                )}
-              </li>
-            ))}
-          </ul>
+    <div className="fixed left-6 top-1/2 transform -translate-y-1/2 z-50 flex flex-col space-y-8">
+      <Link href="/" className="flex flex-col items-center group">
+        <div className={`rounded-full p-3 transition-colors ${isActive('/') ? 'bg-black/70' : 'bg-black/50 group-hover:bg-black/60'}`}>
+          <svg className={`h-8 w-8 ${isActive('/') ? 'text-white' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2c5.514 0 10 4.486 10 10s-4.486 10-10 10-10-4.486-10-10 4.486-10 10-10-10 4.486-10 10-10-10 4.486-10-10zm-3 17v-10l9 5-9 5z"/>
+          </svg>
         </div>
-      ) : (
-        <div className="text-center p-6 bg-yellow-50 rounded-md">
-          <p>No videos found in the Firebase Storage 'videos/' folder.</p>
-          <p className="mt-2 text-sm">Make sure you've uploaded videos to the correct location.</p>
+        <span className={`text-sm font-medium mt-2 ${isActive('/') ? 'text-white' : 'text-gray-300'}`}>For You</span>
+      </Link>
+
+      <Link href="/discover" className="flex flex-col items-center group">
+        <div className={`rounded-full p-3 transition-colors ${isActive('/discover') ? 'bg-black/70' : 'bg-black/50 group-hover:bg-black/60'}`}>
+          <svg className={`h-8 w-8 ${isActive('/discover') ? 'text-white' : 'text-gray-300'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
         </div>
-      )}
+        <span className={`text-sm font-medium mt-2 ${isActive('/discover') ? 'text-white' : 'text-gray-300'}`}>Discover</span>
+      </Link>
+
+      <Link href={currentUser ? "/upload" : "/auth/login"} className="flex flex-col items-center group">
+        <div className="rounded-full bg-tiktok-pink p-3 group-hover:bg-pink-600 transition-colors">
+          <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+        </div>
+        <span className="text-sm font-medium mt-2 text-white">Upload</span>
+      </Link>
+
+      <Link href="/inbox" className="flex flex-col items-center group">
+        <div className={`rounded-full p-3 transition-colors ${isActive('/inbox') ? 'bg-black/70' : 'bg-black/50 group-hover:bg-black/60'}`}>
+          <svg className={`h-8 w-8 ${isActive('/inbox') ? 'text-white' : 'text-gray-300'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+          </svg>
+        </div>
+        <span className={`text-sm font-medium mt-2 ${isActive('/inbox') ? 'text-white' : 'text-gray-300'}`}>Inbox</span>
+      </Link>
+
+      <Link 
+        href={currentUser ? 
+          (userProfile?.username ? `/profile/${userProfile.username}` : `/profile/${currentUser.uid}`) : 
+          "/auth/login"} 
+        className="flex flex-col items-center group"
+      >
+        <div className={`rounded-full p-3 transition-colors ${isActive('/profile') ? 'bg-black/70' : 'bg-black/50 group-hover:bg-black/60'}`}>
+          <svg className={`h-8 w-8 ${isActive('/profile') ? 'text-white' : 'text-gray-300'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        </div>
+        <span className={`text-sm font-medium mt-2 ${isActive('/profile') ? 'text-white' : 'text-gray-300'}`}>Profile</span>
+      </Link>
     </div>
   );
 }
