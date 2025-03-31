@@ -150,7 +150,7 @@ const FirebaseDirectTest = () => {
                     setTimeout(() => reject(new Error('Timeout: getDownloadURL operation took too long (10s)')), 10000);
                   });
                   
-                  const url = await Promise.race([urlPromise, urlTimeoutPromise]);
+                  const url = await Promise.race([urlPromise, urlTimeoutPromise]) as string;
                   addLog(`✅ Got download URL: ${url.substring(0, 50)}...`);
                   addLog('🎉 ALL TESTS PASSED! Your Firebase Storage is working correctly.');
                 } catch (urlError) {
