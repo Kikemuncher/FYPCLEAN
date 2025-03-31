@@ -1,70 +1,72 @@
-Skip to main content
-Firebase logo
-Project Overview
-Project shortcuts
-Storage
-What's new
-Genkit
-New
-Vertex AI
-New
-Product categories
-Build
-Run
-Analytics
-AI
-All products
-Related development tools
-IDX
-Checks
-Billing plan:Blaze
-Pay as you go
+// pages/direct-test.jsx
+import { useEffect, useState } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getStorage, ref, listAll, getDownloadURL } from 'firebase/storage';
 
-warning:
-Enable Multi-factor Authentication (MFA) on your Google Account before May 13, 2025 to keep accessing Firebase. Learn more 
-Tiktok
-Storage
-tiktok-a7af5.firebasestorage.app
-Files
-Rules
-Usage
-Extensions
-Write Security Rules that control access to Storage based on the contents of your Firestore Database.
-Rules Playground
-Simulation type
-get
-Location
-/b/tiktok-a7af5.firebasestorage.app/o
-path/to/resource
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if true;  // Fully open access
+export default function DirectTest() {
+  const [status, setStatus] = useState('Loading...');
+  const [videoUrl, setVideoUrl] = useState('');
+  
+  useEffect(() => {
+    async function testFirebase() {
+      try {
+        setStatus('Initializing Firebase...');
+        
+        // Initialize Firebase with your config
+        const firebaseConfig = {
+          apiKey: "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
+          authDomain: "tiktok-a7af5.firebaseapp.com",
+          projectId: "tiktok-a7af5",
+          storageBucket: "tiktok-a7af5.firebasestorage.app",
+          messagingSenderId: "609721475346",
+          appId: "1:609721475346:web:c80084600ed104b6b153cb",
+          measurementId: "G-3Z96CKXW1W"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const storage = getStorage(app);
+        
+        setStatus('Listing videos folder...');
+        const videosRef = ref(storage, 'videos');
+        const result = await listAll(videosRef);
+        
+        setStatus(`Found ${result.items.length} videos, getting first video URL...`);
+        
+        if (result.items.length > 0) {
+          const firstVideo = result.items[0];
+          setStatus(`Getting URL for ${firstVideo.name}...`);
+          
+          const url = await getDownloadURL(firstVideo);
+          setVideoUrl(url);
+          setStatus('Success!');
+        } else {
+          setStatus('No videos found in the folder');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        setStatus(`Error: ${error.message || 'Unknown error'}`);
+      }
     }
-  }
+    
+    testFirebase();
+  }, []);
+  
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Direct Firebase Storage Test</h1>
+      <p className="mb-4">Status: {status}</p>
+      
+      {videoUrl && (
+        <div className="border rounded overflow-hidden max-w-md">
+          <video controls className="w-full h-auto">
+            <source src={videoUrl} type="video/mp4" />
+            Your browser doesn't support video playback.
+          </video>
+          <div className="p-2 bg-gray-50 break-all text-xs">
+            <p>{videoUrl}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
-
-1
-rules_version = '2';
-2
-service firebase.storage {
-3
-  match /b/{bucket}/o {
-4
-    match /{allPaths=**} {
-5
-      allow read, write: if true;  // Fully open access
-6
-    }
-7
-  }
-8
-}
-9
-​
-This Firebase-provisioned API key is for use only with Firebase Web Apps and only with Firebase-related APIs. This key is automatically restricted to Firebase-related APIs. Learn more
-Genkit for Node.js is Generally Available
-Generate images using Imagen 3 models
-Genkit for Node.js is Generally Available
-Generate images using Imagen 3 models
