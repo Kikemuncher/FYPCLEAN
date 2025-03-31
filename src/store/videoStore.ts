@@ -1,7 +1,5 @@
 import { create } from 'zustand';
 import { VideoData } from '@/types/video';
-import { storage } from '@/lib/firebase';
-import { ref, listAll, getDownloadURL } from 'firebase/storage';
 
 interface VideoState {
   currentVideoIndex: number;
@@ -37,64 +35,24 @@ export const useVideoStore = create<VideoState>((set, get) => ({
 
   fetchVideos: async () => {
     set({ loading: true, error: null });
-
     try {
-      console.log("Fetching videos from Firebase Storage...");
-      const videosRef = ref(storage, 'videos/');
-      
-      const result = await listAll(videosRef);
-      console.log(`Found ${result.items.length} videos in storage`);
-      
-      if (result.items && result.items.length > 0) {
-        const videoUrls = await Promise.all(
-          result.items.map(async (item) => {
-            try {
-              const url = await getDownloadURL(item);
-              console.log(`Got download URL for ${item.name}`);
-              return {
-                id: item.name,
-                username: "TikTok User",
-                caption: "Video from Firebase Storage",
-                song: "Original Sound",
-                likes: Math.floor(Math.random() * 1000),
-                comments: Math.floor(Math.random() * 100),
-                saves: Math.floor(Math.random() * 50),
-                shares: Math.floor(Math.random() * 30),
-                views: Math.floor(Math.random() * 10000),
-                videoUrl: url,
-                userAvatar: "https://randomuser.me/api/portraits/lego/1.jpg",
-              };
-            } catch (err) {
-              console.error(`Error getting download URL for ${item.name}:`, err);
-              return null;
-            }
-          })
-        );
-        
-        const validVideos = videoUrls.filter(v => v !== null) as VideoData[];
-        
-        if (validVideos.length > 0) {
-          console.log(`Successfully loaded ${validVideos.length} videos from Firebase`);
-          set({ videos: validVideos, loading: false, hasMore: false });
-        } else {
-          console.log("No valid videos found in Firebase");
-          set({ loading: false, error: "No valid videos found in Firebase Storage" });
-        }
-      } else {
-        console.log("No videos found in Firebase Storage");
-        set({ loading: false, error: "No videos found in Firebase Storage" });
+      const response = await fetch('/api/get-videos');
+      if (!response.ok) {
+        throw new Error('Failed to fetch videos');
       }
+      const data = await response.json();
+      
+      set({ videos: data.videos });
+      return data.videos;
     } catch (error) {
-      console.error("Error fetching videos:", error);
-      set({ 
-        loading: false,
-        error: "Error fetching videos from Firebase Storage."
-      });
+      console.error('Error fetching videos:', error);
+      set({ loading: false, error: 'Error fetching videos' });
+      throw error;
     }
   },
 
   fetchMoreVideos: async () => {
-    // Since we're not implementing pagination for Firebase Storage,
+    // Since we're not implementing pagination for this endpoint,
     // this function won't do anything for now
     set({ hasMore: false });
   },
