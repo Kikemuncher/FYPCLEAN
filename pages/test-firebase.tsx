@@ -4,8 +4,8 @@ import { ref, listAll, getDownloadURL } from 'firebase/storage';
 
 export default function TestFirebase() {
   const [status, setStatus] = useState('Testing connection to Firebase...');
-  const [videos, setVideos] = useState([]);
-  const [error, setError] = useState(null);
+  const [videos, setVideos] = useState<{ name: string; url: string }[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function testFirebaseConnection() {
@@ -27,9 +27,9 @@ export default function TestFirebase() {
               try {
                 const url = await getDownloadURL(item);
                 return { name: item.name, url };
-              } catch (urlError) {
+              } catch (urlError: any) {
                 console.error(`Error getting URL for ${item.name}:`, urlError);
-                return { name: item.name, url: `Error: ${urlError.message}` };
+                return { name: item.name, url: `Error: ${urlError.message || 'Unknown error'}` };
               }
             })
           );
@@ -37,7 +37,7 @@ export default function TestFirebase() {
           setVideos(videosList);
           setStatus('Firebase connection successful');
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Firebase test error:', err);
         setError(err.message || 'Unknown error occurred');
         setStatus('Firebase connection test failed');
