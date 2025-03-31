@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState, useEffect, useRef } from "react";
 import { useVideoStore } from "@/store/videoStore";
 import Link from "next/link";
@@ -11,39 +9,51 @@ function FeedList() {
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const wheelLock = useRef(false);
 
+  // New useEffect for asynchronously loading videos with added console logs
+  useEffect(() => {
+    console.log("Starting to fetch videos...");
+    const loadVideos = async () => {
+      try {
+        console.log("Calling fetchVideos from videoStore");
+        await fetchVideos();
+        console.log("fetchVideos completed");
+      } catch (error) {
+        console.error("Error in fetchVideos:", error);
+      }
+    };
+    loadVideos();
+  }, [fetchVideos]);
+
+  // Original useEffect for handling window resize
   useEffect(() => {
     setWindowHeight(window.innerHeight);
     const handleResize = () => setWindowHeight(window.innerHeight);
     window.addEventListener("resize", handleResize);
-
-    fetchVideos();
-
     return () => window.removeEventListener("resize", handleResize);
-  }, [fetchVideos]);
+  }, []);
 
+  // Wheel event handling for video navigation
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (wheelLock.current) return;
     wheelLock.current = true;
-
     if (e.deltaY > 0 && currentVideoIndex < videos.length - 1) {
       setCurrentVideoIndex(currentVideoIndex + 1);
     } else if (e.deltaY < 0 && currentVideoIndex > 0) {
       setCurrentVideoIndex(currentVideoIndex - 1);
     }
-
     setTimeout(() => {
       wheelLock.current = false;
     }, 800);
   };
 
+  // Rendering logic including the mute button
   return videos.length === 0 ? (
     <div className="flex items-center justify-center h-screen w-full bg-black">
       <p className="text-white">Loading videos...</p>
     </div>
   ) : (
     <div className="fixed inset-0 bg-black" style={{ height: `${windowHeight}px` }} onWheel={handleWheel}>
-      {/* 📹 Video Player Container */}
       <div className="w-full h-full flex justify-center">
         <div
           className="relative"
@@ -67,8 +77,6 @@ function FeedList() {
                 muted={isMuted}
                 autoPlay={index === currentVideoIndex}
               />
-
-              {/* 🎭 Video Info Overlay */}
               <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
                 <Link
                   href={`/profile/${video.username}`}
@@ -98,8 +106,6 @@ function FeedList() {
           ))}
         </div>
       </div>
-
-      {/* 🔇 Mute Button */}
       <button
         onClick={() => setIsMuted(!isMuted)}
         className="absolute top-4 right-4 bg-black/30 rounded-full p-2 z-30"
