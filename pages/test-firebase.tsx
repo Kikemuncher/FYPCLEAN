@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import { ref, listAll, getDownloadURL, getStorage } from 'firebase/storage';
 import { initializeApp, getApp, getApps } from 'firebase/app';
+import { FirebaseOptions } from 'firebase/app';
 
 // Direct Firebase validation component - doesn't rely on existing config
 const FirebaseStorageDebugger = () => {
-  const [videos, setVideos] = useState([]);
+  const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState({
     initialized: false,
     storageAccess: false,
@@ -16,8 +17,8 @@ const FirebaseStorageDebugger = () => {
     downloadUrls: false
   });
   
-  // Direct firebase config check
-  const [firebaseConfig, setFirebaseConfig] = useState(null);
+  // Fixed type definition for firebaseConfig
+  const [firebaseConfig, setFirebaseConfig] = useState<FirebaseOptions | null>(null);
 
   useEffect(() => {
     // First check if we can access the Firebase config
@@ -65,7 +66,7 @@ const FirebaseStorageDebugger = () => {
             }
             
             // Get download URLs with individual try/catch blocks
-            const urls = [];
+            const urls: {path: string, url?: string, error?: string}[] = [];
             for (const item of result.items) {
               try {
                 console.log('Requesting URL for:', item.fullPath);
@@ -74,7 +75,7 @@ const FirebaseStorageDebugger = () => {
                 urls.push({path: item.fullPath, url});
               } catch (urlErr) {
                 console.error(`Failed to get URL for ${item.fullPath}:`, urlErr);
-                urls.push({path: item.fullPath, error: urlErr.message});
+                urls.push({path: item.fullPath, error: (urlErr as Error).message});
               }
             }
             
@@ -84,7 +85,7 @@ const FirebaseStorageDebugger = () => {
             setLoading(false);
           } catch (err) {
             console.error('Error during video listing:', err);
-            setError(`Firebase listing error: ${err.message}`);
+            setError(`Firebase listing error: ${(err as Error).message}`);
             setLoading(false);
           }
         };
@@ -92,12 +93,12 @@ const FirebaseStorageDebugger = () => {
         fetchVideos();
       } catch (storageErr) {
         console.error('Failed to get storage reference:', storageErr);
-        setError(`Firebase storage access error: ${storageErr.message}`);
+        setError(`Firebase storage access error: ${(storageErr as Error).message}`);
         setLoading(false);
       }
     } catch (appErr) {
       console.error('Error accessing Firebase app:', appErr);
-      setError(`Firebase initialization error: ${appErr.message}`);
+      setError(`Firebase initialization error: ${(appErr as Error).message}`);
       setLoading(false);
     }
   }, []);
