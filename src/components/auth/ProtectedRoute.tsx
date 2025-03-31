@@ -1,56 +1,25 @@
-"use client";
-
-import { useEffect, ReactNode } from 'react';
+// src/components/auth/ProtectedRoute.tsx
+import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
+import { useEffect } from 'react';
 
-interface ProtectedRouteProps {
-  children: ReactNode;
-  requireAdmin?: boolean;
-  requireCreator?: boolean;
-}
-
-export default function ProtectedRoute({ 
-  children, 
-  requireAdmin = false,
-  requireCreator = false 
-}: ProtectedRouteProps) {
-  const { currentUser, loading } = useAuth();
+export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
   const router = useRouter();
-
+  
   useEffect(() => {
-    if (!loading) {
-      if (!currentUser) {
-        // Not logged in, redirect to login
-        router.push('/login');
-      } else if (requireAdmin && !currentUser.isAdmin) {
-        // Not an admin, redirect to home
-        router.push('/');
-      } else if (requireCreator && !currentUser.isCreator && !currentUser.isAdmin) {
-        // Not a creator or admin, redirect to home
-        router.push('/');
-      }
+    if (!loading && !user) {
+      router.push('/login');
     }
-  }, [currentUser, loading, requireAdmin, requireCreator, router]);
-
-  // Show loading while checking auth
+  }, [user, loading, router]);
+  
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen w-full bg-black">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-8 w-8 border-4 border-tiktok-pink rounded-full border-t-transparent"></div>
       </div>
     );
   }
-
-  // Auth requirements not met, render nothing (will redirect)
-  if (
-    !currentUser || 
-    (requireAdmin && !currentUser.isAdmin) || 
-    (requireCreator && !currentUser.isCreator && !currentUser.isAdmin)
-  ) {
-    return null;
-  }
-
-  // Auth requirements are met, render children
-  return <>{children}</>;
+  
+  return user ? <>{children}</> : null;
 }
