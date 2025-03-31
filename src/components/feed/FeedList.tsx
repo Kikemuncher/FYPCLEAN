@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useVideoStore } from "@/store/videoStore";
 import Link from "next/link";
-import { ref, getStorage, listAll, getDownloadURL } from "firebase/storage";
+import { ref, listAll, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 
 function FeedList() {
@@ -22,72 +22,19 @@ function FeedList() {
       try {
         // Try the normal way first through your store
         console.log("Calling fetchVideos from videoStore");
-        const result = await fetchVideos();
-        console.log("fetchVideos completed, videos loaded:", result);
+        await fetchVideos();
+        console.log("fetchVideos completed, videos loaded:", videos.length);
         
-        // If we have videos, we're done
-        if (videos.length > 0) {
-          setIsLoading(false);
-          return;
-        }
-        
-        // If no videos were loaded through the store after 5 seconds, try direct approach
-        setTimeout(async () => {
-          if (videos.length === 0 && isMounted.current) {
-            console.log("No videos loaded from store after 5s, trying direct approach");
-            try {
-              // Direct approach as fallback - fetch videos directly from Firebase
-              const videosRef = ref(storage, 'videos/');
-              console.log("Fetching video list directly from Firebase");
-              
-              const listResult = await listAll(videosRef);
-              console.log(`Found ${listResult.items.length} videos directly`);
-              
-              // Process videos in batches of 3 to avoid overwhelming the network
-              for (let i = 0; i < listResult.items.length && isMounted.current; i += 3) {
-                const batch = listResult.items.slice(i, i + 3);
-                console.log(`Processing batch ${i/3 + 1}`);
-                
-                await Promise.all(batch.map(async (videoRef) => {
-                  try {
-                    console.log(`Getting URL for ${videoRef.name}...`);
-                    const url = await getDownloadURL(videoRef);
-                    
-                    // Fake video object with minimal required fields
-                    const videoObj = {
-                      id: videoRef.name,
-                      videoUrl: url,
-                      username: "user",
-                      userAvatar: "https://placehold.co/100x100",
-                      song: "Unknown",
-                      caption: videoRef.name,
-                    };
-                    
-                    // Check if we're still mounted before updating
-                    if (isMounted.current) {
-                      // Add it to the video store (assuming it has an addVideo method)
-                      if (typeof useVideoStore().addVideo === 'function') {
-                        useVideoStore().addVideo(videoObj);
-                      }
-                    }
-                  } catch (err) {
-                    console.error(`Error getting URL for ${videoRef.name}:`, err);
-                  }
-                }));
-                
-                // Short delay between batches
-                await new Promise(resolve => setTimeout(resolve, 500));
-              }
-              
-              if (isMounted.current) {
-                setIsLoading(false);
-              }
-            } catch (directError) {
-              console.error("Error in direct video loading:", directError);
-              if (isMounted.current) {
-                setLoadingError("Failed to load videos. Please refresh the page.");
-                setIsLoading(false);
-              }
+        // Set a timer to check if videos loaded
+        setTimeout(() => {
+          if (isMounted.current) {
+            if (videos.length > 0) {
+              console.log("Videos loaded successfully from store");
+              setIsLoading(false);
+            } else {
+              console.log("No videos loaded from store after 5s");
+              setLoadingError("Failed to load videos. Please refresh the page.");
+              setIsLoading(false);
             }
           }
         }, 5000);
@@ -106,7 +53,15 @@ function FeedList() {
     return () => {
       isMounted.current = false;
     };
-  }, [fetchVideos, videos.length]);
+  }, [fetchVideos]);
+
+  // Video check effect - when videos are available, ensure loading is false
+  useEffect(() => {
+    if (videos.length > 0 && isLoading) {
+      console.log("Videos detected, ending loading state");
+      setIsLoading(false);
+    }
+  }, [videos.length, isLoading]);
 
   // Original useEffect for handling window resize
   useEffect(() => {
@@ -145,10 +100,50 @@ function FeedList() {
       const currentVideo = videoRefs.current[videos[currentVideoIndex]?.id];
       if (currentVideo) {
         currentVideo.currentTime = 0;
-        currentVideo.play().catch(e => console.error("Error playing video:", e));
+        const playPromise = currentVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(e => console.error("Error playing video:", e));
+        }
       }
     }
   }, [currentVideoIndex, videos]);
+
+  // Manual retry function that users can call if videos don't load
+  const handleRetry = () => {
+    setIsLoading(true);
+    setLoadingError(null);
+    
+    // Direct loading approach
+    const directLoad = async () => {
+      try {
+        console.log("Trying direct loading approach");
+        const videosRef = ref(storage, 'videos/');
+        
+        const result = await listAll(videosRef);
+        console.log(`Found ${result.items.length} videos directly`);
+        
+        if (result.items.length === 0) {
+          setLoadingError("No videos found in storage.");
+          setIsLoading(false);
+          return;
+        }
+        
+        // Just trigger a refresh since we can't directly update the store
+        window.location.reload();
+      } catch (error) {
+        console.error("Error in direct loading:", error);
+        setLoadingError("Failed to load videos. Please try again later.");
+        setIsLoading(false);
+      }
+    };
+    
+    // Wait a bit then try direct approach
+    setTimeout(() => {
+      if (videos.length === 0 && isMounted.current) {
+        directLoad();
+      }
+    }, 2000);
+  };
 
   // Improved loading state
   if (isLoading && videos.length === 0) {
@@ -170,7 +165,7 @@ function FeedList() {
         <div className="bg-red-500/20 backdrop-blur-sm p-4 rounded-lg max-w-md text-center">
           <p className="text-white mb-3">{loadingError}</p>
           <button 
-            onClick={() => window.location.reload()}
+            onClick={handleRetry}
             className="bg-white text-black px-4 py-2 rounded-full text-sm font-medium"
           >
             Retry
@@ -187,7 +182,7 @@ function FeedList() {
         <div className="text-center">
           <p className="text-white mb-3">No videos found</p>
           <button 
-            onClick={() => window.location.reload()}
+            onClick={handleRetry}
             className="bg-white text-black px-4 py-2 rounded-full text-sm font-medium"
           >
             Refresh
