@@ -9,7 +9,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
   authDomain: "tiktok-a7af5.firebaseapp.com",
   projectId: "tiktok-a7af5",
-  storageBucket: "tiktok-a7af5.appspot.com", // Fixed: removed the .firebasestorage.app
+  storageBucket: "tiktok-a7af5.firebasestorage.app", 
   messagingSenderId: "609721475346",
   appId: "1:609721475346:web:c80084600ed104b6b153cb"
 };
