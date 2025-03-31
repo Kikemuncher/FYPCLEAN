@@ -13,53 +13,70 @@ const firebaseConfig = {
   appId: "1:609721475346:web:c80084600ed104b6b153cb"
 };
 
-// Simple in-memory cache
-let cachedVideos: any[] = [];
-let lastFetched: number = 0;
-const CACHE_DURATION = 1000 * 60 * 5; // 5 minutes
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // Return cached videos if available and not expired
-    const now = Date.now();
-    if (cachedVideos.length > 0 && (now - lastFetched) < CACHE_DURATION) {
-      console.log('Returning cached videos');
-      return res.status(200).json({ videos: cachedVideos });
-    }
-
-    // Initialize Firebase
+    // Step 1: Initialize Firebase
+    console.log('Step 1: Initializing Firebase');
     const app = initializeApp(firebaseConfig, 'api-instance');
+    
+    // Step 2: Get Storage Reference
+    console.log('Step 2: Getting Storage reference');
     const storage = getStorage(app);
     
-    // Get videos from Firebase Storage
+    // Step 3: Create videos reference
+    console.log('Step 3: Creating videos reference');
     const videosRef = ref(storage, 'videos/');
-    const result = await listAll(videosRef);
     
-    // Fetch download URLs
-    const videos = [];
-    for (const item of result.items) {
-      try {
-        const videoUrl = await getDownloadURL(item);
-        videos.push({
-          id: item.name,
-          videoUrl,
-          username: 'user',
-          userAvatar: 'https://placehold.co/100x100',
-          song: 'Unknown Song',
-          caption: item.name.replace(/\.\w+$/, ''),
-        });
-      } catch (error) {
-        console.error(`Error getting URL for ${item.name}:`, error);
+    // Step 4: List all videos
+    console.log('Step 4: Listing videos from storage');
+    try {
+      const result = await listAll(videosRef);
+      console.log(`Found ${result.items.length} videos`);
+      
+      if (result.items.length === 0) {
+        return res.status(200).json({ videos: [], message: 'No videos found in storage' });
       }
+      
+      // Step 5: Get first video URL as test
+      console.log('Step 5: Getting URL for first video as test');
+      try {
+        const firstItem = result.items[0];
+        console.log(`Testing with video: ${firstItem.name}`);
+        
+        const videoUrl = await getDownloadURL(firstItem);
+        console.log('Successfully got URL:', videoUrl.substring(0, 30) + '...');
+        
+        // Return success with just one video for testing
+        return res.status(200).json({ 
+          videos: [{
+            id: firstItem.name,
+            videoUrl,
+            username: 'user',
+            userAvatar: 'https://placehold.co/100x100',
+            song: 'Test Song',
+            caption: firstItem.name,
+          }],
+          message: 'Successfully loaded first video as test'
+        });
+      } catch (urlError) {
+        console.error('Failed to get video URL:', urlError);
+        return res.status(500).json({ 
+          error: 'Got video list but failed to get download URL',
+          message: urlError instanceof Error ? urlError.message : 'Unknown URL error'
+        });
+      }
+    } catch (listError) {
+      console.error('Failed to list videos:', listError);
+      return res.status(500).json({ 
+        error: 'Failed to list videos', 
+        message: listError instanceof Error ? listError.message : 'Unknown listing error'
+      });
     }
-    
-    // Update cache
-    cachedVideos = videos;
-    lastFetched = now;
-    
-    res.status(200).json({ videos });
   } catch (error) {
-    console.error('Error fetching videos:', error);
-    res.status(500).json({ error: 'Failed to fetch videos' });
+    console.error('General error:', error);
+    return res.status(500).json({ 
+      error: 'Failed to fetch videos',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 }
