@@ -51,11 +51,11 @@ const FirebaseStorageDebugger = () => {
             
             // Add timeout to prevent infinite waiting
             const listPromise = listAll(videosRef);
-            const timeoutPromise = new Promise((_, reject) => 
+            const timeoutPromise = new Promise<never>((_, reject) => 
               setTimeout(() => reject(new Error('Firebase listAll operation timed out after 10 seconds')), 10000)
             );
             
-            const result = await Promise.race([listPromise, timeoutPromise]);
+            const result = await Promise.race([listPromise, timeoutPromise]) as Awaited<ReturnType<typeof listAll>>;
             console.log('Successfully listed videos:', result);
             setConnectionStatus(prev => ({...prev, listOperation: true}));
             
