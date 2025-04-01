@@ -1,87 +1,144 @@
+'use client';
+
 // src/components/layout/SideNav.tsx
 import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
-import { signOut } from '@/lib/authService';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
+import { useState } from 'react';
 
 export default function SideNav() {
-  const { user, loading } = useAuth();
+  const { currentUser, userProfile, loading, signOut } = useAuth();
   const router = useRouter();
   
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  
   const handleSignOut = async () => {
-    await signOut();
-    router.push('/login');
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      router.push('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    } finally {
+      setIsSigningOut(false);
+    }
   };
   
-  // Your existing SideNav code here, but replace the user-related sections with:
-  
   return (
-    <div className="fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-200 overflow-y-auto">
+    <div className="fixed left-0 top-0 h-full w-64 bg-zinc-900 border-r border-zinc-800 overflow-y-auto">
       <div className="p-4">
-        <Link href="/" className="text-xl font-bold text-tiktok-pink">
-          TikTok Clone
+        <Link href="/" className="flex items-center">
+          <span className="text-xl font-bold text-tiktok-pink">TikTok Clone</span>
         </Link>
       </div>
       
       <div className="px-4 py-2">
         {/* Navigation links */}
         <nav className="space-y-2">
-          <Link href="/" className="flex items-center p-2 hover:bg-gray-100 rounded-md">
+          <Link href="/" className="flex items-center p-2 hover:bg-zinc-800 rounded-md text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6-6h6" />
+            </svg>
             <span>Home</span>
           </Link>
-          <Link href="/explore" className="flex items-center p-2 hover:bg-gray-100 rounded-md">
-            <span>Explore</span>
+          
+          <Link href="/discover" className="flex items-center p-2 hover:bg-zinc-800 rounded-md text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span>Discover</span>
           </Link>
-          {/* Add your other navigation links */}
+          
+          <Link href="/inbox" className="flex items-center p-2 hover:bg-zinc-800 rounded-md text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <span>Inbox</span>
+          </Link>
+          
+          {currentUser && (
+            <Link href={`/profile/${userProfile?.username || currentUser.uid}`} className="flex items-center p-2 hover:bg-zinc-800 rounded-md text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span>Profile</span>
+            </Link>
+          )}
         </nav>
       </div>
       
-      <div className="px-4 py-4 border-t border-gray-200">
+      <div className="px-4 py-6 mt-6 border-t border-zinc-800">
         {loading ? (
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-gray-200 animate-pulse"></div>
-            <div className="flex-1">
-              <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>
+          <div className="flex items-center p-2">
+            <div className="w-10 h-10 rounded-full bg-zinc-800 animate-pulse"></div>
+            <div className="ml-3">
+              <div className="h-4 w-24 bg-zinc-800 rounded animate-pulse"></div>
             </div>
           </div>
-        ) : user ? (
-          <div className="space-y-3">
-            <Link href={`/profile/${user.displayName}`} className="flex items-center space-x-3">
+        ) : currentUser ? (
+          <div>
+            <div className="flex items-center p-2">
               <div className="w-10 h-10 rounded-full overflow-hidden">
                 <img 
-                  src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} 
-                  alt={user.displayName || 'User'} 
+                  src={userProfile?.photoURL || currentUser.photoURL || "https://placehold.co/100/gray/white?text=User"}
+                  alt={userProfile?.displayName || currentUser.displayName || "User"}
                   className="w-full h-full object-cover"
                 />
               </div>
-              <div>
-                <p className="font-medium">{user.displayName}</p>
-                <p className="text-xs text-gray-500">{user.email}</p>
+              <div className="ml-3">
+                <p className="text-white font-medium">
+                  {userProfile?.displayName || currentUser.displayName}
+                </p>
+                <p className="text-gray-400 text-xs">
+                  @{userProfile?.username || currentUser.displayName?.toLowerCase().replace(/\s+/g, '_')}
+                </p>
               </div>
-            </Link>
-            <button 
+            </div>
+            
+            <button
               onClick={handleSignOut}
-              className="w-full text-sm bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded text-left"
+              disabled={isSigningOut}
+              className="mt-4 w-full py-2 px-4 flex justify-center items-center bg-zinc-800 hover:bg-zinc-700 rounded-md text-white text-sm font-medium transition-colors"
             >
-              Logout
+              {isSigningOut ? 'Signing out...' : 'Sign Out'}
             </button>
           </div>
         ) : (
           <div className="space-y-2">
             <Link 
               href="/login" 
-              className="block w-full text-center text-sm py-2 px-4 border border-gray-300 rounded-md hover:bg-gray-50"
+              className="block w-full py-2 px-4 text-center bg-zinc-800 hover:bg-zinc-700 rounded-md text-white text-sm font-medium transition-colors"
             >
-              Login
+              Log In
             </Link>
             <Link 
               href="/signup" 
-              className="block w-full text-center text-sm py-2 px-4 bg-tiktok-pink hover:bg-tiktok-pink-dark text-white rounded-md"
+              className="block w-full py-2 px-4 text-center bg-tiktok-pink hover:bg-pink-700 rounded-md text-white text-sm font-medium transition-colors"
             >
               Sign Up
             </Link>
           </div>
         )}
+      </div>
+      
+      {currentUser && (
+        <div className="px-4 py-4 mt-4 border-t border-zinc-800">
+          <p className="text-xs text-gray-400 mb-2">Creator Tools</p>
+          <Link 
+            href="/upload" 
+            className="flex items-center p-2 hover:bg-zinc-800 rounded-md text-white"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            <span>Upload Video</span>
+          </Link>
+        </div>
+      )}
+      
+      <div className="px-4 py-6 mt-auto text-center text-xs text-gray-500">
+        <p>© 2023 TikTok Clone</p>
+        <p className="mt-1">All rights reserved</p>
       </div>
     </div>
   );
