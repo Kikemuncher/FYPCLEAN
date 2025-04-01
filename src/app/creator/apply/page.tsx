@@ -1,6 +1,8 @@
 // src/app/creator/apply/page.tsx
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useRouter } from 'next/navigation';
 import { AuthWrapper } from '@/components/auth/AuthWrapper';
 import CreatorApplicationForm from '@/components/profile/CreatorApplicationForm';
