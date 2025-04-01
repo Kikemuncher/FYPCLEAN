@@ -1,3 +1,4 @@
+// src/lib/userService.ts
 import { auth, db } from './firebase';
 import {
   doc,
@@ -86,22 +87,85 @@ export const updateUserProfile = async (userId: string, userData: any) => {
 // getPendingCreatorApplications, processCreatorApplication, searchUsers, etc.
 
 export const getUserProfileByUsername = async (usernameOrUid: string): Promise<UserProfile | null> => {
-  // Implementation remains unchanged
+  // Implementation with proper return
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('username', '==', usernameOrUid));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+      const userDoc = querySnapshot.docs[0];
+      return { id: userDoc.id, ...userDoc.data() } as UserProfile;
+    } else {
+      // Also check by UID if username search fails
+      const userDoc = await getDoc(doc(db, 'users', usernameOrUid));
+      if (userDoc.exists()) {
+        return { id: userDoc.id, ...userDoc.data() } as UserProfile;
+      }
+      return null;
+    }
+  } catch (error) {
+    console.error('Error getting user by username:', error);
+    return null; // Return null in case of error
+  }
 };
 
 export const createCreatorApplication = async (
   uid: string,
   applicationData: Partial<CreatorApplication>
 ): Promise<boolean> => {
-  // Implementation remains unchanged
+  // Implement function body with return statement
+  try {
+    const applicationRef = doc(db, 'creatorApplications', uid);
+    await setDoc(applicationRef, {
+      ...applicationData,
+      status: 'pending',
+      submittedAt: Date.now()
+    });
+    return true;
+  } catch (error) {
+    console.error('Error creating creator application:', error);
+    return false;
+  }
 };
 
 export const getCreatorApplication = async (uid: string): Promise<CreatorApplication | null> => {
-  // Implementation remains unchanged
+  // Implement function body with return statement
+  try {
+    const applicationRef = doc(db, 'creatorApplications', uid);
+    const applicationSnap = await getDoc(applicationRef);
+    
+    if (applicationSnap.exists()) {
+      return { id: applicationSnap.id, ...applicationSnap.data() } as CreatorApplication;
+    } else {
+      return null;
+    }
+  } catch (error) {
+    console.error('Error getting creator application:', error);
+    return null;
+  }
 };
 
 export const getPendingCreatorApplications = async (): Promise<CreatorApplication[]> => {
-  // Implementation remains unchanged
+  // Implement function body with return statement
+  try {
+    const applicationsRef = collection(db, 'creatorApplications');
+    const q = query(
+      applicationsRef,
+      where('status', '==', 'pending'),
+      orderBy('submittedAt', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as CreatorApplication[];
+  } catch (error) {
+    console.error('Error getting pending creator applications:', error);
+    return [];
+  }
 };
 
 export const processCreatorApplication = async (
@@ -110,9 +174,57 @@ export const processCreatorApplication = async (
   adminUid: string,
   rejectionReason?: string
 ): Promise<boolean> => {
-  // Implementation remains unchanged
+  // Implement function body with return statement
+  try {
+    const applicationRef = doc(db, 'creatorApplications', applicationUid);
+    const userRef = doc(db, 'users', applicationUid);
+    
+    // Update application status
+    await updateDoc(applicationRef, {
+      status: approved ? 'approved' : 'rejected',
+      reviewedAt: Date.now(),
+      reviewedBy: adminUid,
+      rejectionReason: rejectionReason || null
+    });
+    
+    // If approved, update user profile
+    if (approved) {
+      await updateDoc(userRef, {
+        isCreator: true,
+        accountType: 'creator',
+        updatedAt: Date.now()
+      });
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error processing creator application:', error);
+    return false;
+  }
 };
 
 export const searchUsers = async (queryStr: string, limit = 10): Promise<UserProfile[]> => {
-  // Implementation remains unchanged
+  // Implement function body with return statement
+  try {
+    // Firebase doesn't support native text search, so we use startAt/endAt for prefix search
+    const usersRef = collection(db, 'users');
+    
+    // Search by username
+    const q = query(
+      usersRef,
+      where('username', '>=', queryStr),
+      where('username', '<=', queryStr + '\uf8ff'),
+      limit
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as UserProfile[];
+  } catch (error) {
+    console.error('Error searching users:', error);
+    return [];
+  }
 };
