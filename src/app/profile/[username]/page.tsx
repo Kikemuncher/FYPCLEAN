@@ -11,7 +11,8 @@ import SideNav from '@/components/layout/SideNav';
 
 export default function ProfilePage() {
   const params = useParams();
-  const username = params.username as string;
+  // Fix the TypeScript error by adding a null check
+  const username = params?.username as string || '';
   
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -20,7 +21,12 @@ export default function ProfilePage() {
 
   useEffect(() => {
     async function fetchUserProfile() {
-      if (!username) return;
+      if (!username) {
+        setError('Username not provided');
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
       try {
         const userData = await getUserByUsername(username);
