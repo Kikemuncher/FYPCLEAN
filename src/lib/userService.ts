@@ -9,7 +9,8 @@ import {
   getDocs,
   setDoc,
   updateDoc,
-  orderBy
+  orderBy,
+  limit
 } from 'firebase/firestore';
 import { UserProfile, CreatorApplication } from '@/types/user';
 
@@ -212,7 +213,7 @@ export const processCreatorApplication = async (
   }
 };
 
-export const searchUsers = async (queryStr: string, limit = 10): Promise<UserProfile[]> => {
+export const searchUsers = async (queryStr: string, limitCount = 10): Promise<UserProfile[]> => {
   // Implement function body with return statement
   try {
     // Firebase doesn't support native text search, so we use startAt/endAt for prefix search
@@ -223,7 +224,7 @@ export const searchUsers = async (queryStr: string, limit = 10): Promise<UserPro
       usersRef,
       where('username', '>=', queryStr),
       where('username', '<=', queryStr + '\uf8ff'),
-      limit
+      limit(limitCount)
     );
     
     const querySnapshot = await getDocs(q);
