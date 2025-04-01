@@ -95,12 +95,17 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
 
     if (!querySnapshot.empty) {
       const userDoc = querySnapshot.docs[0];
-      return { id: userDoc.id, ...userDoc.data() } as UserProfile;
+      const userData = userDoc.data();
+      return { 
+        uid: userDoc.id, 
+        ...userData 
+      } as UserProfile;
     } else {
       // Also check by UID if username search fails
       const userDoc = await getDoc(doc(db, 'users', usernameOrUid));
       if (userDoc.exists()) {
-        return { id: userDoc.id, ...userDoc.data() } as UserProfile;
+        const userData = userDoc.data();
+        return { uid: userDoc.id, ...userData } as UserProfile;
       }
       return null;
     }
@@ -220,7 +225,7 @@ export const searchUsers = async (queryStr: string, limit = 10): Promise<UserPro
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map(doc => ({
-      id: doc.id,
+      uid: doc.id,
       ...doc.data()
     })) as UserProfile[];
   } catch (error) {
