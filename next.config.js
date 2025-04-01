@@ -38,7 +38,12 @@ const nextConfig = {
       },
     ];
   },
-  // Removed the experimental appDir flag as it's no longer needed
+  // Add server-side rendering configuration to prevent static pre-rendering
+  experimental: {
+    appDir: true
+  },
+  // Disable static pre-rendering for pages that use authentication
+  staticPageGenerationTimeout: 300
 };
 
 module.exports = nextConfig;
