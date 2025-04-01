@@ -79,7 +79,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         uid: user.uid,
         username,
         displayName: username,
-        email: user.email || email,
         bio: '',
         photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${username}&background=random`,
         coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
@@ -94,7 +93,12 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         accountType: 'user'
       };
       
-      await setDoc(doc(db, 'users', user.uid), userProfile);
+      // Store the email in Firestore as well, but not in the UserProfile type
+      await setDoc(doc(db, 'users', user.uid), {
+        ...userProfile,
+        email: user.email || email // Add email outside of the UserProfile type
+      });
+      
       setUserProfile(userProfile);
       
     } catch (err: any) {
