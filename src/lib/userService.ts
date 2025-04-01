@@ -141,7 +141,11 @@ export const getCreatorApplication = async (uid: string): Promise<CreatorApplica
     const applicationSnap = await getDoc(applicationRef);
     
     if (applicationSnap.exists()) {
-      return { id: applicationSnap.id, ...applicationSnap.data() } as CreatorApplication;
+      const applicationData = applicationSnap.data();
+      return { 
+        uid: applicationSnap.id, 
+        ...applicationData 
+      } as CreatorApplication;
     } else {
       return null;
     }
@@ -164,7 +168,7 @@ export const getPendingCreatorApplications = async (): Promise<CreatorApplicatio
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map(doc => ({
-      id: doc.id,
+      uid: doc.id,
       ...doc.data()
     })) as CreatorApplication[];
   } catch (error) {
