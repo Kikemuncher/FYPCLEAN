@@ -4,6 +4,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { AuthWrapper } from '@/components/auth/AuthWrapper';
 
+export const dynamic = "force-dynamic";
 export default function InboxPage() {
   const { currentUser } = useAuth();
 
