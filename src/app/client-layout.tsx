@@ -1,28 +1,8 @@
 'use client';
 
+import React from 'react';
 import { ReactNode, Suspense, useEffect, useState } from 'react';
 import { AuthProvider } from '@/hooks/useAuth';
-
-export default function ClientLayout({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  
-  // Handle client-side only rendering
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
-  // Return null during SSR
-  if (!mounted) {
-    return <div>Loading application...</div>;
-  }
-  
-  // Wrap with error boundary
-  return (
-    <ErrorBoundary>
-      <AuthProvider>{children}</AuthProvider>
-    </ErrorBoundary>
-  );
-}
 
 // Simple error boundary component
 class ErrorBoundary extends React.Component {
@@ -59,4 +39,25 @@ class ErrorBoundary extends React.Component {
 
     return this.props.children;
   }
+}
+
+export default function ClientLayout({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  
+  // Handle client-side only rendering
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  // Return loading indicator during SSR
+  if (!mounted) {
+    return <div>Loading application...</div>;
+  }
+  
+  // Wrap with error boundary
+  return (
+    <ErrorBoundary>
+      <AuthProvider>{children}</AuthProvider>
+    </ErrorBoundary>
+  );
 }
