@@ -1,43 +1,52 @@
-// src/lib/firebase.ts
+// Fix Firebase initialization
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
-// Firebase configuration with hardcoded values
+// Get config from environment variables with fallback
 const firebaseConfig = {
-  apiKey: "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
-  authDomain: "tiktok-a7af5.firebaseapp.com",
-  projectId: "tiktok-a7af5",
-  storageBucket: "tiktok-a7af5.firebasestorage.app", 
-  messagingSenderId: "609721475346",
-  appId: "1:609721475346:web:c80084600ed104b6b153cb"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "tiktok-a7af5.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "tiktok-a7af5",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "tiktok-a7af5.firebasestorage.app", 
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "609721475346",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:609721475346:web:c80084600ed104b6b153cb"
 };
 
-// Initialize Firebase
+// Initialize Firebase safely
 let firebaseApp: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
 let storage: FirebaseStorage;
 
-try {
-  if (!getApps().length) {
-    console.log('Initializing Firebase...');
-    firebaseApp = initializeApp(firebaseConfig);
-  } else {
-    console.log('Firebase already initialized');
-    firebaseApp = getApps()[0];
+// Only initialize on client side
+if (typeof window !== 'undefined') {
+  try {
+    if (!getApps().length) {
+      console.log('Initializing Firebase...');
+      firebaseApp = initializeApp(firebaseConfig);
+    } else {
+      console.log('Firebase already initialized');
+      firebaseApp = getApps()[0];
+    }
+    
+    // Initialize services
+    auth = getAuth(firebaseApp);
+    db = getFirestore(firebaseApp);
+    storage = getStorage(firebaseApp);
+    
+    console.log('Firebase services initialized successfully');
+  } catch (error) {
+    console.error('Firebase initialization failed:', error);
+    // Provide default instances to prevent app crashes
+    firebaseApp = {} as FirebaseApp;
+    auth = {} as Auth;
+    db = {} as Firestore; 
+    storage = {} as FirebaseStorage;
   }
-  
-  // Initialize services
-  auth = getAuth(firebaseApp);
-  db = getFirestore(firebaseApp);
-  storage = getStorage(firebaseApp);
-  
-  console.log('Firebase services initialized successfully');
-} catch (error) {
-  console.error('Firebase initialization failed:', error);
-  // Provide default instances to prevent app crashes
+} else {
+  // Server-side empty placeholders
   firebaseApp = {} as FirebaseApp;
   auth = {} as Auth;
   db = {} as Firestore; 
