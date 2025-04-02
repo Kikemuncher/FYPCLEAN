@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import dynamicImport from "next/dynamic"; // Renamed from 'dynamic' to 'dynamicImport'
+import dynamicImport from "next/dynamic";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
+import SideNav from "@/components/layout/SideNav";
 
 // Export dynamic param for Next.js
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ const FeedList = dynamicImport(() => import("@/components/feed/FeedList"), {
   )
 });
 
-// Auth buttons component 
+// Auth buttons component
 const AuthButtons = () => {
   const { currentUser, signOut } = useAuth();
   return (
@@ -68,8 +69,16 @@ export default function Home() {
 
   return (
     <div className="relative">
+      {/* Side Navigation */}
+      <SideNav />
+      
+      {/* Auth Buttons */}
       <AuthButtons />
-      <FeedList />
+      
+      {/* FeedList */}
+      <div className="ml-64"> {/* Add margin to account for SideNav width */}
+        <FeedList />
+      </div>
     </div>
   );
 }
