@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import SideNav from '@/components/layout/SideNav';
 
+export const dynamic = "force-dynamic";
 export default function ProfileRedirect() {
   const { currentUser, userProfile, loading } = useAuth();
   const router = useRouter();
