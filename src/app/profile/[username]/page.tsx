@@ -9,6 +9,7 @@ import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileVideos from '@/components/profile/ProfileVideos';
 import SideNav from '@/components/layout/SideNav';
 
+export const dynamic = "force-dynamic";
 export default function ProfilePage() {
   const params = useParams();
   // Fix the TypeScript error by adding a null check
