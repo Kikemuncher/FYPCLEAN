@@ -38,10 +38,9 @@ const nextConfig = {
       },
     ];
   },
-  // Add server-side rendering configuration to prevent static pre-rendering
-  experimental: {
-    appDir: true
-  },
+  // Remove appDir from experimental since it's now the default
+  // Add standalone output to improve deployment
+  output: 'standalone',
   // Disable static pre-rendering for pages that use authentication
   staticPageGenerationTimeout: 300
 };
