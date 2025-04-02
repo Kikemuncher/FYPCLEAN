@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   description: 'A TikTok clone built with Next.js and Firebase',
 };
 
+// Add dynamic export to prevent static pre-rendering
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: {
