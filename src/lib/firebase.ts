@@ -1,20 +1,26 @@
-// Fix Firebase initialization
+// src/lib/firebase.ts
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
-// Get config from environment variables with fallback
+// Firebase configuration with hardcoded values
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "tiktok-a7af5.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "tiktok-a7af5",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "tiktok-a7af5.firebasestorage.app", 
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "609721475346",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:609721475346:web:c80084600ed104b6b153cb"
+  apiKey: "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
+  authDomain: "tiktok-a7af5.firebaseapp.com",
+  projectId: "tiktok-a7af5",
+  storageBucket: "tiktok-a7af5.firebasestorage.app", 
+  messagingSenderId: "609721475346",
+  appId: "1:609721475346:web:c80084600ed104b6b153cb"
 };
 
-// Initialize Firebase safely
+// Dummy implementations for SSR
+class DummyAuth {}
+class DummyFirestore {}
+class DummyStorage {}
+class DummyApp {}
+
+// Initialize Firebase
 let firebaseApp: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
@@ -23,6 +29,7 @@ let storage: FirebaseStorage;
 // Only initialize on client side
 if (typeof window !== 'undefined') {
   try {
+    // Check if Firebase is already initialized
     if (!getApps().length) {
       console.log('Initializing Firebase...');
       firebaseApp = initializeApp(firebaseConfig);
@@ -39,18 +46,18 @@ if (typeof window !== 'undefined') {
     console.log('Firebase services initialized successfully');
   } catch (error) {
     console.error('Firebase initialization failed:', error);
-    // Provide default instances to prevent app crashes
-    firebaseApp = {} as FirebaseApp;
-    auth = {} as Auth;
-    db = {} as Firestore; 
-    storage = {} as FirebaseStorage;
+    // Create dummy instances
+    firebaseApp = new DummyApp() as unknown as FirebaseApp;
+    auth = new DummyAuth() as unknown as Auth;
+    db = new DummyFirestore() as unknown as Firestore;
+    storage = new DummyStorage() as unknown as FirebaseStorage;
   }
 } else {
-  // Server-side empty placeholders
-  firebaseApp = {} as FirebaseApp;
-  auth = {} as Auth;
-  db = {} as Firestore; 
-  storage = {} as FirebaseStorage;
+  // Create dummy instances for server-side
+  firebaseApp = new DummyApp() as unknown as FirebaseApp;
+  auth = new DummyAuth() as unknown as Auth;
+  db = new DummyFirestore() as unknown as Firestore;
+  storage = new DummyStorage() as unknown as FirebaseStorage;
 }
 
 export { firebaseApp, auth, db, storage };
