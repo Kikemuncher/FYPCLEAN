@@ -4,7 +4,8 @@ import { useState, useEffect, createContext, useContext, ReactNode } from 'react
 import { useRouter } from 'next/navigation';
 import { User, UserProfile } from '@/types/user';
 
-const USE_MOCK_AUTH = false;
+// Set this to true to use mock auth instead of Firebase
+const USE_MOCK_AUTH = true;
 
 interface AuthContextType {
   currentUser: User | null;
@@ -37,7 +38,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const useMockAuthState = (): AuthContextType => {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
+  // Safe localStorage parsing with SSR check
   const safeParse = (key: string, fallback: any) => {
     if (typeof window === 'undefined') return fallback;
     try {
@@ -72,21 +75,26 @@ const useMockAuthState = (): AuthContextType => {
     safeParse('mock-auth-saved-posts', [])
   );
 
+  // Ensure we're mounted before accessing localStorage
   useEffect(() => {
-    localStorage.setItem('mock-auth-following', JSON.stringify(following));
-  }, [following]);
+    setMounted(true);
+  }, []);
 
+  // Save state to localStorage when it changes
   useEffect(() => {
-    localStorage.setItem('mock-auth-followers', JSON.stringify(followers));
-  }, [followers]);
-
-  useEffect(() => {
-    localStorage.setItem('mock-auth-liked-posts', JSON.stringify(likedPosts));
-  }, [likedPosts]);
-
-  useEffect(() => {
-    localStorage.setItem('mock-auth-saved-posts', JSON.stringify(savedPosts));
-  }, [savedPosts]);
+    if (!mounted) return;
+    
+    try {
+      localStorage.setItem('mock-auth-user', JSON.stringify(currentUser));
+      localStorage.setItem('mock-auth-profile', JSON.stringify(userProfile));
+      localStorage.setItem('mock-auth-following', JSON.stringify(following));
+      localStorage.setItem('mock-auth-followers', JSON.stringify(followers));
+      localStorage.setItem('mock-auth-liked-posts', JSON.stringify(likedPosts));
+      localStorage.setItem('mock-auth-saved-posts', JSON.stringify(savedPosts));
+    } catch (err) {
+      console.error("Error saving to localStorage:", err);
+    }
+  }, [mounted, currentUser, userProfile, following, followers, likedPosts, savedPosts]);
 
   const followUser = async (targetUid: string) => {
     if (!currentUser || following.includes(targetUid)) return;
@@ -255,7 +263,7 @@ const useMockAuthState = (): AuthContextType => {
   return {
     currentUser,
     userProfile,
-    loading: false,
+    loading: !mounted, // Set loading true until mounted
     error: null,
     signUp,
     signIn,
@@ -277,7 +285,18 @@ const useMockAuthState = (): AuthContextType => {
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [mounted, setMounted] = useState(false);
   const mock = useMockAuthState();
+  
+  // Only render children after component mounts on client
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  if (!mounted) {
+    return null; // Return nothing during SSR to prevent hydration issues
+  }
+  
   return <AuthContext.Provider value={mock}>{children}</AuthContext.Provider>;
 };
 
@@ -290,6 +309,11 @@ export const useAuth = () => {
 // Utility to get all registered users from localStorage
 export const getAllRegisteredUsers = () => {
   if (typeof window === 'undefined') return [];
-  const registeredUsersStr = localStorage.getItem('mock-registered-users');
-  return registeredUsersStr ? JSON.parse(registeredUsersStr) : [];
+  try {
+    const registeredUsersStr = localStorage.getItem('mock-registered-users');
+    return registeredUsersStr ? JSON.parse(registeredUsersStr) : [];
+  } catch (err) {
+    console.error("Error getting registered users:", err);
+    return [];
+  }
 };
