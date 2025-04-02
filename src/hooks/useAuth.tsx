@@ -1,4 +1,27 @@
-"use client";
+$1 // Remove hardcoded follower counts, video counts, etc.
+// In the useMockAuthState function:
+const signUp = async (email: string, password: string, username: string) => {
+  // Update the newProfile object to have zero values:
+  const newProfile: UserProfile = {
+    uid,
+    username,
+    displayName: username,
+    bio: '',
+    photoURL: 'https://placehold.co/400/gray/white?text=User',
+    coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
+    followerCount: 0,
+    followingCount: 0,
+    videoCount: 0,
+    likeCount: 0,
+    links: {},
+    createdAt: Date.now(),
+    isVerified: false,
+    isCreator: false,
+    accountType: 'user'
+  };
+}
+
+// Also update the signIn function's test user to have realistic values $2 "use client";
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
@@ -316,4 +339,4 @@ export const getAllRegisteredUsers = () => {
     console.error("Error getting registered users:", err);
     return [];
   }
-};
+}; 
