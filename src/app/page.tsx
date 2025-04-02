@@ -1,25 +1,23 @@
 "use client";
 
-// Use a different variable name for the dynamic import
 import { useState, useEffect } from "react";
-import dynamicImport from "next/dynamic";
-import MainLayout from "@/components/layout/MainLayout";
-import SideNav from "@/components/layout/SideNav";
-import { useAuth } from "@/hooks/useAuth";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/hooks/useAuth";
 
 // Export dynamic param for Next.js
 export const dynamic = "force-dynamic";
 
-// Dynamically import FeedList with updated typing and loading placeholder
-const FeedList = dynamicImport(() => import("@/components/feed/FeedList").then(mod => mod.default), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-screen w-full bg-black">
-      <p className="text-white">Loading videos...</p>
+// Simple placeholder for FeedList until it's fixed
+const SimpleFeedPlaceholder = () => (
+  <div className="flex items-center justify-center h-screen bg-black text-white">
+    <div className="text-center">
+      <h1 className="text-2xl font-bold mb-4">TikTok Clone</h1>
+      <p className="mb-8">Welcome to the TikTok clone app!</p>
+      <p>(Video feed will appear here)</p>
     </div>
-  )
-});
+  </div>
+);
 
 // 🔐 Auth buttons component
 const AuthButtons = () => {
@@ -53,27 +51,26 @@ const AuthButtons = () => {
   );
 };
 
-export default function Home(): JSX.Element {
+export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
+  const { loading } = useAuth();
+  
   useEffect(() => {
     setIsMounted(true);
   }, []);
-  return (
-    <MainLayout showHeader={true}>
-      <div className="relative">
-        {/* Always render AuthButtons */}
-        <AuthButtons />
-        {/* 🧭 Side Navigation */}
-        <SideNav />
-        {/* 🎬 Video Feed */}
-        {isMounted ? (
-          <FeedList />
-        ) : (
-          <div className="flex items-center justify-center h-screen w-full bg-black">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
-          </div>
-        )}
+
+  if (!isMounted || loading) {
+    return (
+      <div className="flex items-center justify-center h-screen w-full bg-black">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
       </div>
-    </MainLayout>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <AuthButtons />
+      <SimpleFeedPlaceholder />
+    </div>
   );
 }
