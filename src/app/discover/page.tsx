@@ -1,6 +1,8 @@
 // src/app/(main)/discover/page.tsx
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useAuth } from '@/hooks/useAuth';
 
 export default function DiscoverPage() {
