@@ -1,23 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 
 // Export dynamic param for Next.js
 export const dynamic = "force-dynamic";
 
-// Simple placeholder for content
-const ContentPlaceholder = () => (
-  <div className="flex items-center justify-center h-screen bg-black text-white">
-    <div className="text-center">
-      <h1 className="text-2xl font-bold mb-4">Social Media App</h1>
-      <p className="mb-8">Welcome to your new social platform!</p>
-      <p>(Content feed will appear here)</p>
+// Dynamically import FeedList with SSR disabled
+const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-screen w-full bg-black">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
     </div>
-  </div>
-);
+  )
+});
 
 // Auth buttons component
 const AuthButtons = () => {
@@ -70,7 +69,7 @@ export default function Home() {
   return (
     <div className="relative">
       <AuthButtons />
-      <ContentPlaceholder />
+      <FeedList />
     </div>
   );
 }
