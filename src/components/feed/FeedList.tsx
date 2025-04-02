@@ -28,7 +28,12 @@ function FeedList() {
             username: "dancerX",
             userAvatar: "https://randomuser.me/api/portraits/men/32.jpg",
             song: "Dancing Lights",
-            caption: "Friday night vibes 💃"
+            caption: "Friday night vibes 💃",
+            likes: 0,
+            comments: 0,
+            saves: 0,
+            shares: 0,
+            views: 0
           },
           {
             id: "video2",
@@ -36,7 +41,12 @@ function FeedList() {
             username: "nature_lover",
             userAvatar: "https://randomuser.me/api/portraits/women/65.jpg",
             song: "Spring Time",
-            caption: "Beautiful yellow flowers blooming 🌸"
+            caption: "Beautiful yellow flowers blooming 🌸",
+            likes: 0,
+            comments: 0,
+            saves: 0,
+            shares: 0,
+            views: 0
           },
           {
             id: "video3",
@@ -44,7 +54,12 @@ function FeedList() {
             username: "neon_vibes",
             userAvatar: "https://randomuser.me/api/portraits/women/22.jpg",
             song: "Neon Dreams",
-            caption: "City lights 🌃"
+            caption: "City lights 🌃",
+            likes: 0,
+            comments: 0,
+            saves: 0,
+            shares: 0,
+            views: 0
           }
         ];
         
@@ -67,7 +82,12 @@ function FeedList() {
                   username: "user" + Math.floor(Math.random() * 100),
                   userAvatar: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? 'men' : 'women'}/${Math.floor(Math.random() * 99)}.jpg`,
                   song: "Original Sound",
-                  caption: item.name.replace(/\.\w+$/, '').replace(/Snaptik\.app_/, '')
+                  caption: item.name.replace(/\.\w+$/, '').replace(/Snaptik\.app_/, ''),
+                  likes: 0,
+                  comments: 0,
+                  saves: 0,
+                  shares: 0,
+                  views: 0
                 });
               } catch (err) {
                 console.error(`Error getting URL for ${item.name}:`, err);
