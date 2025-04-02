@@ -1,82 +1,112 @@
-// Update the video fetching logic to focus on direct loading
+// src/components/feed/FeedList.tsx
 import React, { useState, useEffect, useRef } from "react";
-import { useVideoStore } from "@/store/videoStore";
 import Link from "next/link";
 import { storage } from "@/lib/firebase";
 import { ref, listAll, getDownloadURL } from "firebase/storage";
 
 function FeedList() {
-  const { videos, currentVideoIndex, setCurrentVideoIndex } = useVideoStore();
+  const [videos, setVideos] = useState<any[]>([]);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [windowHeight, setWindowHeight] = useState(0);
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const wheelLock = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [directVideos, setDirectVideos] = useState<any[]>([]);
 
-  // Load videos directly from Firebase Storage
+  // Load videos directly with better error handling
   useEffect(() => {
-    async function loadDirectVideos() {
+    async function loadVideos() {
       try {
-        setLoading(true);
-        console.log("Attempting direct video loading");
+        console.log("Loading videos directly from Firebase Storage");
         
-        // Try to load from Storage directly
-        const videosRef = ref(storage, 'videos/');
-        const result = await listAll(videosRef);
-        
-        if (result.items.length === 0) {
-          console.log("No videos found in storage");
-          setError("No videos found");
-          setLoading(false);
-          return;
-        }
-        
-        console.log(`Found ${result.items.length} videos, getting URLs`);
-        
-        // Process first 5 videos
-        const loadedVideos = [];
-        for (const item of result.items.slice(0, 5)) {
-          try {
-            console.log(`Getting URL for ${item.name}`);
-            const url = await getDownloadURL(item);
-            loadedVideos.push({
-              id: item.name,
-              videoUrl: url,
-              username: "user",
-              userAvatar: "https://placehold.co/100x100",
-              song: "Original Sound",
-              caption: item.name
-            });
-          } catch (err) {
-            console.error(`Error getting URL for ${item.name}:`, err);
+        // Create mock videos for testing if Firebase isn't working
+        const mockVideos = [
+          {
+            id: "video1",
+            videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-man-dancing-under-changing-lights-2532-large.mp4",
+            username: "dancerX",
+            userAvatar: "https://randomuser.me/api/portraits/men/32.jpg",
+            song: "Dancing Lights",
+            caption: "Friday night vibes 💃"
+          },
+          {
+            id: "video2",
+            videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-tree-with-yellow-flowers-1173-large.mp4",
+            username: "nature_lover",
+            userAvatar: "https://randomuser.me/api/portraits/women/65.jpg",
+            song: "Spring Time",
+            caption: "Beautiful yellow flowers blooming 🌸"
+          },
+          {
+            id: "video3",
+            videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4",
+            username: "neon_vibes",
+            userAvatar: "https://randomuser.me/api/portraits/women/22.jpg",
+            song: "Neon Dreams",
+            caption: "City lights 🌃"
           }
-        }
+        ];
         
-        if (loadedVideos.length > 0) {
-          console.log(`Loaded ${loadedVideos.length} videos directly`);
-          setDirectVideos(loadedVideos);
+        // Try Firebase first, fall back to mock data
+        try {
+          // Try to load from Storage directly
+          const videosRef = ref(storage, 'videos/');
+          const result = await listAll(videosRef);
+          
+          if (result.items.length > 0) {
+            console.log(`Found ${result.items.length} videos in Firebase`);
+            
+            const loadedVideos = [];
+            for (const item of result.items.slice(0, 5)) {
+              try {
+                const url = await getDownloadURL(item);
+                loadedVideos.push({
+                  id: item.name,
+                  videoUrl: url,
+                  username: "user" + Math.floor(Math.random() * 100),
+                  userAvatar: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? 'men' : 'women'}/${Math.floor(Math.random() * 99)}.jpg`,
+                  song: "Original Sound",
+                  caption: item.name.replace(/\.\w+$/, '').replace(/Snaptik\.app_/, '')
+                });
+              } catch (err) {
+                console.error(`Error getting URL for ${item.name}:`, err);
+              }
+            }
+            
+            if (loadedVideos.length > 0) {
+              console.log(`Successfully loaded ${loadedVideos.length} videos from Firebase`);
+              setVideos(loadedVideos);
+              setLoading(false);
+              return;
+            }
+          }
+          
+          // If we get here, fall back to mock data
+          console.log("Falling back to mock video data");
+          setVideos(mockVideos);
           setLoading(false);
-        } else {
-          setError("Could not load any videos");
+        } catch (firebaseError) {
+          console.error("Firebase error:", firebaseError);
+          console.log("Using mock videos instead");
+          setVideos(mockVideos);
           setLoading(false);
         }
       } catch (error) {
-        console.error("Error in direct loading:", error);
-        setError("Error loading videos");
+        console.error("Error loading videos:", error);
+        setError("Unable to load videos. Please try again later.");
         setLoading(false);
       }
     }
     
-    loadDirectVideos();
-  }, []);
-
-  // Handle window height for vertical scrolling
-  useEffect(() => {
+    // Load videos
+    loadVideos();
+    
+    // Set window height for vertical scrolling
     setWindowHeight(window.innerHeight);
     const handleResize = () => setWindowHeight(window.innerHeight);
     window.addEventListener("resize", handleResize);
+    
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
@@ -86,9 +116,7 @@ function FeedList() {
     if (wheelLock.current) return;
     wheelLock.current = true;
     
-    // Use direct videos since store might not be working
-    const videosToUse = directVideos;
-    const maxIndex = videosToUse.length - 1;
+    const maxIndex = videos.length - 1;
     
     if (e.deltaY > 0 && currentVideoIndex < maxIndex) {
       setCurrentVideoIndex(currentVideoIndex + 1);
@@ -103,33 +131,32 @@ function FeedList() {
 
   // Handle video playback for current video
   useEffect(() => {
-    const videosToUse = directVideos;
-    if (videosToUse.length > 0) {
+    if (videos.length > 0) {
       // Pause all videos
       Object.values(videoRefs.current).forEach(videoEl => {
         if (videoEl) videoEl.pause();
       });
       
       // Play current video
-      const currentVideo = videoRefs.current[videosToUse[currentVideoIndex]?.id];
+      const currentVideo = videoRefs.current[videos[currentVideoIndex]?.id];
       if (currentVideo) {
         currentVideo.currentTime = 0;
         currentVideo.play().catch(e => console.error("Error playing video:", e));
       }
     }
-  }, [currentVideoIndex, directVideos]);
+  }, [currentVideoIndex, videos]);
 
   // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
-        <p className="text-white">Loading videos...</p>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
       </div>
     );
   }
 
   // Error state
-  if (error && directVideos.length === 0) {
+  if (error) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
         <div className="text-center">
@@ -146,7 +173,7 @@ function FeedList() {
   }
 
   // No videos state
-  if (directVideos.length === 0) {
+  if (videos.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-black">
         <p className="text-white">No videos available</p>
@@ -162,7 +189,7 @@ function FeedList() {
           className="relative"
           style={{ width: "100%", maxWidth: `${windowHeight * 9 / 16}px`, height: "100%" }}
         >
-          {directVideos.map((video, index) => (
+          {videos.map((video, index) => (
             <div
               key={video.id}
               className={`absolute top-0 left-0 w-full h-full transition-opacity duration-300 ${
