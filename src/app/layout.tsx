@@ -1,14 +1,13 @@
-// src/app/layout.tsx
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import ClientLayout from './client-layout';
+import Providers from './providers';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Social Media Platform',
-  description: 'A social media platform for sharing short videos',
+  title: 'Social Platform',
+  description: 'A social media platform',
 };
 
 // Add dynamic export to prevent static pre-rendering
@@ -22,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <ClientLayout>{children}</ClientLayout>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
