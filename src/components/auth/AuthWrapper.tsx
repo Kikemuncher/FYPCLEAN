@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -21,9 +21,14 @@ export function AuthWrapper({
 }: AuthWrapperProps) {
   const { currentUser, loading } = useAuth();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!loading) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !loading) {
       if (requireAuth && !currentUser) {
         // Redirect to login if authentication is required but user is not logged in
         router.push(loginPath);
@@ -32,7 +37,12 @@ export function AuthWrapper({
         router.push(redirectPath);
       }
     }
-  }, [currentUser, loading, requireAuth, redirectIfAuthenticated, redirectPath, loginPath, router]);
+  }, [currentUser, loading, requireAuth, redirectIfAuthenticated, redirectPath, loginPath, router, mounted]);
+
+  // Don't render anything during SSR to prevent hydration mismatch
+  if (!mounted) {
+    return null;
+  }
 
   // Show loading state while checking auth
   if (loading) {
