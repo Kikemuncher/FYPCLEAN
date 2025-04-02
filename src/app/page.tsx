@@ -8,18 +8,18 @@ import { useAuth } from "@/hooks/useAuth";
 // Export dynamic param for Next.js
 export const dynamic = "force-dynamic";
 
-// Simple placeholder for FeedList until it's fixed
-const SimpleFeedPlaceholder = () => (
+// Simple placeholder for content
+const ContentPlaceholder = () => (
   <div className="flex items-center justify-center h-screen bg-black text-white">
     <div className="text-center">
-      <h1 className="text-2xl font-bold mb-4">TikTok Clone</h1>
-      <p className="mb-8">Welcome to the TikTok clone app!</p>
-      <p>(Video feed will appear here)</p>
+      <h1 className="text-2xl font-bold mb-4">Social Media App</h1>
+      <p className="mb-8">Welcome to your new social platform!</p>
+      <p>(Content feed will appear here)</p>
     </div>
   </div>
 );
 
-// 🔐 Auth buttons component
+// Auth buttons component
 const AuthButtons = () => {
   const { currentUser, signOut } = useAuth();
   return (
@@ -41,7 +41,7 @@ const AuthButtons = () => {
           </Link>
           <Link
             href="/auth/signup"
-            className="px-4 py-2 bg-tiktok-pink rounded-md text-white text-sm font-medium hover:bg-pink-700 transition-colors"
+            className="px-4 py-2 bg-pink-600 rounded-md text-white text-sm font-medium hover:bg-pink-700 transition-colors"
           >
             Sign Up
           </Link>
@@ -70,7 +70,7 @@ export default function Home() {
   return (
     <div className="relative">
       <AuthButtons />
-      <SimpleFeedPlaceholder />
+      <ContentPlaceholder />
     </div>
   );
 }
