@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
+import dynamicImport from "next/dynamic"; // Renamed from 'dynamic' to 'dynamicImport'
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 export const dynamic = "force-dynamic";
 
 // Dynamically import FeedList with SSR disabled
-const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
+const FeedList = dynamicImport(() => import("@/components/feed/FeedList"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -18,7 +18,7 @@ const FeedList = dynamic(() => import("@/components/feed/FeedList"), {
   )
 });
 
-// Auth buttons component
+// Auth buttons component 
 const AuthButtons = () => {
   const { currentUser, signOut } = useAuth();
   return (
