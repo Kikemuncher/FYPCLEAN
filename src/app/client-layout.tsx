@@ -1,15 +1,23 @@
 'use client';
 
 // src/app/client-layout.tsx
-import { ReactNode, Suspense } from 'react';
-import { AuthProvider } from '@/context/AuthContext';
+import { ReactNode, Suspense, useEffect, useState } from 'react';
+import { AuthProvider } from '@/hooks/useAuth';
 
 export default function ClientLayout({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  if (!mounted) {
+    return <div>Loading...</div>;
+  }
+  
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <AuthProvider>
-        {children}
-      </AuthProvider>
-    </Suspense>
+    <AuthProvider>
+      {children}
+    </AuthProvider>
   );
 }
