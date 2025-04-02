@@ -1,9 +1,8 @@
 'use client';
 
-// src/components/layout/SideNav.tsx
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useState } from 'react';
 
 export default function SideNav() {
@@ -16,7 +15,7 @@ export default function SideNav() {
     setIsSigningOut(true);
     try {
       await signOut();
-      router.push('/login');
+      router.push('/auth/login');
     } catch (error) {
       console.error('Error signing out:', error);
     } finally {
@@ -25,10 +24,10 @@ export default function SideNav() {
   };
   
   return (
-    <div className="fixed left-0 top-0 h-full w-64 bg-zinc-900 border-r border-zinc-800 overflow-y-auto">
+    <div className="fixed left-0 top-0 h-full w-64 bg-zinc-900 border-r border-zinc-800 overflow-y-auto z-40">
       <div className="p-4">
         <Link href="/" className="flex items-center">
-          <span className="text-xl font-bold text-tiktok-pink">TikTok Clone</span>
+          <span className="text-xl font-bold text-pink-600">Social App</span>
         </Link>
       </div>
       
@@ -106,39 +105,19 @@ export default function SideNav() {
         ) : (
           <div className="space-y-2">
             <Link 
-              href="/login" 
+              href="/auth/login" 
               className="block w-full py-2 px-4 text-center bg-zinc-800 hover:bg-zinc-700 rounded-md text-white text-sm font-medium transition-colors"
             >
               Log In
             </Link>
             <Link 
-              href="/signup" 
-              className="block w-full py-2 px-4 text-center bg-tiktok-pink hover:bg-pink-700 rounded-md text-white text-sm font-medium transition-colors"
+              href="/auth/signup" 
+              className="block w-full py-2 px-4 text-center bg-pink-600 hover:bg-pink-700 rounded-md text-white text-sm font-medium transition-colors"
             >
               Sign Up
             </Link>
           </div>
         )}
-      </div>
-      
-      {currentUser && (
-        <div className="px-4 py-4 mt-4 border-t border-zinc-800">
-          <p className="text-xs text-gray-400 mb-2">Creator Tools</p>
-          <Link 
-            href="/upload" 
-            className="flex items-center p-2 hover:bg-zinc-800 rounded-md text-white"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            <span>Upload Video</span>
-          </Link>
-        </div>
-      )}
-      
-      <div className="px-4 py-6 mt-auto text-center text-xs text-gray-500">
-        <p>© 2023 TikTok Clone</p>
-        <p className="mt-1">All rights reserved</p>
       </div>
     </div>
   );
