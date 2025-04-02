@@ -1,16 +1,18 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
+// Use a different variable name for the dynamic import
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
+import dynamicImport from "next/dynamic";
 import MainLayout from "@/components/layout/MainLayout";
 import SideNav from "@/components/layout/SideNav";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 
+// Export dynamic param for Next.js
+export const dynamic = "force-dynamic";
+
 // Dynamically import FeedList with updated typing and loading placeholder
-const FeedList = dynamic(() => import("@/components/feed/FeedList").then(mod => mod.default), {
+const FeedList = dynamicImport(() => import("@/components/feed/FeedList").then(mod => mod.default), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-screen w-full bg-black">
@@ -22,7 +24,6 @@ const FeedList = dynamic(() => import("@/components/feed/FeedList").then(mod => 
 // 🔐 Auth buttons component
 const AuthButtons = () => {
   const { currentUser, signOut } = useAuth();
-
   return (
     <div className="fixed top-4 right-4 z-50">
       {currentUser ? (
@@ -54,20 +55,16 @@ const AuthButtons = () => {
 
 export default function Home(): JSX.Element {
   const [isMounted, setIsMounted] = useState(false);
-
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
   return (
     <MainLayout showHeader={true}>
       <div className="relative">
         {/* Always render AuthButtons */}
         <AuthButtons />
-
         {/* 🧭 Side Navigation */}
         <SideNav />
-
         {/* 🎬 Video Feed */}
         {isMounted ? (
           <FeedList />
