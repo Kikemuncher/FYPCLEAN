@@ -4,22 +4,32 @@ import React from 'react';
 import { ReactNode, Suspense, useEffect, useState } from 'react';
 import { AuthProvider } from '@/hooks/useAuth';
 
-// Simple error boundary component
-class ErrorBoundary extends React.Component {
-  constructor(props) {
+// Define proper types for the ErrorBoundary
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+// Error boundary component with proper TypeScript types
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error, errorInfo) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     console.error("Client error:", error, errorInfo);
   }
 
-  render() {
+  render(): React.ReactNode {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-black text-white flex items-center justify-center">
