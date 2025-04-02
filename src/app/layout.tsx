@@ -2,14 +2,13 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { Suspense } from 'react';
 import ClientLayout from './client-layout';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'TikTok Clone',
-  description: 'A TikTok clone built with Next.js and Firebase',
+  title: 'Social Media Platform',
+  description: 'A social media platform for sharing short videos',
 };
 
 // Add dynamic export to prevent static pre-rendering
@@ -23,9 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Suspense fallback={<div>Loading App...</div>}>
-          <ClientLayout>{children}</ClientLayout>
-        </Suspense>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );
