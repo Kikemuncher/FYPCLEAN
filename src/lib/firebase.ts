@@ -1,10 +1,10 @@
 // src/lib/firebase.ts
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 
-// Firebase configuration from environment variables or direct config
+// Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "tiktok-a7af5.firebaseapp.com",
@@ -15,10 +15,10 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-let firebaseApp;
-let auth;
-let db;
-let storage;
+let firebaseApp: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
 
 // Only initialize on client side
 if (typeof window !== 'undefined') {
