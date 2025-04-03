@@ -1,7 +1,7 @@
 // src/lib/videoService.ts
 
 import { db, storage } from './firebase';
-import { collection, getDocs, query, orderBy, limit, doc, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore'; // Added increment import
+import { collection, getDocs, query, orderBy, limit, doc, updateDoc, arrayUnion, arrayRemove, increment, getDoc } from 'firebase/firestore'; // Added getDoc import
 import { VideoData } from '@/types/video';
 
 // Update to fetch only from Firebase
@@ -82,6 +82,25 @@ export const unlikeVideo = async (userId: string, videoId: string): Promise<bool
     return true;
   } catch (error) {
     console.error('Error unliking video:', error);
+    return false;
+  }
+};
+
+// Check if video is liked by user
+export const isVideoLikedByUser = async (userId: string, videoId: string): Promise<boolean> => {
+  try {
+    const videoDocRef = doc(db, 'videos', videoId);
+    const videoDoc = await getDoc(videoDocRef);
+    
+    if (videoDoc.exists()) {
+      const data = videoDoc.data();
+      const likedBy = data.likedBy || [];
+      return likedBy.includes(userId);
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking if video is liked:', error);
     return false;
   }
 };
