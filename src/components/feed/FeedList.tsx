@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import * as videoService from "@/lib/videoService";
 import { VideoData } from "@/types/video";
+import * as localStorageService from '@/lib/localStorageService'; // Added import
 
 function FeedList() {
   const { currentUser } = useAuth();
