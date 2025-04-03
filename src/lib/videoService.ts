@@ -66,42 +66,50 @@ export const getVideoById = (videoId: string): VideoData | null => {
   return videos.find(video => video.id === videoId) || null;
 };
 
-// Delete video
+// Delete video (Corrected Version)
 export const deleteVideo = (videoId: string, creatorUid: string): boolean => {
   const videos = localStorageService.getVideos();
   const video = videos.find(v => v.id === videoId);
-  
+
   if (!video || video.creatorUid !== creatorUid) {
     return false; // Not found or not authorized
   }
-  
+
   const filteredVideos = videos.filter(v => v.id !== videoId);
-  // Just update the videos array in localStorage directly
+  
+  let success = false; // Initialize success flag
   if (typeof window !== 'undefined') {
     try {
+      // Directly use the saveVideos function if it exists in localStorageService
+      // Assuming localStorageService.saveVideos replaces the entire array
+      // If not, use localStorage.setItem as originally shown:
       localStorage.setItem('local_videos', JSON.stringify(filteredVideos));
-      return true;
+      // Or if you have a dedicated function like: localStorageService.saveVideos(filteredVideos);
+      success = true; // Set flag to true on successful save
     } catch (error) {
-      console.error('Error saving videos:', error);
-      return false;
+      console.error('Error saving videos after deletion:', error);
+      success = false; // Ensure flag is false on error
     }
+  } else {
+     // If window is not defined (e.g., SSR), deletion cannot persist in localStorage
+     success = false; 
   }
-  return false;
-  
-  if (success) {
-    // Update creator's video count
+
+  // Only update creator profile if the video list was successfully updated
+  if (success) { 
     const creator = localStorageService.getUserProfileById(creatorUid);
     if (creator) {
       const updatedProfile = {
         ...creator,
-        videoCount: Math.max(0, (creator.videoCount || 0) - 1)
+        videoCount: Math.max(0, (creator.videoCount || 0) - 1) // Decrement video count
       };
-      localStorageService.saveUserProfile(updatedProfile);
+      localStorageService.saveUserProfile(updatedProfile); 
     }
   }
-  
-  return success;
+
+  return success; // Return the success status of saving the filtered video list
 };
+
 
 // Like/unlike helpers
 export const likeVideo = (userId: string, videoId: string): boolean => {
@@ -113,7 +121,7 @@ export const likeVideo = (userId: string, videoId: string): boolean => {
   if (success) {
     // Update video likes count
     video.likes += 1;
-    localStorageService.saveVideo(video);
+    localStorageService.saveVideo(video); // Save the updated video object
     
     // Update creator's like count
     if (video.creatorUid) {
@@ -140,7 +148,7 @@ export const unlikeVideo = (userId: string, videoId: string): boolean => {
   if (success) {
     // Update video likes count
     video.likes = Math.max(0, video.likes - 1);
-    localStorageService.saveVideo(video);
+    localStorageService.saveVideo(video); // Save the updated video object
     
     // Update creator's like count
     if (video.creatorUid) {
@@ -164,5 +172,6 @@ export const incrementVideoView = (videoId: string): boolean => {
   if (!video) return false;
   
   video.views += 1;
-  return localStorageService.saveVideo(video);
+  // Assuming saveVideo handles overwriting/updating the specific video
+  return localStorageService.saveVideo(video); 
 };
