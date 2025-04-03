@@ -11,7 +11,13 @@ export const getAllVideos = (): VideoData[] => {
 // Get videos for feed (could implement algorithms here later)
 export const getFeedVideos = (): VideoData[] => {
   const videos = localStorageService.getVideos();
-  return videos.sort(() => Math.random() - 0.5); // Simple randomization for now
+  return videos.sort((a, b) => {
+    // Sort by created timestamp if available, newest first
+    if (a.createdAt && b.createdAt) {
+      return b.createdAt - a.createdAt;
+    }
+    return Math.random() - 0.5; // Simple randomization if no timestamps
+  });
 };
 
 // Create a new video
