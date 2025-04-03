@@ -1,7 +1,7 @@
 // src/lib/videoService.ts
 
 import { db, storage } from './firebase';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { VideoData } from '@/types/video';
 
 // Update to fetch only from Firebase
@@ -42,14 +42,46 @@ export const getFeedVideos = async (): Promise<VideoData[]> => {
   }
 };
 
-// --- REMOVE ALL LOCAL STORAGE RELATED FUNCTIONS ---
+// Increment view count
+export const incrementVideoView = async (videoId: string): Promise<boolean> => {
+  try {
+    const videoDocRef = doc(db, 'videos', videoId);
+    await updateDoc(videoDocRef, {
+      views: firebase.firestore.FieldValue.increment(1)
+    });
+    return true;
+  } catch (error) {
+    console.error('Error incrementing video view:', error);
+    return false;
+  }
+};
 
-// The following functions were removed, as they were related to local storage:
-// - getAllVideos
-// - createVideo
-// - getVideosByCreator
-// - getVideoById
-// - deleteVideo
-// - likeVideo
-// - unlikeVideo
-// - incrementVideoView
+// Like video
+export const likeVideo = async (userId: string, videoId: string): Promise<boolean> => {
+  try {
+    const videoDocRef = doc(db, 'videos', videoId);
+    await updateDoc(videoDocRef, {
+      likes: firebase.firestore.FieldValue.increment(1),
+      likedBy: arrayUnion(userId)
+    });
+    return true;
+  } catch (error) {
+    console.error('Error liking video:', error);
+    return false;
+  }
+};
+
+// Unlike video
+export const unlikeVideo = async (userId: string, videoId: string): Promise<boolean> => {
+  try {
+    const videoDocRef = doc(db, 'videos', videoId);
+    await updateDoc(videoDocRef, {
+      likes: firebase.firestore.FieldValue.increment(-1),
+      likedBy: arrayRemove(userId)
+    });
+    return true;
+  } catch (error) {
+    console.error('Error unliking video:', error);
+    return false;
+  }
+};
