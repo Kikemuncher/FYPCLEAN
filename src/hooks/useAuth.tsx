@@ -1,9 +1,38 @@
-import { useState, useEffect } from 'react';
+"use client";
+
+import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, UserProfile } from '@/types/user';
 import * as localStorageService from '@/lib/localStorageService';
-import { AuthContextType } from '@/types/auth'; // Import the AuthContextType
 
+// Define the full AuthContextType with all required methods
+interface AuthContextType {
+  currentUser: User | null;
+  userProfile: UserProfile | null;
+  loading: boolean;
+  error: string | null;
+  signUp: (email: string, password: string, username: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
+  followUser: (targetUid: string) => Promise<void>;
+  unfollowUser: (targetUid: string) => Promise<void>;
+  isFollowing: (targetUid: string) => boolean;
+  likePost: (postId: string) => Promise<void>;
+  unlikePost: (postId: string) => Promise<void>;
+  isPostLiked: (postId: string) => boolean;
+  savePost: (postId: string) => Promise<void>;
+  unsavePost: (postId: string) => Promise<void>;
+  isPostSaved: (postId: string) => boolean;
+  getFollowing: () => string[];
+  getFollowers: () => string[];
+  upgradeToCreator: (creatorData: any) => Promise<void>;
+}
+
+// Create the auth context
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Implementation of auth state with localStorage
 const useMockAuthState = (): AuthContextType => {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
@@ -243,6 +272,21 @@ const useMockAuthState = (): AuthContextType => {
     return localStorageService.isVideoLiked(currentUser.uid, postId);
   };
 
+  const savePost = async (postId: string) => {
+    // Placeholder - implement if needed
+    return Promise.resolve();
+  };
+
+  const unsavePost = async (postId: string) => {
+    // Placeholder - implement if needed
+    return Promise.resolve();
+  };
+
+  const isPostSaved = (postId: string): boolean => {
+    // Placeholder - implement if needed
+    return false;
+  };
+
   const getFollowing = (): string[] => {
     if (!mounted || !currentUser) return [];
     
@@ -261,8 +305,34 @@ const useMockAuthState = (): AuthContextType => {
       .map(f => f.followerId);
   };
 
-  // Other methods would remain the same
-  // Include savePost, unsavePost, isPostSaved, upgradeToCreator, etc.
+  const upgradeToCreator = async (creatorData: any) => {
+    if (!mounted || !currentUser || !userProfile) return;
+    
+    try {
+      const updatedUser = {
+        ...currentUser,
+        isCreator: true,
+        accountType: 'creator' as const
+      };
+      
+      const updatedProfile = {
+        ...userProfile,
+        ...creatorData,
+        isCreator: true,
+        accountType: 'creator' as const
+      };
+      
+      // Update local storage
+      localStorageService.saveUser(updatedUser);
+      localStorageService.saveUserProfile(updatedProfile);
+      
+      // Update state
+      setCurrentUser(updatedUser);
+      setUserProfile(updatedProfile);
+    } catch (err) {
+      console.error('Upgrade to creator error:', err);
+    }
+  };
 
   return {
     currentUser,
@@ -279,13 +349,36 @@ const useMockAuthState = (): AuthContextType => {
     likePost,
     unlikePost,
     isPostLiked,
-    savePost: async () => {}, // Implement these as needed
-    unsavePost: async () => {},
-    isPostSaved: () => false,
+    savePost,
+    unsavePost,
+    isPostSaved,
     getFollowing,
     getFollowers,
-    upgradeToCreator: async () => {}
+    upgradeToCreator
   };
 };
 
-export { useMockAuthState };
+// Provider component that wraps the app
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [mounted, setMounted] = useState(false);
+  const authContext = useMockAuthState();
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  if (!mounted) {
+    return null; // Return nothing during SSR to prevent hydration issues
+  }
+  
+  return <AuthContext.Provider value={authContext}>{children}</AuthContext.Provider>;
+};
+
+// Hook to use the auth context
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
