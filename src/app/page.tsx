@@ -1,3 +1,4 @@
+// src/app/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -10,7 +11,7 @@ import SideNav from "@/components/layout/SideNav";
 export const dynamic = "force-dynamic";
 
 // Dynamically import FeedList with SSR disabled
-const FeedList = dynamicImport(() => import("@/components/feed/FeedList"), {
+const FeedList = dynamicImport(() => import("@/components/feed/FeedList").then(mod => mod.default), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-screen w-full bg-black">
