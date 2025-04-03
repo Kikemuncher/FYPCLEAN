@@ -335,7 +335,9 @@ function FeedList() {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              handleFollowUser(video.creatorUid);
+                              if (video.creatorUid) { // Add this explicit check
+                                handleFollowUser(video.creatorUid);
+                              }
                             }}
                             className={`inline-flex ml-2 items-center justify-center rounded-full px-2 py-0.5 text-xs text-white ${
                               isFollowing ? 'bg-gray-600' : 'bg-pink-600'
