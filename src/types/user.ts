@@ -35,6 +35,8 @@ export interface UserProfile {
   creatorBio?: string;
   creatorCategory?: string;
   portfolioLinks?: string[];
+  followers?: string[]; // Added followers field
+  following?: string[]; // Added following field
 }
 
 export interface CreatorApplication {
