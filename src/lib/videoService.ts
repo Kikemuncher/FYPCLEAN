@@ -1,4 +1,4 @@
-// Create a new file for video-related operations
+// src/lib/videoService.ts
 
 import { VideoData } from '@/types/video';
 import * as localStorageService from '@/lib/localStorageService';
@@ -76,7 +76,9 @@ export const deleteVideo = (videoId: string, creatorUid: string): boolean => {
   }
   
   const filteredVideos = videos.filter(v => v.id !== videoId);
-  const success = localStorageService.safelySetItem('local_videos', filteredVideos);
+  const success = localStorageService.safelySetItem
+    ? localStorageService.safelySetItem('local_videos', filteredVideos)
+    : false;
   
   if (success) {
     // Update creator's video count
