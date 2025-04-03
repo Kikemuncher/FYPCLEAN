@@ -76,8 +76,17 @@ export const deleteVideo = (videoId: string, creatorUid: string): boolean => {
   }
   
   const filteredVideos = videos.filter(v => v.id !== videoId);
-  // Use a different method that is definitely exported
-  return localStorageService.saveVideo ? localStorageService.saveVideos(filteredVideos) : false;
+  // Just update the videos array in localStorage directly
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('local_videos', JSON.stringify(filteredVideos));
+      return true;
+    } catch (error) {
+      console.error('Error saving videos:', error);
+      return false;
+    }
+  }
+  return false;
   
   if (success) {
     // Update creator's video count
