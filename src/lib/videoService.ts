@@ -1,7 +1,7 @@
 // src/lib/videoService.ts
 
 import { VideoData } from '@/types/video';
-import * as localStorageService from '@/lib/localStorageService';
+import * as localStorageService from '@/lib/localStorageService'; // Assumes safelySetItem is defined here
 
 // Get all videos
 export const getAllVideos = (): VideoData[] => {
@@ -66,44 +66,31 @@ export const getVideoById = (videoId: string): VideoData | null => {
   return videos.find(video => video.id === videoId) || null;
 };
 
-// Delete video (Corrected Version)
+// Delete video (Using safelySetItem approach from Snippet $1)
 export const deleteVideo = (videoId: string, creatorUid: string): boolean => {
   const videos = localStorageService.getVideos();
   const video = videos.find(v => v.id === videoId);
 
-  if (!video || video.creatorUid !== creatorUid) {
+  // Check if video exists and if creatorUid is provided and matches video's creatorUid
+  if (!video || (video.creatorUid && video.creatorUid !== creatorUid)) {
     return false; // Not found or not authorized
   }
 
   const filteredVideos = videos.filter(v => v.id !== videoId);
   
-  let success = false; // Initialize success flag
-  if (typeof window !== 'undefined') {
-    try {
-      // Directly use the saveVideos function if it exists in localStorageService
-      // Assuming localStorageService.saveVideos replaces the entire array
-      // If not, use localStorage.setItem as originally shown:
-      localStorage.setItem('local_videos', JSON.stringify(filteredVideos));
-      // Or if you have a dedicated function like: localStorageService.saveVideos(filteredVideos);
-      success = true; // Set flag to true on successful save
-    } catch (error) {
-      console.error('Error saving videos after deletion:', error);
-      success = false; // Ensure flag is false on error
-    }
-  } else {
-     // If window is not defined (e.g., SSR), deletion cannot persist in localStorage
-     success = false; 
-  }
+  // Delegate saving to localStorageService, assuming it handles try/catch & stringify
+  const success = localStorageService.safelySetItem('local_videos', filteredVideos);
 
-  // Only update creator profile if the video list was successfully updated
-  if (success) { 
-    const creator = localStorageService.getUserProfileById(creatorUid);
+  // If saving the filtered list was successful AND the video had a creator
+  if (success && video.creatorUid) {
+    const creator = localStorageService.getUserProfileById(video.creatorUid);
     if (creator) {
       const updatedProfile = {
         ...creator,
         videoCount: Math.max(0, (creator.videoCount || 0) - 1) // Decrement video count
       };
-      localStorageService.saveUserProfile(updatedProfile); 
+      // Assuming saveUserProfile handles its own success/failure reporting if needed
+      localStorageService.saveUserProfile(updatedProfile);
     }
   }
 
