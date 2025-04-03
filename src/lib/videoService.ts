@@ -1,7 +1,7 @@
 // src/lib/videoService.ts
 
 import { db, storage } from './firebase';
-import { collection, getDocs, query, orderBy, limit, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, doc, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore'; // Added increment import
 import { VideoData } from '@/types/video';
 
 // Update to fetch only from Firebase
@@ -47,7 +47,7 @@ export const incrementVideoView = async (videoId: string): Promise<boolean> => {
   try {
     const videoDocRef = doc(db, 'videos', videoId);
     await updateDoc(videoDocRef, {
-      views: firebase.firestore.FieldValue.increment(1)
+      views: increment(1) // Changed to use the imported increment function
     });
     return true;
   } catch (error) {
@@ -61,7 +61,7 @@ export const likeVideo = async (userId: string, videoId: string): Promise<boolea
   try {
     const videoDocRef = doc(db, 'videos', videoId);
     await updateDoc(videoDocRef, {
-      likes: firebase.firestore.FieldValue.increment(1),
+      likes: increment(1), // Changed to increment function
       likedBy: arrayUnion(userId)
     });
     return true;
@@ -76,7 +76,7 @@ export const unlikeVideo = async (userId: string, videoId: string): Promise<bool
   try {
     const videoDocRef = doc(db, 'videos', videoId);
     await updateDoc(videoDocRef, {
-      likes: firebase.firestore.FieldValue.increment(-1),
+      likes: increment(-1), // Changed to increment function
       likedBy: arrayRemove(userId)
     });
     return true;
