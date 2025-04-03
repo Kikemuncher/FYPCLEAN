@@ -1,9 +1,8 @@
-// Replace the current useMockAuthState function with this version
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, UserProfile } from '@/types/user';
 import * as localStorageService from '@/lib/localStorageService';
+import { AuthContextType } from '@/types/auth'; // Import the AuthContextType
 
 const useMockAuthState = (): AuthContextType => {
   const router = useRouter();
@@ -288,3 +287,5 @@ const useMockAuthState = (): AuthContextType => {
     upgradeToCreator: async () => {}
   };
 };
+
+export { useMockAuthState };
