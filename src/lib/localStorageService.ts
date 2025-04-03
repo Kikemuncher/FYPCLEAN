@@ -1,4 +1,4 @@
-// Create a new file with these functions
+// src/lib/localStorageService.ts
 
 // Types
 import { User, UserProfile } from '@/types/user';
@@ -27,7 +27,7 @@ const safelyGetItem = (key: string, defaultValue: any = null) => {
   }
 };
 
-const safelySetItem = (key: string, value: any): boolean => {
+export const safelySetItem = (key: string, value: any): boolean => {
   if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(key, JSON.stringify(value));
