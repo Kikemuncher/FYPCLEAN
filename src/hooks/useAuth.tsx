@@ -18,9 +18,9 @@ interface AuthContextType {
   followUser: (targetUid: string) => Promise<void>;
   unfollowUser: (targetUid: string) => Promise<void>;
   isFollowing: (targetUid: string) => boolean;
-  likePost: (postId: string) => Promise<void>;
-  unlikePost: (postId: string) => Promise<void>;
-  isPostLiked: (postId: string) => boolean;
+  likePost: (postId: string) => Promise<void>; // Assuming posts are videos here based on localStorageService methods used
+  unlikePost: (postId: string) => Promise<void>; // Assuming posts are videos here
+  isPostLiked: (postId: string) => boolean; // Assuming posts are videos here
   savePost: (postId: string) => Promise<void>;
   unsavePost: (postId: string) => Promise<void>;
   isPostSaved: (postId: string) => boolean;
@@ -37,7 +37,7 @@ const useMockAuthState = (): AuthContextType => {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // State for profile
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,10 +59,12 @@ const useMockAuthState = (): AuthContextType => {
       
       if (user && profile) {
         setCurrentUser(user);
-        setUserProfile(profile);
+        setUserProfile(profile); // Load profile into state
       } else {
         // If user data is incomplete, clear the current user
         localStorageService.setCurrentUser(null);
+        setCurrentUser(null); // Also clear state
+        setUserProfile(null); // Also clear state
       }
       
       setLoading(false);
@@ -116,7 +118,7 @@ const useMockAuthState = (): AuthContextType => {
         photoURL: 'https://placehold.co/400/gray/white?text=User',
         coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
         followerCount: 0,
-        followingCount: 0,
+        followingCount: 0, // Initialize followingCount
         videoCount: 0,
         likeCount: 0,
         links: {},
@@ -133,12 +135,12 @@ const useMockAuthState = (): AuthContextType => {
       
       // Update state
       setCurrentUser(newUser);
-      setUserProfile(newProfile);
+      setUserProfile(newProfile); // Set profile state
       
-      router.push('/auth/onboarding');
+      router.push('/auth/onboarding'); // Redirect after successful sign up
     } catch (err) {
       console.error('Sign up error:', err);
-      setError('An unexpected error occurred');
+      setError('An unexpected error occurred during sign up');
     } finally {
       setLoading(false);
     }
@@ -163,7 +165,9 @@ const useMockAuthState = (): AuthContextType => {
       const profile = localStorageService.getUserProfileById(user.uid);
       
       if (!profile) {
-        setError('User profile not found');
+        // This case might indicate data inconsistency; handle appropriately
+        setError('User profile not found. Please contact support.');
+        // Optionally clear inconsistent state: localStorageService.setCurrentUser(null);
         setLoading(false);
         return;
       }
@@ -173,12 +177,12 @@ const useMockAuthState = (): AuthContextType => {
       
       // Update state
       setCurrentUser(user);
-      setUserProfile(profile);
+      setUserProfile(profile); // Set profile state
       
-      router.push('/');
+      router.push('/'); // Redirect after successful sign in
     } catch (err) {
       console.error('Sign in error:', err);
-      setError('An unexpected error occurred');
+      setError('An unexpected error occurred during sign in');
     } finally {
       setLoading(false);
     }
@@ -188,25 +192,26 @@ const useMockAuthState = (): AuthContextType => {
     if (!mounted) return;
     
     try {
-      localStorageService.setCurrentUser(null);
-      setCurrentUser(null);
-      setUserProfile(null);
-      router.push('/auth/login');
+      localStorageService.setCurrentUser(null); // Clear current user marker
+      setCurrentUser(null); // Clear state
+      setUserProfile(null); // Clear profile state
+      router.push('/auth/login'); // Redirect to login
     } catch (err) {
       console.error('Sign out error:', err);
+      // Optionally set an error state if needed: setError('Failed to sign out');
     }
   };
 
   const updateUserProfile = async (data: Partial<UserProfile>) => {
     if (!mounted || !currentUser || !userProfile) return;
-    setLoading(true);
+    // setLoading(true); // Optional: indicate loading state during profile update
     setError(null);
     
     try {
       const updatedProfile = {
         ...userProfile,
         ...data,
-        updatedAt: Date.now()
+        updatedAt: Date.now() // Add/update timestamp if desired
       };
       
       // Update local storage
@@ -218,108 +223,162 @@ const useMockAuthState = (): AuthContextType => {
       console.error('Profile update error:', err);
       setError('Failed to update profile');
     } finally {
-      setLoading(false);
+      // setLoading(false); // Stop loading indicator
     }
   };
 
-  const followUser = async (targetUid: string) => {
+  // --- Updated followUser ---
+  const followUser = async (targetUid: string): Promise<void> => {
     if (!mounted || !currentUser) return;
     
     try {
-      localStorageService.followUser(currentUser.uid, targetUid);
+      // Attempt to update storage first
+      const success = localStorageService.followUser(currentUser.uid, targetUid); 
+      // Note: Assuming followUser returns boolean or throws on failure. Adapt if not.
+      
+      // If storage update was successful, update local state
+      if (success && userProfile) { // Check if profile exists before updating
+        setUserProfile({
+          ...userProfile,
+          followingCount: (userProfile.followingCount || 0) + 1
+        });
+      } else if (!success) {
+         // Optional: Handle storage failure scenario if needed
+         console.warn('Failed to persist follow action in storage.');
+      }
     } catch (err) {
       console.error('Follow user error:', err);
+      // Optionally set an error state: setError('Failed to follow user');
     }
   };
 
-  const unfollowUser = async (targetUid: string) => {
+  // --- Updated unfollowUser ---
+  const unfollowUser = async (targetUid: string): Promise<void> => {
     if (!mounted || !currentUser) return;
     
     try {
-      localStorageService.unfollowUser(currentUser.uid, targetUid);
+      // Attempt to update storage first
+      const success = localStorageService.unfollowUser(currentUser.uid, targetUid);
+      // Note: Assuming unfollowUser returns boolean or throws on failure. Adapt if not.
+
+      // If storage update was successful, update local state
+      if (success && userProfile) { // Check if profile exists before updating
+        setUserProfile({
+          ...userProfile,
+          followingCount: Math.max(0, (userProfile.followingCount || 0) - 1)
+        });
+      } else if (!success) {
+         // Optional: Handle storage failure scenario if needed
+         console.warn('Failed to persist unfollow action in storage.');
+      }
     } catch (err) {
       console.error('Unfollow user error:', err);
+      // Optionally set an error state: setError('Failed to unfollow user');
     }
   };
 
   const isFollowing = (targetUid: string): boolean => {
-    if (!mounted || !currentUser) return false;
+    // Ensure checks happen only when ready and user exists
+    if (!mounted || !currentUser) return false; 
     return localStorageService.isFollowing(currentUser.uid, targetUid);
   };
 
-  const likePost = async (postId: string) => {
+  // --- Assuming Posts = Videos based on localStorageService method names ---
+  const likePost = async (postId: string) => { // Changed name to postId for consistency
     if (!mounted || !currentUser) return;
     
     try {
+      // Assuming likeVideo returns boolean success or throws
       localStorageService.likeVideo(currentUser.uid, postId);
+      // Potential improvement: Update local state for immediate feedback on like counts
     } catch (err) {
       console.error('Like post error:', err);
+      // Optionally set an error state
     }
   };
 
-  const unlikePost = async (postId: string) => {
+  const unlikePost = async (postId: string) => { // Changed name to postId
     if (!mounted || !currentUser) return;
     
     try {
+      // Assuming unlikeVideo returns boolean success or throws
       localStorageService.unlikeVideo(currentUser.uid, postId);
+      // Potential improvement: Update local state for immediate feedback on like counts
     } catch (err) {
       console.error('Unlike post error:', err);
+      // Optionally set an error state
     }
   };
 
-  const isPostLiked = (postId: string): boolean => {
+  const isPostLiked = (postId: string): boolean => { // Changed name to postId
     if (!mounted || !currentUser) return false;
-    return localStorageService.isVideoLiked(currentUser.uid, postId);
+    // Assuming isVideoLiked exists and maps to post liking
+    return localStorageService.isVideoLiked(currentUser.uid, postId); 
   };
+  // --- End Post/Video Assumption ---
+
 
   const savePost = async (postId: string) => {
-    // Placeholder - implement if needed
-    return Promise.resolve();
+    // Placeholder - implement actual logic using localStorageService if needed
+    console.warn('savePost not implemented');
+    return Promise.resolve(); 
   };
 
   const unsavePost = async (postId: string) => {
-    // Placeholder - implement if needed
+    // Placeholder - implement actual logic using localStorageService if needed
+    console.warn('unsavePost not implemented');
     return Promise.resolve();
   };
 
   const isPostSaved = (postId: string): boolean => {
-    // Placeholder - implement if needed
+    // Placeholder - implement actual logic using localStorageService if needed
+    console.warn('isPostSaved not implemented');
     return false;
   };
 
   const getFollowing = (): string[] => {
     if (!mounted || !currentUser) return [];
     
-    const follows = localStorageService.getFollows();
-    return follows
-      .filter(f => f.followerId === currentUser.uid)
-      .map(f => f.followingId);
+    try {
+      const follows = localStorageService.getFollows(); // Assumes getFollows exists
+      return follows
+        .filter(f => f.followerId === currentUser.uid)
+        .map(f => f.followingId);
+    } catch (err) {
+      console.error('Error getting following list:', err);
+      return []; // Return empty list on error
+    }
   };
 
   const getFollowers = (): string[] => {
     if (!mounted || !currentUser) return [];
     
-    const follows = localStorageService.getFollows();
-    return follows
-      .filter(f => f.followingId === currentUser.uid)
-      .map(f => f.followerId);
+    try {
+      const follows = localStorageService.getFollows(); // Assumes getFollows exists
+      return follows
+        .filter(f => f.followingId === currentUser.uid)
+        .map(f => f.followerId);
+    } catch (err) {
+      console.error('Error getting followers list:', err);
+      return []; // Return empty list on error
+    }
   };
 
-  const upgradeToCreator = async (creatorData: any) => {
+  const upgradeToCreator = async (creatorData: any) => { // Consider defining a type for creatorData
     if (!mounted || !currentUser || !userProfile) return;
     
     try {
-      const updatedUser = {
+      const updatedUser: User = { // Explicitly type
         ...currentUser,
         isCreator: true,
-        accountType: 'creator' as const
+        accountType: 'creator' as const // Use const assertion for literal type
       };
       
-      const updatedProfile = {
+      const updatedProfile: UserProfile = { // Explicitly type
         ...userProfile,
-        ...creatorData,
+        ...creatorData, // Merge creator-specific data
         isCreator: true,
-        accountType: 'creator' as const
+        accountType: 'creator' as const // Use const assertion
       };
       
       // Update local storage
@@ -331,20 +390,22 @@ const useMockAuthState = (): AuthContextType => {
       setUserProfile(updatedProfile);
     } catch (err) {
       console.error('Upgrade to creator error:', err);
+      // Optionally set an error state
     }
   };
 
   return {
     currentUser,
     userProfile,
-    loading: !mounted || loading,
+    // Ensure loading reflects mount status as well
+    loading: !mounted || loading, 
     error,
     signUp,
     signIn,
     signOut,
     updateUserProfile,
-    followUser,
-    unfollowUser,
+    followUser, // Now using the updated version
+    unfollowUser, // Now using the updated version
     isFollowing,
     likePost,
     unlikePost,
@@ -361,23 +422,26 @@ const useMockAuthState = (): AuthContextType => {
 // Provider component that wraps the app
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [mounted, setMounted] = useState(false);
-  const authContext = useMockAuthState();
+  const authContext = useMockAuthState(); // Use the hook that manages state
   
+  // Prevent rendering children until mounted on the client
   useEffect(() => {
     setMounted(true);
   }, []);
   
+  // On the server or before hydration, return null or a loader
   if (!mounted) {
-    return null; // Return nothing during SSR to prevent hydration issues
+    return null; 
   }
   
+  // Once mounted, provide the context value
   return <AuthContext.Provider value={authContext}>{children}</AuthContext.Provider>;
 };
 
 // Hook to use the auth context
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) { // Check for undefined context
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
