@@ -3,7 +3,7 @@
 // src/components/profile/ProfileHeader.tsx
 import React from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { UserProfile } from '@/types/user';
 
 type ProfileHeaderProps = {
