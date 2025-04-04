@@ -1,26 +1,19 @@
+// src/components/profile/ProfileVideos.tsx
 'use client';
 
-// src/components/profile/ProfileVideos.tsx
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { storage } from '@/lib/firebase';
-import { ref, listAll, getDownloadURL } from 'firebase/storage';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-
-interface Video {
-  id: string;
-  url: string;
-  thumbnail?: string;
-  caption: string;
-}
+import { ref, getDownloadURL } from 'firebase/storage';
+import { getVideosByUsername } from '@/lib/videoService';
+import { VideoData } from '@/types/video';
 
 type ProfileVideosProps = {
   username: string;
 };
 
 export default function ProfileVideos({ username }: ProfileVideosProps) {
-  const [videos, setVideos] = useState<Video[]>([]);
+  const [videos, setVideos] = useState<VideoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,65 +23,14 @@ export default function ProfileVideos({ username }: ProfileVideosProps) {
         setLoading(true);
         setError(null);
         
-        // First try to fetch videos from Firestore where creator matches username
-        const videosRef = collection(db, 'videos');
-        const q = query(
-          videosRef, 
-          where('username', '==', username),
-          orderBy('timestamp', 'desc'), 
-          limit(20)
-        );
+        // Fetch videos directly from the videoService
+        const videoData = await getVideosByUsername(username);
         
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-          // Videos found in Firestore
-          const videoData = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              url: data.url,
-              thumbnail: data.thumbnail,
-              caption: data.caption || '',
-            };
-          });
-          
-          setVideos(videoData);
-          setLoading(false);
-          return;
+        if (videoData.length === 0) {
+          console.log('No videos found for user:', username);
         }
         
-        // If no videos found in Firestore, try fetching from Storage directly
-        // This is a fallback and may not be accurate for per-user videos
-        const videosStorageRef = ref(storage, 'videos/');
-        const result = await listAll(videosStorageRef);
-        
-        if (result.items.length === 0) {
-          setVideos([]);
-          setLoading(false);
-          return;
-        }
-        
-        // Get download URLs and create video objects
-        const videoPromises = result.items.map(async (item) => {
-          try {
-            const url = await getDownloadURL(item);
-            return {
-              id: item.name,
-              url,
-              thumbnail: url, // In a real app, you'd generate/store thumbnails
-              caption: item.name.replace(/\.\w+$/, '').replace(/Snaptik\.app_/, '')
-            };
-          } catch (err) {
-            console.error(`Error getting URL for ${item.name}:`, err);
-            return null;
-          }
-        });
-        
-        const videoResults = await Promise.all(videoPromises);
-        const validVideos = videoResults.filter(Boolean) as Video[];
-        
-        setVideos(validVideos);
+        setVideos(videoData);
         setLoading(false);
       } catch (err) {
         console.error('Error fetching user videos:', err);
@@ -143,7 +85,7 @@ export default function ProfileVideos({ username }: ProfileVideosProps) {
             <Link href={`/?video=${video.id}`}>
               <div className="absolute inset-0">
                 <video
-                  src={video.url}
+                  src={video.videoUrl}
                   className="w-full h-full object-cover"
                   muted
                   playsInline
@@ -155,7 +97,7 @@ export default function ProfileVideos({ username }: ProfileVideosProps) {
                         <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
                         <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
                       </svg>
-                      <span>View</span>
+                      <span>{video.views} views</span>
                     </div>
                   </div>
                 </div>
