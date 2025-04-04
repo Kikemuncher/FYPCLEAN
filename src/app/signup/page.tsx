@@ -78,7 +78,7 @@ export default function SignupPage() {
         </h2>
         <p className="mt-2 text-center text-sm text-gray-400">
           Or{' '}
-          <Link href="/login" className="font-medium text-tiktok-pink hover:text-pink-400">
+          <Link href="/auth/login" className="font-medium text-tiktok-pink hover:text-pink-400">
             sign in to an existing account
           </Link>
         </p>
