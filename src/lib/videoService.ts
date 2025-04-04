@@ -1,18 +1,17 @@
-// src/lib/videoService.ts
 import { db, storage } from './firebase';
-import { 
-  collection, 
-  getDocs, 
+import {
+  collection,
+  getDocs,
   getDoc,
-  doc, 
-  updateDoc, 
-  arrayUnion, 
-  arrayRemove, 
-  increment, 
-  query, 
-  orderBy, 
-  where, 
-  limit 
+  doc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+  increment,
+  query,
+  orderBy,
+  where,
+  limit
 } from 'firebase/firestore';
 import { VideoData } from '@/types/video';
 
@@ -23,12 +22,12 @@ export const getFeedVideos = async (): Promise<VideoData[]> => {
     const videosRef = collection(db, 'videos');
     const q = query(videosRef, orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
-    
+
     if (querySnapshot.empty) {
       console.log('No videos found in Firebase');
       return [];
     }
-    
+
     // Map Firebase documents to VideoData
     return querySnapshot.docs.map(doc => {
       const data = doc.data();
@@ -76,14 +75,14 @@ export const likeVideo = async (userId: string, videoId: string): Promise<boolea
       likes: increment(1),
       likedBy: arrayUnion(userId)
     });
-    
+
     // Also update user's liked videos
     const userDocRef = doc(db, 'users', userId);
     await updateDoc(userDocRef, {
       likedVideos: arrayUnion(videoId),
       likeCount: increment(1)
     });
-    
+
     return true;
   } catch (error) {
     console.error('Error liking video:', error);
@@ -99,14 +98,14 @@ export const unlikeVideo = async (userId: string, videoId: string): Promise<bool
       likes: increment(-1),
       likedBy: arrayRemove(userId)
     });
-    
+
     // Also update user's liked videos
     const userDocRef = doc(db, 'users', userId);
     await updateDoc(userDocRef, {
       likedVideos: arrayRemove(videoId),
       likeCount: increment(-1)
     });
-    
+
     return true;
   } catch (error) {
     console.error('Error unliking video:', error);
@@ -119,13 +118,13 @@ export const isVideoLikedByUser = async (userId: string, videoId: string): Promi
   try {
     const videoDocRef = doc(db, 'videos', videoId);
     const videoDoc = await getDoc(videoDocRef);
-    
+
     if (videoDoc.exists()) {
       const data = videoDoc.data();
       const likedBy = data.likedBy || [];
       return likedBy.includes(userId);
     }
-    
+
     return false;
   } catch (error) {
     console.error('Error checking if video is liked:', error);
@@ -142,9 +141,9 @@ export const getVideosByUser = async (userId: string): Promise<VideoData[]> => {
       where('creatorUid', '==', userId),
       orderBy('createdAt', 'desc')
     );
-    
+
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map(doc => {
       const data = doc.data();
       return {
@@ -178,9 +177,9 @@ export const getVideosByUsername = async (username: string): Promise<VideoData[]
       where('username', '==', username),
       orderBy('createdAt', 'desc')
     );
-    
+
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map(doc => {
       const data = doc.data();
       return {
@@ -203,3 +202,4 @@ export const getVideosByUsername = async (username: string): Promise<VideoData[]
     console.error('Error fetching user videos by username:', error);
     return [];
   }
+};
