@@ -29,14 +29,16 @@ export interface UserProfile {
     website?: string;
   };
   createdAt: number;
+  updatedAt?: number;
   isVerified: boolean;
   isCreator: boolean;
   accountType: 'user' | 'creator';
   creatorBio?: string;
   creatorCategory?: string;
   portfolioLinks?: string[];
-  followers?: string[]; // Added followers field
-  following?: string[]; // Added following field
+  followers?: string[];
+  following?: string[];
+  likedVideos?: string[];
 }
 
 export interface CreatorApplication {
@@ -56,10 +58,4 @@ export interface CreatorApplication {
   reviewedAt?: number;
   reviewedBy?: string;
   rejectionReason?: string;
-}
-
-export interface UserRelationship {
-  followerId: string;
-  followingId: string;
-  createdAt: number;
 }
