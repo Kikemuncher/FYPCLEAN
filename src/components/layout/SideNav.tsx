@@ -8,9 +8,9 @@ import { useState } from 'react';
 export default function SideNav() {
   const { currentUser, userProfile, loading, signOut } = useAuth();
   const router = useRouter();
-  
+
   const [isSigningOut, setIsSigningOut] = useState(false);
-  
+
   const handleSignOut = async () => {
     setIsSigningOut(true);
     try {
@@ -22,7 +22,7 @@ export default function SideNav() {
       setIsSigningOut(false);
     }
   };
-  
+
   return (
     <div className="fixed left-0 top-0 h-full w-64 bg-zinc-900 border-r border-zinc-800 overflow-y-auto z-40">
       <div className="p-4">
@@ -30,7 +30,7 @@ export default function SideNav() {
           <span className="text-xl font-bold text-pink-600">Social App</span>
         </Link>
       </div>
-      
+
       <div className="px-4 py-2">
         {/* Navigation links */}
         <nav className="space-y-2">
@@ -40,21 +40,21 @@ export default function SideNav() {
             </svg>
             <span>Home</span>
           </Link>
-          
+
           <Link href="/discover" className="flex items-center p-2 hover:bg-zinc-800 rounded-md text-white">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <span>Discover</span>
           </Link>
-          
+
           <Link href="/inbox" className="flex items-center p-2 hover:bg-zinc-800 rounded-md text-white">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
             <span>Inbox</span>
           </Link>
-          
+
           {currentUser && (
             <Link href={`/profile/${userProfile?.username || currentUser.uid}`} className="flex items-center p-2 hover:bg-zinc-800 rounded-md text-white">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -65,7 +65,7 @@ export default function SideNav() {
           )}
         </nav>
       </div>
-      
+
       <div className="px-4 py-6 mt-6 border-t border-zinc-800">
         {loading ? (
           <div className="flex items-center p-2">
@@ -78,7 +78,7 @@ export default function SideNav() {
           <div>
             <div className="flex items-center p-2">
               <div className="w-10 h-10 rounded-full overflow-hidden">
-                <img 
+                <img
                   src={userProfile?.photoURL || currentUser.photoURL || "https://placehold.co/100/gray/white?text=User"}
                   alt={userProfile?.displayName || currentUser.displayName || "User"}
                   className="w-full h-full object-cover"
@@ -93,7 +93,7 @@ export default function SideNav() {
                 </p>
               </div>
             </div>
-            
+
             <button
               onClick={handleSignOut}
               disabled={isSigningOut}
@@ -104,14 +104,14 @@ export default function SideNav() {
           </div>
         ) : (
           <div className="space-y-2">
-            <Link 
-              href="/auth/login" 
+            <Link
+              href="/auth/login"
               className="block w-full py-2 px-4 text-center bg-zinc-800 hover:bg-zinc-700 rounded-md text-white text-sm font-medium transition-colors"
             >
               Log In
             </Link>
-            <Link 
-              href="/auth/signup" 
+            <Link
+              href="/auth/signup"
               className="block w-full py-2 px-4 text-center bg-pink-600 hover:bg-pink-700 rounded-md text-white text-sm font-medium transition-colors"
             >
               Sign Up
