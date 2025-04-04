@@ -12,8 +12,22 @@ type ProfileHeaderProps = {
 };
 
 export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps) {
-  const { currentUser } = useAuth();
-  
+  const { currentUser, isFollowing, followUser, unfollowUser } = useAuth();
+
+  const handleFollow = async () => {
+    if (!user?.uid) return;
+
+    try {
+      if (isFollowing(user.uid)) {
+        await unfollowUser(user.uid);
+      } else {
+        await followUser(user.uid);
+      }
+    } catch (error) {
+      console.error('Error following/unfollowing user:', error);
+    }
+  };
+
   if (!user) {
     return (
       <div className="animate-pulse p-6 bg-zinc-900 rounded-lg">
@@ -43,14 +57,14 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
             className="w-full h-full object-cover"
           />
         </div>
-        
+
         <div className="flex-1 text-center md:text-left">
           <h1 className="text-2xl font-bold text-white">@{user.username}</h1>
-          
+
           {user.displayName && (
             <p className="text-gray-400 text-lg">{user.displayName}</p>
           )}
-          
+
           <div className="flex flex-wrap justify-center md:justify-start gap-6 mt-4">
             <div className="text-center">
               <p className="text-white font-bold">{user.videoCount || 0}</p>
@@ -69,18 +83,18 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
               <p className="text-gray-400 text-sm">Likes</p>
             </div>
           </div>
-          
+
           {user.bio && (
             <p className="mt-4 text-white">{user.bio}</p>
           )}
-          
+
           {/* Social links */}
           {user.links && Object.keys(user.links).length > 0 && (
             <div className="mt-4 flex flex-wrap gap-3">
               {user.links.instagram && (
-                <a 
-                  href={`https://instagram.com/${user.links.instagram}`} 
-                  target="_blank" 
+                <a
+                  href={`https://instagram.com/${user.links.instagram}`}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-400 hover:text-white"
                 >
@@ -90,11 +104,11 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
                   </svg>
                 </a>
               )}
-              
+
               {user.links.twitter && (
-                <a 
-                  href={`https://twitter.com/${user.links.twitter}`} 
-                  target="_blank" 
+                <a
+                  href={`https://twitter.com/${user.links.twitter}`}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-400 hover:text-white"
                 >
@@ -104,11 +118,11 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
                   </svg>
                 </a>
               )}
-              
+
               {user.links.youtube && (
-                <a 
-                  href={`https://youtube.com/${user.links.youtube}`} 
-                  target="_blank" 
+                <a
+                  href={`https://youtube.com/${user.links.youtube}`}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-400 hover:text-white"
                 >
@@ -118,11 +132,11 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
                   </svg>
                 </a>
               )}
-              
+
               {user.links.website && (
-                <a 
-                  href={user.links.website.startsWith('http') ? user.links.website : `https://${user.links.website}`} 
-                  target="_blank" 
+                <a
+                  href={user.links.website.startsWith('http') ? user.links.website : `https://${user.links.website}`}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-400 hover:text-white"
                 >
@@ -134,11 +148,11 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
               )}
             </div>
           )}
-          
+
           <div className="mt-6">
             {isOwnProfile ? (
-              <Link 
-                href="/settings/profile" 
+              <Link
+                href="/settings/profile"
                 className="inline-flex items-center px-4 py-2 border border-gray-700 rounded-full text-sm font-medium text-white hover:bg-zinc-800"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -148,9 +162,10 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
               </Link>
             ) : (
               <button
-                className="inline-flex items-center px-6 py-2 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-tiktok-pink hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tiktok-pink"
+                onClick={handleFollow}
+                className={`inline-flex items-center px-6 py-2 border border-transparent rounded-full shadow-sm text-sm font-medium text-white ${isFollowing(user.uid) ? "bg-gray-600 hover:bg-gray-700" : "bg-tiktok-pink hover:bg-pink-700"} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tiktok-pink`}
               >
-                Follow
+                {isFollowing(user.uid) ? "Following" : "Follow"}
               </button>
             )}
           </div>
