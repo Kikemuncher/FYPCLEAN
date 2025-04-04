@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { VideoData } from '@/types/video';
+import * as videoService from "@/lib/videoService";
 
 interface VideoState {
   currentVideoIndex: number;
@@ -36,14 +37,9 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   fetchVideos: async () => {
     set({ loading: true, error: null });
     try {
-      const response = await fetch('/api/get-videos');
-      if (!response.ok) {
-        throw new Error('Failed to fetch videos');
-      }
-      const data = await response.json();
-      
-      set({ videos: data.videos });
-      return data.videos;
+      const videos = await videoService.getFeedVideos();
+      set({ videos, loading: false });
+      return videos;
     } catch (error) {
       console.error('Error fetching videos:', error);
       set({ loading: false, error: 'Error fetching videos' });
