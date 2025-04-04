@@ -1,5 +1,6 @@
-// src/lib/mockUserService.ts
 import { UserProfile, User } from "@/types/user";
+import { db } from './firebase';
+import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 
 // Check if we're in a browser environment
 const isBrowser = typeof window !== "undefined";
@@ -95,86 +96,77 @@ export const getUserProfileByUsername = async (usernameOrUid: string): Promise<U
   );
   if (sampleCreator) return sampleCreator;
 
-  const currentUserStr = localStorage.getItem("mock-auth-user");
-  const currentProfileStr = localStorage.getItem("mock-auth-profile");
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('username', '==', usernameOrUid));
+    const querySnapshot = await getDocs(q);
 
-  if (currentUserStr && currentProfileStr) {
-    const currentUser = JSON.parse(currentUserStr) as User;
-    const currentProfile = JSON.parse(currentProfileStr) as UserProfile;
-
-    if (currentProfile.username === usernameOrUid || currentUser.uid === usernameOrUid) {
-      return currentProfile;
-    }
-  }
-
-  const mockProfilesStr = localStorage.getItem("mock-profiles");
-  if (mockProfilesStr) {
-    const mockProfiles = JSON.parse(mockProfilesStr) as UserProfile[];
-    const foundProfile = mockProfiles.find(
-      (profile) => profile.username === usernameOrUid || profile.uid === usernameOrUid
-    );
-    if (foundProfile) return foundProfile;
-  }
-
-  if (usernameOrUid && !usernameOrUid.includes(" ")) {
-    const generatedProfile: UserProfile = {
-      uid: `generated-${usernameOrUid}`,
-      username: usernameOrUid,
-      displayName: usernameOrUid
-        .split("_")
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" "),
-      bio: "Creator of amazing content",
-      photoURL: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? "women" : "men"}/${Math.floor(Math.random() * 99)}.jpg`,
-      coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Creator",
-      followerCount: 0,
-      followingCount: 0,
-      videoCount: 0,
-      likeCount: 0,
-      links: {},
-      createdAt: Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000,
-      isVerified: Math.random() > 0.7,
-      isCreator: true,
-      accountType: 'creator'
-    };
-
-    try {
-      const mockProfilesStr = localStorage.getItem("mock-profiles");
-      const mockProfiles = mockProfilesStr ? JSON.parse(mockProfilesStr) : [];
-      mockProfiles.push(generatedProfile);
-      localStorage.setItem("mock-profiles", JSON.stringify(mockProfiles));
-    } catch (err) {
-      console.error("Failed to save generated profile", err);
+    if (!querySnapshot.empty) {
+      const userDoc = querySnapshot.docs[0];
+      return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
     }
 
-    return generatedProfile;
-  }
+    const userDocRef = doc(db, 'users', usernameOrUid);
+    const userDoc = await getDoc(userDocRef);
 
-  if (usernameOrUid === "testuser" || usernameOrUid === "mock-test-user") {
-    return {
-      uid: "mock-test-user",
-      username: "testuser",
-      displayName: "Test User",
-      bio: "This is a test user for development",
-      photoURL: "https://placehold.co/400/gray/white?text=User",
-      coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Cover",
-      followerCount: 0,
-      followingCount: 0,
-      videoCount: 0,
-      likeCount: 0,
-      links: {
-        instagram: "testuser",
-        twitter: "testuser",
-        youtube: "testuser",
-        website: "https://example.com",
-      },
-      createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
-      isVerified: true,
-      isCreator: true,
-      accountType: 'creator'
-    };
-  }
+    if (userDoc.exists()) {
+      return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+    }
 
-  // 🚨 Final fallback
-  return null;
+    if (usernameOrUid && !usernameOrUid.includes(" ")) {
+      const generatedProfile: UserProfile = {
+        uid: `generated-${usernameOrUid}`,
+        username: usernameOrUid,
+        displayName: usernameOrUid
+          .split("_")
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" "),
+        bio: "Creator of amazing content",
+        photoURL: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? "women" : "men"}/${Math.floor(Math.random() * 99)}.jpg`,
+        coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Creator",
+        followerCount: 0,
+        followingCount: 0,
+        videoCount: 0,
+        likeCount: 0,
+        links: {},
+        createdAt: Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000,
+        isVerified: Math.random() > 0.7,
+        isCreator: true,
+        accountType: 'creator'
+      };
+
+      return generatedProfile;
+    }
+
+    if (usernameOrUid === "testuser" || usernameOrUid === "mock-test-user") {
+      return {
+        uid: "mock-test-user",
+        username: "testuser",
+        displayName: "Test User",
+        bio: "This is a test user for development",
+        photoURL: "https://placehold.co/400/gray/white?text=User",
+        coverPhotoURL: "https://placehold.co/1200x400/gray/white?text=Cover",
+        followerCount: 0,
+        followingCount: 0,
+        videoCount: 0,
+        likeCount: 0,
+        links: {
+          instagram: "testuser",
+          twitter: "testuser",
+          youtube: "testuser",
+          website: "https://example.com",
+        },
+        createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
+        isVerified: true,
+        isCreator: true,
+        accountType: 'creator'
+      };
+    }
+
+    // 🚨 Final fallback
+    return null;
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return null;
+  }
 };
