@@ -1,9 +1,6 @@
-import { UserProfile, User } from "@/types/user";
+import { UserProfile } from "@/types/user";
 import { db } from './firebase';
 import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
-
-// Check if we're in a browser environment
-const isBrowser = typeof window !== "undefined";
 
 // Sample creator profiles
 const SAMPLE_CREATORS: UserProfile[] = [
@@ -89,7 +86,6 @@ const SAMPLE_CREATORS: UserProfile[] = [
 ];
 
 export const getUserProfileByUsername = async (usernameOrUid: string): Promise<UserProfile | null> => {
-  if (!isBrowser) return null;
 
   const sampleCreator = SAMPLE_CREATORS.find(
     creator => creator.username === usernameOrUid || creator.uid === usernameOrUid
