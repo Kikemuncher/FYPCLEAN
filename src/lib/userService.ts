@@ -14,7 +14,6 @@ import {
 } from 'firebase/firestore';
 import { UserProfile, CreatorApplication } from '@/types/user';
 
-const USE_MOCK_AUTH = true;
 
 // Create or update user profile in Firestore
 export const createUserProfile = async (userId: string, userData: any) => {
