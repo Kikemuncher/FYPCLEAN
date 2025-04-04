@@ -1,3 +1,4 @@
+// src/components/profile/CreatorApplicationForm.tsx
 "use client";
 
 import { useState } from 'react';
@@ -37,7 +38,7 @@ export default function CreatorApplicationForm({ onComplete, onCancel }: Creator
     setIsSubmitting(true);
     
     try {
-      await createCreatorApplication(currentUser.uid, {
+      const success = await createCreatorApplication(currentUser.uid, {
         username: userProfile.username,
         displayName: userProfile.displayName,
         email: currentUser.email || '',
@@ -47,10 +48,16 @@ export default function CreatorApplicationForm({ onComplete, onCancel }: Creator
           twitter: socialLinks.twitter || undefined,
           youtube: socialLinks.youtube || undefined,
           website: socialLinks.website || undefined
-        }
+        },
+        status: 'pending',
+        submittedAt: Date.now()
       });
       
-      onComplete();
+      if (success) {
+        onComplete();
+      } else {
+        setError('Failed to submit application. Please try again.');
+      }
     } catch (err) {
       console.error('Error submitting application:', err);
       setError('Failed to submit application. Please try again.');
@@ -59,6 +66,7 @@ export default function CreatorApplicationForm({ onComplete, onCancel }: Creator
     }
   };
 
+  // Rest of the component remains the same...
   return (
     <div className="bg-zinc-900 p-6 rounded-lg">
       <h2 className="text-xl font-bold text-white mb-4">Apply to Become a Creator</h2>
@@ -103,6 +111,7 @@ export default function CreatorApplicationForm({ onComplete, onCancel }: Creator
             </div>
             
             {/* Add similar fields for Twitter, YouTube, and Website */}
+            {/* ... */}
           </div>
         </div>
         
