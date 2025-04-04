@@ -1,13 +1,11 @@
-// src/components/feed/FeedList.tsx
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import * as videoService from "@/lib/videoService";
 import { VideoData } from "@/types/video";
-// Remove localStorageService import
 
 function FeedList() {
-  const { currentUser } = useAuth();
+  const { currentUser, isFollowing, followUser, unfollowUser } = useAuth();
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -16,6 +14,8 @@ function FeedList() {
   const wheelLock = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [likedVideos, setLikedVideos] = useState<Record<string, boolean>>({});
+  const [followingUsers, setFollowingUsers] = useState<Record<string, boolean>>({});
 
   // Load videos from Firebase
   useEffect(() => {
@@ -96,9 +96,9 @@ function FeedList() {
 
     try {
       // Check if video is liked by querying Firestore
-      const isLiked = await videoService.isVideoLikedByUser(currentUser.uid, videoId);
+      const isVideoLiked = await videoService.isVideoLikedByUser(currentUser.uid, videoId);
 
-      if (isLiked) {
+      if (isVideoLiked) {
         await videoService.unlikeVideo(currentUser.uid, videoId);
       } else {
         await videoService.likeVideo(currentUser.uid, videoId);
@@ -108,10 +108,16 @@ function FeedList() {
       setVideos(
         videos.map((video) =>
           video.id === videoId
-            ? { ...video, likes: isLiked ? Math.max(0, video.likes - 1) : video.likes + 1 }
+            ? { ...video, likes: isVideoLiked ? Math.max(0, video.likes - 1) : video.likes + 1 }
             : video
         )
       );
+
+      // Update likedVideos state
+      setLikedVideos((prevLikedVideos) => ({
+        ...prevLikedVideos,
+        [videoId]: !isVideoLiked,
+      }));
     } catch (error) {
       console.error("Error handling like/unlike:", error);
     }
@@ -123,21 +129,52 @@ function FeedList() {
 
     try {
       // Check if user is following creator
-      const { isFollowing } = useAuth();
       const following = isFollowing(creatorUid);
 
       if (following) {
-        await useAuth().unfollowUser(creatorUid);
+        await unfollowUser(creatorUid);
       } else {
-        await useAuth().followUser(creatorUid);
+        await followUser(creatorUid);
       }
 
       // Force re-render
       setVideos([...videos]);
+
+      // Update followingUsers state
+      setFollowingUsers((prevFollowingUsers) => ({
+        ...prevFollowingUsers,
+        [creatorUid]: !following,
+      }));
     } catch (error) {
       console.error("Error handling follow/unfollow:", error);
     }
   };
+
+  // Load initial liked/following states
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadInteractionData = async () => {
+      const likedMap: Record<string, boolean> = {};
+      const followingMap: Record<string, boolean> = {};
+
+      await Promise.all(
+        videos.map(async (video) => {
+          if (video.id) {
+            likedMap[video.id] = await videoService.isVideoLikedByUser(currentUser.uid, video.id);
+          }
+          if (video.creatorUid) {
+            followingMap[video.creatorUid] = isFollowing(video.creatorUid);
+          }
+        })
+      );
+
+      setLikedVideos(likedMap);
+      setFollowingUsers(followingMap);
+    };
+
+    loadInteractionData();
+  }, [currentUser, videos, isFollowing]);
 
   // Loading state
   if (loading) {
@@ -183,23 +220,6 @@ function FeedList() {
           style={{ width: "100%", maxWidth: `${(windowHeight * 9) / 16}px`, height: "100%" }}
         >
           {videos.map((video, index) => {
-            // We need to implement isVideoLikedByUser and isFollowing from auth context
-            const [isLiked, setIsLiked] = useState(false);
-            const [isFollowing, setIsFollowing] = useState(false);
-            
-            // Check if video is liked and user is following when component mounts
-            useEffect(() => {
-              if (currentUser && video.id) {
-                videoService.isVideoLikedByUser(currentUser.uid, video.id)
-                  .then(liked => setIsLiked(liked))
-                  .catch(err => console.error("Error checking like status:", err));
-                
-                if (video.creatorUid) {
-                  setIsFollowing(useAuth().isFollowing(video.creatorUid));
-                }
-              }
-            }, [currentUser, video.id, video.creatorUid]);
-
             return (
               <div
                 key={video.id}
@@ -226,10 +246,13 @@ function FeedList() {
                     onClick={() => handleLikeVideo(video.id)}
                     className="flex flex-col items-center"
                   >
-                    <div className={`w-10 h-10 flex items-center justify-center rounded-full ${isLiked ? "text-red-500" : "text-white"}`}>
+                    <div className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                      likedVideos[video.id] ? "text-red-500" : "text-white"
+                    }`}
+                    >
                       <svg
                         className="w-6 h-6"
-                        fill={isLiked ? "currentColor" : "none"}
+                        fill={likedVideos[video.id] ? "currentColor" : "none"}
                         viewBox="0 0 24 24"
                         stroke="currentColor"
                       >
@@ -282,59 +305,3 @@ function FeedList() {
                       </svg>
                     </div>
                     <span className="text-white text-xs mt-1">{video.shares}</span>
-                  </button>
-                </div>
-
-                {/* User and Video Info */}
-                <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10">
-                  <Link
-                    href={`/profile/${video.username}`}
-                    className="flex items-center mb-2"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="w-10 h-10 rounded-full overflow-hidden mr-3 border border-white/30">
-                      <img src={video.userAvatar} alt={video.username} className="w-full h-full object-cover" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-white flex items-center">
-                        @{video.username}
-                        {video.creatorUid && currentUser && video.creatorUid !== currentUser.uid && (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (video.creatorUid) {
-                                handleFollowUser(video.creatorUid);
-                              }
-                            }}
-                            className={`inline-flex ml-2 items-center justify-center rounded-full px-2 py-0.5 text-xs text-white ${
-                              isFollowing ? "bg-gray-600" : "bg-pink-600"
-                            }`}
-                          >
-                            {isFollowing ? "Following" : "Follow"}
-                          </button>
-                        )}
-                      </p>
-                      <p className="text-white text-xs opacity-80">{video.song}</p>
-                    </div>
-                  </Link>
-                  <p className="text-white text-sm mb-4">{video.caption}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Mute/Unmute Button */}
-      <button
-        onClick={() => setIsMuted(!isMuted)}
-        className="absolute top-4 right-4 bg-black/30 rounded-full p-2 z-30"
-      >
-        {isMuted ? "🔇" : "🔊"}
-      </button>
-    </div>
-  );
-}
-
-export default FeedList;
