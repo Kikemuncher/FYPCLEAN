@@ -6,6 +6,11 @@ interface LocalUser {
   displayName?: string;
   photoURL?: string;
   createdAt: number;
+  updatedAt?: number;
+  followers?: string[];
+  following?: string[];
+  followerCount?: number;
+  followingCount?: number;
 }
 
 const USERS_KEY = 'social_app_users';
@@ -35,7 +40,11 @@ export const registerUser = async (email: string, password: string, username: st
     password,
     displayName: username,
     photoURL: `https://ui-avatars.com/api/?name=${username}&background=random`,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    followers: [],
+    following: [],
+    followerCount: 0,
+    followingCount: 0,
   };
   
   localStorage.setItem(USERS_KEY, JSON.stringify([...users, newUser]));
@@ -44,7 +53,8 @@ export const registerUser = async (email: string, password: string, username: st
   return newUser;
 };
 
-export const signIn = async (email: string, password: string): Promise<LocalUser> => {
+// Rename signIn to loginUser
+export const loginUser = async (email: string, password: string): Promise<LocalUser> => {
   const users = getUsers();
   const user = users.find(u => u.email === email && u.password === password);
   
@@ -56,11 +66,13 @@ export const signIn = async (email: string, password: string): Promise<LocalUser
   return user;
 };
 
-export const signOut = async (): Promise<void> => {
+// Rename signOut to logoutUser
+export const logoutUser = async (): Promise<void> => {
   localStorage.removeItem(CURRENT_USER_KEY);
 };
 
-export const getCurrentUser = (): LocalUser | null => {
+// Rename getCurrentUser to getLoggedInUser
+export const getLoggedInUser = (): LocalUser | null => {
   if (typeof window === 'undefined') return null;
   const user = localStorage.getItem(CURRENT_USER_KEY);
   return user ? JSON.parse(user) : null;
@@ -76,8 +88,102 @@ export const onAuthChange = (callback: (user: LocalUser | null) => void): (() =>
   window.addEventListener('storage', handleStorageChange);
   
   // Initial call
-  callback(getCurrentUser());
+  callback(getLoggedInUser());
   
   // Return cleanup function
   return () => window.removeEventListener('storage', handleStorageChange);
+};
+
+// Add updateUser function
+export const updateUser = async (userId: string, userData: Partial<LocalUser>): Promise<LocalUser> => {
+  const users = getUsers();
+  const userIndex = users.findIndex(u => u.uid === userId);
+  
+  if (userIndex === -1) {
+    throw new Error('User not found');
+  }
+  
+  const updatedUser = {...users[userIndex], ...userData, updatedAt: Date.now()};
+  users[userIndex] = updatedUser;
+  
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  
+  const currentUser = getLoggedInUser();
+  if (currentUser && currentUser.uid === userId) {
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedUser));
+  }
+  
+  return updatedUser;
+};
+
+// Add followUser function
+export const followUser = async (userId: string, targetId: string): Promise<LocalUser> => {
+  const users = getUsers();
+  const userIndex = users.findIndex(u => u.uid === userId);
+  const targetIndex = users.findIndex(u => u.uid === targetId);
+  
+  if (userIndex === -1 || targetIndex === -1) {
+    throw new Error('User not found');
+  }
+  
+  // Add to user's following array
+  if (!users[userIndex].following) {
+    users[userIndex].following = [];
+  }
+  if (!users[userIndex].following.includes(targetId)) {
+    users[userIndex].following.push(targetId);
+    users[userIndex].followingCount = (users[userIndex].followingCount || 0) + 1;
+  }
+  
+  // Add to target's followers array
+  if (!users[targetIndex].followers) {
+    users[targetIndex].followers = [];
+  }
+  if (!users[targetIndex].followers.includes(userId)) {
+    users[targetIndex].followers.push(userId);
+    users[targetIndex].followerCount = (users[targetIndex].followerCount || 0) + 1;
+  }
+  
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  
+  // Update current user if needed
+  const updatedCurrentUser = users[userIndex];
+  if (getLoggedInUser()?.uid === userId) {
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedCurrentUser));
+  }
+
+  return updatedCurrentUser;
+};
+
+// Add unfollowUser function
+export const unfollowUser = async (userId: string, targetId: string): Promise<LocalUser> => {
+  const users = getUsers();
+  const userIndex = users.findIndex(u => u.uid === userId);
+  const targetIndex = users.findIndex(u => u.uid === targetId);
+  
+  if (userIndex === -1 || targetIndex === -1) {
+    throw new Error('User not found');
+  }
+  
+  // Remove from user's following array
+  if (users[userIndex].following && users[userIndex].following.includes(targetId)) {
+    users[userIndex].following = users[userIndex].following.filter(id => id !== targetId);
+    users[userIndex].followingCount = Math.max(0, (users[userIndex].followingCount || 1) - 1);
+  }
+  
+  // Remove from target's followers array
+  if (users[targetIndex].followers && users[targetIndex].followers.includes(userId)) {
+    users[targetIndex].followers = users[targetIndex].followers.filter(id => id !== userId);
+    users[targetIndex].followerCount = Math.max(0, (users[targetIndex].followerCount || 1) - 1);
+  }
+  
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  
+  // Update current user if needed
+  const updatedCurrentUser = users[userIndex];
+  if (getLoggedInUser()?.uid === userId) {
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedCurrentUser));
+  }
+
+  return updatedCurrentUser;
 };
