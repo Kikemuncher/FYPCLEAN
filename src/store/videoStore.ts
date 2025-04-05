@@ -10,7 +10,7 @@ interface VideoState {
   lastVisible: any | null;
   error: string | null;
   setCurrentVideoIndex: (index: number) => void;
-  fetchVideos: () => Promise<void>;
+  fetchVideos: () => Promise<VideoData[]>; // Changed return type here
   fetchMoreVideos: () => Promise<void>;
   likeVideo: (videoId: string) => void;
   unlikeVideo: (videoId: string) => void;
