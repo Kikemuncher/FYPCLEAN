@@ -15,9 +15,10 @@ import {
 import { auth, db } from '@/lib/firebase';
 import { User, UserProfile } from '@/types/user';
 import * as localAuthService from '@/lib/localAuthService';
+import { LocalUser } from '@/lib/localAuthService';
 
 interface AuthContextType {
-  currentUser: FirebaseUser | null;
+  currentUser: FirebaseUser | LocalUser | null;
   userProfile: UserProfile | null;
   loading: boolean;
   error: string | null;
@@ -35,7 +36,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | LocalUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
