@@ -185,7 +185,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      const updatedUser = localAuthService.updateUser(currentUser.uid, data);
+      // Await the user update
+      const updatedUser = await localAuthService.updateUser(currentUser.uid, data);
       
       // Explicit type conversion to UserProfile
       const userProfile: UserProfile = {
