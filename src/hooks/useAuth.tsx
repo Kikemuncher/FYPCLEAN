@@ -47,7 +47,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const loggedInUser = localAuthService.getLoggedInUser();
     if (loggedInUser) {
       setCurrentUser(loggedInUser);
-      setUserProfile(loggedInUser); // Assuming UserProfile is same as User for local auth
+      
+      // Map LocalUser to UserProfile
+      const userProfile: UserProfile = {
+        uid: loggedInUser.uid,
+        username: loggedInUser.username || loggedInUser.displayName || '',
+        displayName: loggedInUser.displayName || '',
+        bio: loggedInUser.bio || '',
+        photoURL: loggedInUser.photoURL || '',
+        coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
+        followerCount: loggedInUser.followerCount || 0,
+        followingCount: loggedInUser.followingCount || 0,
+        videoCount: loggedInUser.videoCount || 0,
+        likeCount: loggedInUser.likeCount || 0,
+        links: loggedInUser.links || {},
+        createdAt: loggedInUser.createdAt,
+        isVerified: false,
+        isCreator: false,
+        accountType: 'user',
+        followers: loggedInUser.followers || [],
+        following: loggedInUser.following || []
+      };
+      
+      setUserProfile(userProfile);
     }
     setLoading(false);
   }, []);
