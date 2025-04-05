@@ -127,7 +127,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const user = await localAuthService.loginUser(email, password);
-      setUserProfile(user);
+      
+      // Explicit type conversion
+      const userProfile: UserProfile = {
+        uid: user.uid,
+        username: user.username || '',
+        displayName: user.displayName || '',
+        bio: user.bio || '',
+        photoURL: user.photoURL || '',
+        coverPhotoURL: user.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
+        followerCount: user.followerCount || 0,
+        followingCount: user.followingCount || 0,
+        videoCount: user.videoCount || 0,
+        likeCount: user.likeCount || 0,
+        links: user.links || {},
+        createdAt: user.createdAt || Date.now(),
+        isVerified: false,
+        isCreator: false,
+        accountType: 'user',
+        followers: user.followers || [],
+        following: user.following || []
+      };
+
+      setUserProfile(userProfile);
       setCurrentUser(user);
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to sign in';
