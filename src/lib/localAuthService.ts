@@ -21,11 +21,20 @@ export interface LocalUser {
   username?: string;
   password?: string;
   createdAt: number;
-  updatedAt?: number;
-  followers?: string[];
-  following?: string[];
+  bio?: string;
+  coverPhotoURL?: string;
   followerCount?: number;
   followingCount?: number;
+  videoCount?: number;
+  likeCount?: number;
+  links?: {
+    instagram?: string;
+    twitter?: string;
+    youtube?: string;
+    website?: string;
+  };
+  followers?: string[];
+  following?: string[];
 }
 
 const USERS_KEY = 'social_app_users';
