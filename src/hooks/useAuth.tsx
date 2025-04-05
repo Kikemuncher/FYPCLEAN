@@ -17,9 +17,10 @@ import {
   arrayUnion,
   arrayRemove,
   increment,
-  getDocs,
+  collection,
   query,
   where,
+  getDocs,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User, UserProfile } from '@/types/user';
