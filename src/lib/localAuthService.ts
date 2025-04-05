@@ -1,10 +1,25 @@
 interface LocalUser {
   uid: string;
   email: string;
-  username: string;
-  password: string;
-  displayName?: string;
-  photoURL?: string;
+  displayName: string | null;
+  emailVerified: boolean;
+  isAnonymous: boolean;
+  metadata: {
+    creationTime: string;
+    lastSignInTime: string;
+  };
+  phoneNumber: string | null;
+  photoURL: string | null;
+  providerData: Array<any>;
+  refreshToken: string;
+  tenantId: string | null;
+  delete: () => Promise<void>;
+  getIdToken: () => Promise<string>;
+  getIdTokenResult: () => Promise<any>;
+  reload: () => Promise<void>;
+  toJSON: () => object;
+  username?: string;
+  password?: string;
   createdAt: number;
   updatedAt?: number;
   followers?: string[];
@@ -40,6 +55,21 @@ export const registerUser = async (email: string, password: string, username: st
     password,
     displayName: username,
     photoURL: `https://ui-avatars.com/api/?name=${username}&background=random`,
+    emailVerified: false,
+    isAnonymous: false,
+    metadata: {
+      creationTime: new Date().toISOString(),
+      lastSignInTime: new Date().toISOString()
+    },
+    phoneNumber: null,
+    providerData: [],
+    refreshToken: '',
+    tenantId: null,
+    delete: () => Promise.resolve(),
+    getIdToken: () => Promise.resolve('mock-token'),
+    getIdTokenResult: () => Promise.resolve({}),
+    reload: () => Promise.resolve(),
+    toJSON: () => ({}),
     createdAt: Date.now(),
     followers: [],
     following: [],
