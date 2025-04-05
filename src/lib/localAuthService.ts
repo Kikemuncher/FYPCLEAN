@@ -83,10 +83,15 @@ export const registerUser = async (email: string, password: string, username: st
     reload: () => Promise.resolve(),
     toJSON: () => ({}),
     createdAt: Date.now(),
-    followers: [],
-    following: [],
+    bio: '',
+    coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
     followerCount: 0,
     followingCount: 0,
+    videoCount: 0,
+    likeCount: 0,
+    links: {},
+    followers: [],
+    following: [],
     isVerified: false,
     isCreator: false,
     accountType: 'user'
@@ -107,8 +112,25 @@ export const loginUser = async (email: string, password: string): Promise<LocalU
     throw new Error('auth/wrong-password');
   }
   
-  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-  return user;
+  // Ensure all required properties are set
+  const completeUser: LocalUser = {
+    ...user,
+    isVerified: user.isVerified || false,
+    isCreator: user.isCreator || false,
+    accountType: user.accountType || 'user',
+    bio: user.bio || '',
+    coverPhotoURL: user.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
+    followerCount: user.followerCount || 0,
+    followingCount: user.followingCount || 0,
+    videoCount: user.videoCount || 0,
+    likeCount: user.likeCount || 0,
+    links: user.links || {},
+    followers: user.followers || [],
+    following: user.following || []
+  };
+  
+  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(completeUser));
+  return completeUser;
 };
 
 // Rename signOut to logoutUser
