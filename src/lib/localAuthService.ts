@@ -35,6 +35,9 @@ export interface LocalUser {
   };
   followers?: string[];
   following?: string[];
+  isVerified: boolean;  // Add these missing properties
+  isCreator: boolean;
+  accountType: 'user' | 'creator';
 }
 
 const USERS_KEY = 'social_app_users';
@@ -84,6 +87,9 @@ export const registerUser = async (email: string, password: string, username: st
     following: [],
     followerCount: 0,
     followingCount: 0,
+    isVerified: false,
+    isCreator: false,
+    accountType: 'user'
   };
   
   localStorage.setItem(USERS_KEY, JSON.stringify([...users, newUser]));
