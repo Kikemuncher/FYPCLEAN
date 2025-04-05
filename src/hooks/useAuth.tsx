@@ -3,27 +3,18 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import {
   User as FirebaseUser,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
-  onAuthStateChanged,
-  updateProfile,
 } from 'firebase/auth';
 import {
   doc,
-  getDoc,
-  setDoc,
   updateDoc,
   arrayUnion,
   arrayRemove,
   increment,
-  collection,
-  query,
-  where,
-  getDocs,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User, UserProfile } from '@/types/user';
+import * as localAuthService from '@/lib/localAuthService';
 
 interface AuthContextType {
   currentUser: FirebaseUser | null;
@@ -51,35 +42,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Auth state listener
   useEffect(() => {
-    let isMounted = true;
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!isMounted) return;
-
-      if (user) {
-        try {
-          const userDocRef = doc(db, 'users', user.uid);
-          const userDoc = await getDoc(userDocRef);
-
-          if (userDoc.exists() && isMounted) {
-            setUserProfile(userDoc.data() as UserProfile);
-          }
-        } catch (err) {
-          console.error('Error fetching user profile:', err);
-        }
-      } else if (isMounted) {
-        setUserProfile(null);
-      }
-
-      if (isMounted) {
-        setCurrentUser(user);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
+    // For local auth, we will set the current user and profile immediately
+    const loggedInUser = localAuthService.getLoggedInUser();
+    if (loggedInUser) {
+      setCurrentUser(loggedInUser);
+      setUserProfile(loggedInUser); // Assuming UserProfile is same as User for local auth
+    }
+    setLoading(false);
   }, []);
 
   // Sign up function
@@ -89,29 +58,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       // Check if username already exists first
-      const usernameCheck = await getDocs(
-        query(collection(db, 'users'), where('username', '==', username))
-      );
-      if (!usernameCheck.empty) {
+      const usernameCheck = localAuthService.getUsers().find(u => u.username === username);
+      if (usernameCheck) {
         throw new Error('Username already taken');
       }
 
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      const user = await localAuthService.registerUser(email, password, username);
 
-      // Update profile with username
-      await updateProfile(user, {
-        displayName: username,
-        photoURL: `https://ui-avatars.com/api/?name=${username}&background=random`,
-      });
-
-      // Create user profile in Firestore
+      // Create user profile in local storage (similar structure to Firestore)
       const userProfile: UserProfile = {
         uid: user.uid,
         username,
         displayName: username,
         bio: '',
-        photoURL: `https://ui-avatars.com/api/?name=${username}&background=random`,
+        photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${username}&background=random`,
         coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
         followerCount: 0,
         followingCount: 0,
@@ -126,14 +86,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         following: [],
       };
 
-      await setDoc(doc(db, 'users', user.uid), {
-        ...userProfile,
-        email: user.email,
-      });
-
       setUserProfile(userProfile);
+      setCurrentUser(user); // Set current user after successful signup
     } catch (err: any) {
-      const errorMessage = err.code ? translateFirebaseError(err.code) : err.message;
+      const errorMessage = err.message || 'Error during registration';
       setError(errorMessage);
       throw err;
     } finally {
@@ -147,9 +103,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const user = await localAuthService.loginUser(email, password);
+      setUserProfile(user);
+      setCurrentUser(user);
     } catch (err: any) {
-      const errorMessage = err.code ? translateFirebaseError(err.code) : err.message;
+      const errorMessage = err.message || 'Failed to sign in';
       setError(errorMessage);
       throw err;
     } finally {
@@ -162,7 +120,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     try {
-      await firebaseSignOut(auth);
+      localAuthService.logoutUser();
+      setCurrentUser(null);
+      setUserProfile(null);
     } catch (err: any) {
       console.error('Sign out error:', err);
       setError(err.message || 'Failed to sign out');
@@ -180,26 +140,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      const userRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userRef, {
-        ...data,
-        updatedAt: Date.now(),
-      });
-
-      if (userProfile) {
-        setUserProfile({
-          ...userProfile,
-          ...data,
-        });
-      }
-
-      // Update Firebase Auth profile if necessary
-      if (data.displayName || data.photoURL) {
-        await updateProfile(currentUser, {
-          displayName: data.displayName || currentUser.displayName,
-          photoURL: data.photoURL || currentUser.photoURL,
-        });
-      }
+      const updatedUser = localAuthService.updateUser(currentUser.uid, data);
+      setUserProfile(updatedUser);
+      setCurrentUser(updatedUser);
     } catch (err: any) {
       console.error('Profile update error:', err);
       setError(err.message || 'Failed to update profile');
@@ -212,28 +155,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!currentUser) return;
 
     try {
-      // Update current user's following list
-      const userRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userRef, {
-        following: arrayUnion(targetUid),
-        followingCount: (userProfile?.followingCount || 0) + 1,
-      });
-
-      // Update target user's followers list
-      const targetRef = doc(db, 'users', targetUid);
-      await updateDoc(targetRef, {
-        followers: arrayUnion(currentUser.uid),
-        followerCount: increment(1),
-      });
-
-      // Update local state
-      if (userProfile) {
-        setUserProfile({
-          ...userProfile,
-          following: [...(userProfile.following || []), targetUid],
-          followingCount: (userProfile.followingCount || 0) + 1,
-        });
-      }
+      const updatedUser = localAuthService.followUser(currentUser.uid, targetUid);
+      setUserProfile(updatedUser);
+      setCurrentUser(updatedUser);
     } catch (err) {
       console.error('Follow user error:', err);
     }
@@ -243,28 +167,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!currentUser) return;
 
     try {
-      // Update current user's following list
-      const userRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userRef, {
-        following: arrayRemove(targetUid),
-        followingCount: Math.max(0, (userProfile?.followingCount || 0) - 1),
-      });
-
-      // Update target user's followers list
-      const targetRef = doc(db, 'users', targetUid);
-      await updateDoc(targetRef, {
-        followers: arrayRemove(currentUser.uid),
-        followerCount: increment(-1),
-      });
-
-      // Update local state
-      if (userProfile) {
-        setUserProfile({
-          ...userProfile,
-          following: (userProfile.following || []).filter((uid) => uid !== targetUid),
-          followingCount: Math.max(0, (userProfile.followingCount || 0) - 1),
-        });
-      }
+      const updatedUser = localAuthService.unfollowUser(currentUser.uid, targetUid);
+      setUserProfile(updatedUser);
+      setCurrentUser(updatedUser);
     } catch (err) {
       console.error('Unfollow user error:', err);
     }
@@ -316,17 +221,7 @@ export const useAuth = () => {
   return context;
 };
 
-// Add a function to translate Firebase error codes
+// Add a function to translate Firebase error codes (not needed for local auth)
 const translateFirebaseError = (errorCode: string): string => {
-  switch (errorCode) {
-    case 'auth/email-already-in-use':
-      return 'Email is already in use';
-    case 'auth/invalid-email':
-      return 'Invalid email address';
-    case 'auth/weak-password':
-      return 'Password is too weak';
-    // Add more error cases as needed
-    default:
-      return 'An error occurred during authentication';
-  }
+  return 'An error occurred during authentication';
 };
