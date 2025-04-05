@@ -186,7 +186,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const updatedUser = localAuthService.updateUser(currentUser.uid, data);
-      setUserProfile(updatedUser);
+      
+      // Explicit type conversion to UserProfile
+      const userProfile: UserProfile = {
+        uid: updatedUser.uid,
+        username: updatedUser.username || '',
+        displayName: updatedUser.displayName || '',
+        bio: updatedUser.bio || '',
+        photoURL: updatedUser.photoURL || '',
+        coverPhotoURL: updatedUser.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
+        followerCount: updatedUser.followerCount || 0,
+        followingCount: updatedUser.followingCount || 0,
+        videoCount: updatedUser.videoCount || 0,
+        likeCount: updatedUser.likeCount || 0,
+        links: updatedUser.links || {},
+        createdAt: updatedUser.createdAt || Date.now(),
+        isVerified: false,
+        isCreator: false,
+        accountType: 'user',
+        followers: updatedUser.followers || [],
+        following: updatedUser.following || []
+      };
+
+      setUserProfile(userProfile);
       setCurrentUser(updatedUser);
     } catch (err: any) {
       console.error('Profile update error:', err);
