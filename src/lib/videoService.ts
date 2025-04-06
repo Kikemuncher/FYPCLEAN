@@ -22,7 +22,22 @@ import {
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { VideoData } from '@/types/video';
-import { getUserById } from './userService';
+import { UserProfile } from '@/types/user';
+
+// Get user by ID - placeholder until you implement this function in userService.ts
+export const getUserById = async (userId: string): Promise<UserProfile | null> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (!userDoc.exists()) {
+      return null;
+    }
+    
+    return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+  } catch (error) {
+    console.error("Error getting user by ID:", error);
+    return null;
+  }
+};
 
 // Upload a video to Firebase Storage
 export const uploadVideo = async (
@@ -114,35 +129,39 @@ export const createVideoDocument = async (
   }
 };
 
-// Get feed videos for FYP
+// Get feed videos
 export const getFeedVideos = async (
   lastVisibleDoc?: QueryDocumentSnapshot<DocumentData>,
   pageSize: number = 10
 ): Promise<{videos: VideoData[], lastVisible: QueryDocumentSnapshot<DocumentData> | null}> => {
   try {
-    let videosQuery;
-    
+    let q;
     if (lastVisibleDoc) {
-      videosQuery = query(
+      q = query(
         collection(db, 'videos'),
         orderBy('createdAt', 'desc'),
         startAfter(lastVisibleDoc),
         limit(pageSize)
       );
     } else {
-      videosQuery = query(
+      q = query(
         collection(db, 'videos'),
         orderBy('createdAt', 'desc'),
         limit(pageSize)
       );
     }
     
-    const querySnapshot = await getDocs(videosQuery);
+    const querySnapshot = await getDocs(q);
     
-    const videos: VideoData[] = [];
-    querySnapshot.forEach((doc) => {
+    if (querySnapshot.empty) {
+      console.log('No videos found in Firebase');
+      return { videos: [], lastVisible: null };
+    }
+    
+    // Map Firebase documents to VideoData
+    const videos = querySnapshot.docs.map(doc => {
       const data = doc.data();
-      videos.push({
+      return {
         id: doc.id,
         username: data.username || '',
         caption: data.caption || '',
@@ -152,12 +171,11 @@ export const getFeedVideos = async (
         saves: data.saves || 0,
         shares: data.shares || 0,
         views: data.views || 0,
-        videoUrl: data.videoUrl || '',
-        userAvatar: data.userAvatar || '',
-        hashtags: data.hashtags || [],
-        createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
-        creatorUid: data.creatorUid || ''
-      });
+        videoUrl: data.videoUrl || data.url || '',
+        userAvatar: data.userAvatar || data.profilePic || '',
+        creatorUid: data.creatorUid || data.uid || '',
+        createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now()
+      };
     });
     
     const lastVisible = querySnapshot.docs.length > 0 ? 
@@ -165,7 +183,7 @@ export const getFeedVideos = async (
       
     return { videos, lastVisible };
   } catch (error) {
-    console.error('Error fetching feed videos:', error);
+    console.error('Error fetching videos from Firebase:', error);
     return { videos: [], lastVisible: null };
   }
 };
