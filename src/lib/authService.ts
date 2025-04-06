@@ -11,6 +11,34 @@ import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firest
 import { auth, db } from './firebase';
 import { UserProfile } from '@/types/user';
 
+// Handle error translation
+export const getAuthErrorMessage = (code: string): string => {
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'This email is already registered';
+    case 'auth/invalid-email':
+      return 'Invalid email address';
+    case 'auth/user-disabled':
+      return 'This account has been disabled';
+    case 'auth/user-not-found':
+      return 'No account found with this email';
+    case 'auth/wrong-password':
+      return 'Incorrect password';
+    case 'auth/weak-password':
+      return 'Password should be at least 6 characters';
+    case 'auth/operation-not-allowed':
+      return 'Operation not allowed';
+    case 'auth/popup-closed-by-user':
+      return 'Sign-in popup was closed before completing the operation';
+    case 'auth/requires-recent-login':
+      return 'Please sign in again to complete this action';
+    case 'auth/too-many-requests':
+      return 'Too many unsuccessful login attempts. Please try again later.';
+    default:
+      return 'An error occurred. Please try again.';
+  }
+};
+
 // Register new user
 export const registerUser = async (email: string, password: string, username: string): Promise<User> => {
   try {
@@ -30,11 +58,11 @@ export const registerUser = async (email: string, password: string, username: st
     });
     
     // Create user profile document in Firestore
-    const userProfile: Partial<UserProfile> = {
+    const userProfileData = {
       uid: user.uid,
       username: username,
       displayName: username,
-      email: user.email || email,
+      email: user.email || email,  // We're storing email in Firestore even if not in the type
       bio: '',
       photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${username}&background=random`,
       coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
@@ -43,6 +71,8 @@ export const registerUser = async (email: string, password: string, username: st
       videoCount: 0,
       likeCount: 0,
       links: {},
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
       isVerified: false,
       isCreator: false,
       accountType: 'user',
@@ -50,9 +80,8 @@ export const registerUser = async (email: string, password: string, username: st
       following: []
     };
     
-    // Save the profile to Firestore
     await setDoc(doc(db, 'users', user.uid), {
-      ...userProfile,
+      ...userProfileData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -107,33 +136,26 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
   try {
     const userDoc = await getDoc(doc(db, 'users', uid));
     if (userDoc.exists()) {
-      return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+      return { 
+        uid: userDoc.id, 
+        ...userDoc.data() as Omit<UserProfile, 'uid'>
+      };
     }
     return null;
   } catch (error) {
-    console.error('Error fetching user profile:', error);
+    console.error('Error getting user profile:', error);
     return null;
   }
 };
 
-// Translate Firebase error codes to user-friendly messages
-export const getAuthErrorMessage = (errorCode: string): string => {
-  switch (errorCode) {
-    case 'auth/email-already-in-use':
-      return 'This email is already registered';
-    case 'auth/invalid-email':
-      return 'Invalid email address';
-    case 'auth/user-disabled':
-      return 'This account has been disabled';
-    case 'auth/user-not-found':
-      return 'No account found with this email';
-    case 'auth/wrong-password':
-      return 'Incorrect password';
-    case 'auth/weak-password':
-      return 'Password should be at least 6 characters';
-    case 'auth/too-many-requests':
-      return 'Too many unsuccessful login attempts. Please try again later.';
-    default:
-      return 'An error occurred during authentication';
+// Reset password
+export const resetPassword = async (email: string): Promise<void> => {
+  try {
+    // This would typically use Firebase's sendPasswordResetEmail
+    // But for now we'll just log it
+    console.log(`Password reset would be sent to ${email}`);
+  } catch (error) {
+    console.error('Error sending password reset:', error);
+    throw error;
   }
 };
