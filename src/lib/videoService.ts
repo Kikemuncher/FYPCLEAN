@@ -1,4 +1,3 @@
-// First, remove the comment lines that were added during debugging
 import {
   collection,
   doc,
@@ -83,7 +82,6 @@ export const incrementShareCount = () => {
 
 // Explicit export at the end
 export {
-    getUserById,
     uploadVideo,
     createVideoDocument,
     getFeedVideos,
