@@ -43,9 +43,38 @@ export interface LocalUser {
 const USERS_KEY = 'social_app_users';
 const CURRENT_USER_KEY = 'social_app_current_user';
 
+// Add this to the firebase.ts file
+export const isLocalStorageAvailable = () => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const testKey = '__test__';
+    localStorage.setItem(testKey, testKey);
+    localStorage.removeItem(testKey);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+// Then use this in localAuthService.ts
+const getLocalStorage = (key: string): string | null => {
+  if (!isLocalStorageAvailable()) return null;
+  return localStorage.getItem(key);
+};
+
+const setLocalStorage = (key: string, value: string): void => {
+  if (!isLocalStorageAvailable()) return;
+  localStorage.setItem(key, value);
+};
+
+const removeLocalStorage = (key: string): void => {
+  if (!isLocalStorageAvailable()) return;
+  localStorage.removeItem(key);
+};
+
 export const getUsers = (): LocalUser[] => {
-  if (typeof window === 'undefined') return [];
-  const users = localStorage.getItem(USERS_KEY);
+  if (typeof window === 'undefined' || !isLocalStorageAvailable()) return [];
+  const users = getLocalStorage(USERS_KEY);
   return users ? JSON.parse(users) : [];
 };
 
@@ -97,8 +126,8 @@ export const registerUser = async (email: string, password: string, username: st
     accountType: 'user',
   };
 
-  localStorage.setItem(USERS_KEY, JSON.stringify([...users, newUser]));
-  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(newUser));
+  setLocalStorage(USERS_KEY, JSON.stringify([...users, newUser]));
+  setLocalStorage(CURRENT_USER_KEY, JSON.stringify(newUser));
 
   return newUser;
 };
@@ -127,17 +156,17 @@ export const loginUser = async (email: string, password: string): Promise<LocalU
     following: user.following || [],
   };
 
-  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(completeUser));
+  setLocalStorage(CURRENT_USER_KEY, JSON.stringify(completeUser));
   return completeUser;
 };
 
 export const logoutUser = async (): Promise<void> => {
-  localStorage.removeItem(CURRENT_USER_KEY);
+  removeLocalStorage(CURRENT_USER_KEY);
 };
 
 export const getLoggedInUser = (): LocalUser | null => {
-  if (typeof window === 'undefined') return null;
-  const user = localStorage.getItem(CURRENT_USER_KEY);
+  if (typeof window === 'undefined' || !isLocalStorageAvailable()) return null;
+  const user = getLocalStorage(CURRENT_USER_KEY);
   return user ? JSON.parse(user) : null;
 };
 
@@ -166,11 +195,11 @@ export const updateUser = async (userId: string, userData: Partial<LocalUser>): 
   const updatedUser = { ...users[userIndex], ...userData, updatedAt: Date.now() };
   users[userIndex] = updatedUser;
 
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  setLocalStorage(USERS_KEY, JSON.stringify(users));
 
   const currentUser = getLoggedInUser();
   if (currentUser && currentUser.uid === userId) {
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedUser));
+    setLocalStorage(CURRENT_USER_KEY, JSON.stringify(updatedUser));
   }
 
   return updatedUser;
@@ -201,11 +230,11 @@ export const followUser = async (userId: string, targetId: string): Promise<Loca
     users[targetIndex].followerCount = (users[targetIndex].followerCount || 0) + 1;
   }
 
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  setLocalStorage(USERS_KEY, JSON.stringify(users));
 
   const updatedCurrentUser = users[userIndex];
   if (getLoggedInUser()?.uid === userId) {
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedCurrentUser));
+    setLocalStorage(CURRENT_USER_KEY, JSON.stringify(updatedCurrentUser));
   }
 
   return updatedCurrentUser;
@@ -230,35 +259,35 @@ export const unfollowUser = async (userId: string, targetId: string): Promise<Lo
     users[targetIndex].followerCount = Math.max(0, (users[targetIndex].followerCount || 1) - 1);
   }
 
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  setLocalStorage(USERS_KEY, JSON.stringify(users));
 
   const updatedCurrentUser = users[userIndex];
   if (getLoggedInUser()?.uid === userId) {
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedCurrentUser));
+    setLocalStorage(CURRENT_USER_KEY, JSON.stringify(updatedCurrentUser));
   }
 
   return updatedCurrentUser;
 };
 
-// Helper function to create user profile
-const createUserProfile = (user: LocalUser): UserProfile => {
+// Add to localAuthService.ts
+export const convertToUserProfile = (localUser: LocalUser): UserProfile => {
   return {
-    uid: user.uid,
-    username: user.username || '',
-    displayName: user.displayName || '',
-    bio: user.bio || '',
-    photoURL: user.photoURL || '',
-    coverPhotoURL: user.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
-    followerCount: user.followerCount || 0,
-    followingCount: user.followingCount || 0,
-    videoCount: user.videoCount || 0,
-    likeCount: user.likeCount || 0,
-    links: user.links || {},
-    createdAt: user.createdAt,
-    isVerified: user.isVerified || false,
-    isCreator: user.isCreator || false,
-    accountType: user.accountType || 'user',
-    followers: user.followers || [],
-    following: user.following || []
+    uid: localUser.uid,
+    username: localUser.username || '',
+    displayName: localUser.displayName || '',
+    bio: localUser.bio || '',
+    photoURL: localUser.photoURL || '',
+    coverPhotoURL: localUser.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
+    followerCount: localUser.followerCount || 0,
+    followingCount: localUser.followingCount || 0,
+    videoCount: localUser.videoCount || 0,
+    likeCount: localUser.likeCount || 0,
+    links: localUser.links || {},
+    createdAt: localUser.createdAt,
+    isVerified: localUser.isVerified || false,
+    isCreator: localUser.isCreator || false,
+    accountType: localUser.accountType || 'user',
+    followers: localUser.followers || [],
+    following: localUser.following || []
   };
 };
