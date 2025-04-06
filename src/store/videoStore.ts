@@ -1,16 +1,17 @@
 import { create } from 'zustand';
 import { VideoData } from '@/types/video';
 import * as videoService from "@/lib/videoService";
+import { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 
 interface VideoState {
   currentVideoIndex: number;
   videos: VideoData[];
   loading: boolean;
   hasMore: boolean;
-  lastVisible: any | null;
+  lastVisible: QueryDocumentSnapshot<DocumentData> | null;
   error: string | null;
   setCurrentVideoIndex: (index: number) => void;
-  fetchVideos: () => Promise<VideoData[]>; // Changed return type here
+  fetchVideos: () => Promise<{videos: VideoData[], lastVisible: QueryDocumentSnapshot<DocumentData> | null}>;
   fetchMoreVideos: () => Promise<void>;
   likeVideo: (videoId: string) => void;
   unlikeVideo: (videoId: string) => void;
@@ -37,9 +38,14 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   fetchVideos: async () => {
     set({ loading: true, error: null });
     try {
-      const videos = await videoService.getFeedVideos();
-      set({ videos, loading: false });
-      return videos;
+      const result = await videoService.getFeedVideos();
+      set({ 
+        videos: result.videos, 
+        lastVisible: result.lastVisible,
+        hasMore: result.videos.length > 0,
+        loading: false 
+      });
+      return result;
     } catch (error) {
       console.error('Error fetching videos:', error);
       set({ loading: false, error: 'Error fetching videos' });
@@ -48,9 +54,27 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   },
 
   fetchMoreVideos: async () => {
-    // Since we're not implementing pagination for this endpoint,
-    // this function won't do anything for now
-    set({ hasMore: false });
+    const { lastVisible, loading } = get();
+    if (loading || !lastVisible) return;
+    
+    set({ loading: true });
+    try {
+      const result = await videoService.getFeedVideos(lastVisible);
+      if (result.videos.length === 0) {
+        set({ hasMore: false, loading: false });
+        return;
+      }
+      
+      set(state => ({ 
+        videos: [...state.videos, ...result.videos],
+        lastVisible: result.lastVisible,
+        hasMore: result.videos.length > 0,
+        loading: false 
+      }));
+    } catch (error) {
+      console.error('Error fetching more videos:', error);
+      set({ loading: false, error: 'Error fetching more videos' });
+    }
   },
 
   likeVideo: (videoId) => {
