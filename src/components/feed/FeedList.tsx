@@ -25,7 +25,8 @@ function FeedList() {
         setError(null);
 
         // Get videos from Firebase
-        const firebaseVideos = await videoService.getFeedVideos();
+        const response = await videoService.getFeedVideos();
+        const firebaseVideos = response.videos;
 
         if (firebaseVideos.length === 0) {
           setError("No videos available");
