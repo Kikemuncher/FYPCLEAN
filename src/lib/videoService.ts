@@ -1,3 +1,21 @@
+// Option 1: Update the implementation to match the interface
+fetchVideos: async () => {
+  set({ loading: true, error: null });
+  try {
+    const result = await videoService.getFeedVideos();
+    set({
+      videos: result.videos,
+      lastVisible: result.lastVisible,
+      hasMore: result.videos.length > 0,
+      loading: false
+    });
+    return result.videos; // Return just the videos array to match the type
+  } catch (error) {
+    console.error('Error fetching videos:', error);
+    set({ loading: false, error: 'Error fetching videos' });
+    throw error;
+  }
+}, 
 // src/lib/videoService.ts
 import {
   collection,
