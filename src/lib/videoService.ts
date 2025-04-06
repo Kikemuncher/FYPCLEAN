@@ -82,7 +82,6 @@ export const incrementShareCount = () => {
 
 // Explicit export at the end
 export {
-    uploadVideo,
     createVideoDocument,
     getFeedVideos,
     getVideoById,
