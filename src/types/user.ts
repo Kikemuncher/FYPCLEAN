@@ -15,6 +15,7 @@ export interface UserProfile {
   uid: string;
   username: string;
   displayName: string;
+  email?: string; // Make email optional for flexibility
   bio: string;
   photoURL: string;
   coverPhotoURL: string;
