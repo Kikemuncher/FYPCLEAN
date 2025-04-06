@@ -47,7 +47,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const loggedInUser = localAuthService.getLoggedInUser();
     if (loggedInUser) {
       setCurrentUser(loggedInUser);
-      
+
       // Map LocalUser to UserProfile
       const userProfile: UserProfile = {
         uid: loggedInUser.uid,
@@ -66,9 +66,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isCreator: false,
         accountType: 'user',
         followers: loggedInUser.followers || [],
-        following: loggedInUser.following || []
+        following: loggedInUser.following || [],
       };
-      
+
       setUserProfile(userProfile);
     }
     setLoading(false);
@@ -127,7 +127,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const user = await localAuthService.loginUser(email, password);
-      
+
       // Explicit type conversion
       const userProfile: UserProfile = {
         uid: user.uid,
@@ -146,7 +146,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isCreator: false,
         accountType: 'user',
         followers: user.followers || [],
-        following: user.following || []
+        following: user.following || [],
       };
 
       setUserProfile(userProfile);
@@ -187,7 +187,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       // Await the user update
       const updatedUser = await localAuthService.updateUser(currentUser.uid, data);
-      
+
       // Explicit type conversion to UserProfile
       const userProfile: UserProfile = {
         uid: updatedUser.uid,
@@ -206,7 +206,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isCreator: false,
         accountType: 'user',
         followers: updatedUser.followers || [],
-        following: updatedUser.following || []
+        following: updatedUser.following || [],
       };
 
       setUserProfile(userProfile);
@@ -223,8 +223,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!currentUser) return;
 
     try {
-      const updatedUser = localAuthService.followUser(currentUser.uid, targetUid);
-      setUserProfile(updatedUser);
+      const updatedUser = await localAuthService.followUser(currentUser.uid, targetUid);
+
+      const userProfile: UserProfile = {
+        uid: updatedUser.uid,
+        username: updatedUser.username || '',
+        displayName: updatedUser.displayName || '',
+        bio: updatedUser.bio || '',
+        photoURL: updatedUser.photoURL || '',
+        coverPhotoURL: updatedUser.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
+        followerCount: updatedUser.followerCount || 0,
+        followingCount: updatedUser.followingCount || 0,
+        videoCount: updatedUser.videoCount || 0,
+        likeCount: updatedUser.likeCount || 0,
+        links: updatedUser.links || {},
+        createdAt: updatedUser.createdAt,
+        isVerified: updatedUser.isVerified || false,
+        isCreator: updatedUser.isCreator || false,
+        accountType: updatedUser.accountType || 'user',
+        followers: updatedUser.followers || [],
+        following: updatedUser.following || []
+      };
+
+      setUserProfile(userProfile);
       setCurrentUser(updatedUser);
     } catch (err) {
       console.error('Follow user error:', err);
@@ -235,8 +256,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!currentUser) return;
 
     try {
-      const updatedUser = localAuthService.unfollowUser(currentUser.uid, targetUid);
-      setUserProfile(updatedUser);
+      const updatedUser = await localAuthService.unfollowUser(currentUser.uid, targetUid);
+
+      const userProfile: UserProfile = {
+        uid: updatedUser.uid,
+        username: updatedUser.username || '',
+        displayName: updatedUser.displayName || '',
+        bio: updatedUser.bio || '',
+        photoURL: updatedUser.photoURL || '',
+        coverPhotoURL: updatedUser.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
+        followerCount: updatedUser.followerCount || 0,
+        followingCount: updatedUser.followingCount || 0,
+        videoCount: updatedUser.videoCount || 0,
+        likeCount: updatedUser.likeCount || 0,
+        links: updatedUser.links || {},
+        createdAt: updatedUser.createdAt,
+        isVerified: updatedUser.isVerified || false,
+        isCreator: updatedUser.isCreator || false,
+        accountType: updatedUser.accountType || 'user',
+        followers: updatedUser.followers || [],
+        following: updatedUser.following || []
+      };
+
+      setUserProfile(userProfile);
       setCurrentUser(updatedUser);
     } catch (err) {
       console.error('Unfollow user error:', err);
