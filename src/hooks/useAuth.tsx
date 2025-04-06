@@ -46,6 +46,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Auth state listener
   useEffect(() => {
+    if (typeof window === 'undefined') return; // Skip on server side
+    
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       
@@ -196,16 +198,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       
       // Add a notification for the target user
-      const notificationsRef = doc(db, 'notifications', `follow_${currentUser.uid}_${targetUid}`);
-      await updateDoc(notificationsRef, {
-        type: 'follow',
-        fromUserId: currentUser.uid,
-        fromUsername: userProfile.username,
-        fromUserPhoto: userProfile.photoURL,
-        toUserId: targetUid,
-        read: false,
-        createdAt: serverTimestamp()
-      });
+      try {
+        const notificationsRef = doc(db, 'notifications', `follow_${currentUser.uid}_${targetUid}`);
+        await updateDoc(notificationsRef, {
+          type: 'follow',
+          fromUserId: currentUser.uid,
+          fromUsername: userProfile.username,
+          fromUserPhoto: userProfile.photoURL,
+          toUserId: targetUid,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      } catch (error) {
+        console.error("Failed to create notification, but follow was successful", error);
+      }
     } catch (err) {
       console.error('Follow user error:', err);
     }
