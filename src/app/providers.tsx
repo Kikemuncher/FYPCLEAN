@@ -2,7 +2,8 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from 'react';
-import { AuthProvider } from '@/hooks/useAuth';  // This import must be correct
+import { AuthProvider } from '@/hooks/useAuth';
+import FirebaseProvider from '@/components/firebase/FirebaseProvider';
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -16,8 +17,10 @@ export default function Providers({ children }: { children: ReactNode }) {
   }
   
   return (
-    <AuthProvider>
-      {children}
-    </AuthProvider>
+    <FirebaseProvider>
+      <AuthProvider>
+        {children}
+      </AuthProvider>
+    </FirebaseProvider>
   );
 }
