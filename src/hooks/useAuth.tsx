@@ -3,22 +3,25 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import {
   User as FirebaseUser,
+  onAuthStateChanged,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import {
   doc,
+  getDoc,
   updateDoc,
   arrayUnion,
   arrayRemove,
   increment,
+  onSnapshot,
+  serverTimestamp
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { User, UserProfile } from '@/types/user';
-import * as localAuthService from '@/lib/localAuthService';
-import { LocalUser } from '@/lib/localAuthService';
+import { UserProfile } from '@/types/user';
+import * as authService from '@/lib/authService';
 
 interface AuthContextType {
-  currentUser: FirebaseUser | LocalUser | null;
+  currentUser: FirebaseUser | null;
   userProfile: UserProfile | null;
   loading: boolean;
   error: string | null;
@@ -36,42 +39,40 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | LocalUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Auth state listener
   useEffect(() => {
-    // For local auth, we will set the current user and profile immediately
-    const loggedInUser = localAuthService.getLoggedInUser();
-    if (loggedInUser) {
-      setCurrentUser(loggedInUser);
-
-      // Map LocalUser to UserProfile
-      const userProfile: UserProfile = {
-        uid: loggedInUser.uid,
-        username: loggedInUser.username || loggedInUser.displayName || '',
-        displayName: loggedInUser.displayName || '',
-        bio: loggedInUser.bio || '',
-        photoURL: loggedInUser.photoURL || '',
-        coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
-        followerCount: loggedInUser.followerCount || 0,
-        followingCount: loggedInUser.followingCount || 0,
-        videoCount: loggedInUser.videoCount || 0,
-        likeCount: loggedInUser.likeCount || 0,
-        links: loggedInUser.links || {},
-        createdAt: loggedInUser.createdAt,
-        isVerified: false,
-        isCreator: false,
-        accountType: 'user',
-        followers: loggedInUser.followers || [],
-        following: loggedInUser.following || [],
-      };
-
-      setUserProfile(userProfile);
-    }
-    setLoading(false);
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      
+      if (user) {
+        // Subscribe to user profile document
+        const userRef = doc(db, 'users', user.uid);
+        const unsubscribeUser = onSnapshot(userRef, (doc) => {
+          if (doc.exists()) {
+            setUserProfile({ uid: doc.id, ...doc.data() } as UserProfile);
+          } else {
+            // If user document doesn't exist yet, create it
+            setUserProfile(null);
+          }
+          setLoading(false);
+        }, (err) => {
+          console.error('Error getting user profile:', err);
+          setLoading(false);
+        });
+        
+        return () => unsubscribeUser();
+      } else {
+        setUserProfile(null);
+        setLoading(false);
+      }
+    });
+    
+    return () => unsubscribeAuth();
   }, []);
 
   // Sign up function
@@ -80,43 +81,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     try {
-      // Check if username already exists first
-      const usernameCheck = localAuthService.getUsers().find(u => u.username === username);
-      if (usernameCheck) {
-        throw new Error('Username already taken');
-      }
-
-      const user = await localAuthService.registerUser(email, password, username);
-
-      // Create user profile in local storage (similar structure to Firestore)
-      const userProfile: UserProfile = {
-        uid: user.uid,
-        username,
-        displayName: username,
-        bio: '',
-        photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${username}&background=random`,
-        coverPhotoURL: 'https://placehold.co/1200x400/gray/white?text=Cover',
-        followerCount: 0,
-        followingCount: 0,
-        videoCount: 0,
-        likeCount: 0,
-        links: {},
-        createdAt: Date.now(),
-        isVerified: false,
-        isCreator: false,
-        accountType: 'user',
-        followers: [],
-        following: [],
-      };
-
-      setUserProfile(userProfile);
-      setCurrentUser(user); // Set current user after successful signup
+      await authService.registerUser(email, password, username);
+      // Auth state listener will update the state
     } catch (err: any) {
       const errorMessage = err.message || 'Error during registration';
       setError(errorMessage);
-      throw err;
-    } finally {
       setLoading(false);
+      throw err;
     }
   };
 
@@ -126,37 +97,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     try {
-      const user = await localAuthService.loginUser(email, password);
-
-      // Explicit type conversion
-      const userProfile: UserProfile = {
-        uid: user.uid,
-        username: user.username || '',
-        displayName: user.displayName || '',
-        bio: user.bio || '',
-        photoURL: user.photoURL || '',
-        coverPhotoURL: user.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
-        followerCount: user.followerCount || 0,
-        followingCount: user.followingCount || 0,
-        videoCount: user.videoCount || 0,
-        likeCount: user.likeCount || 0,
-        links: user.links || {},
-        createdAt: user.createdAt || Date.now(),
-        isVerified: false,
-        isCreator: false,
-        accountType: 'user',
-        followers: user.followers || [],
-        following: user.following || [],
-      };
-
-      setUserProfile(userProfile);
-      setCurrentUser(user);
+      await authService.signIn(email, password);
+      // Auth state listener will update the state
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to sign in';
+      const errorMessage = authService.getAuthErrorMessage(err.code) || err.message || 'Failed to sign in';
       setError(errorMessage);
-      throw err;
-    } finally {
       setLoading(false);
+      throw err;
     }
   };
 
@@ -165,9 +112,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     try {
-      localAuthService.logoutUser();
-      setCurrentUser(null);
-      setUserProfile(null);
+      await firebaseSignOut(auth);
+      // Auth state listener will update the state
     } catch (err: any) {
       console.error('Sign out error:', err);
       setError(err.message || 'Failed to sign out');
@@ -185,32 +131,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      // Await the user update
-      const updatedUser = await localAuthService.updateUser(currentUser.uid, data);
-
-      // Explicit type conversion to UserProfile
-      const userProfile: UserProfile = {
-        uid: updatedUser.uid,
-        username: updatedUser.username || '',
-        displayName: updatedUser.displayName || '',
-        bio: updatedUser.bio || '',
-        photoURL: updatedUser.photoURL || '',
-        coverPhotoURL: updatedUser.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
-        followerCount: updatedUser.followerCount || 0,
-        followingCount: updatedUser.followingCount || 0,
-        videoCount: updatedUser.videoCount || 0,
-        likeCount: updatedUser.likeCount || 0,
-        links: updatedUser.links || {},
-        createdAt: updatedUser.createdAt || Date.now(),
-        isVerified: false,
-        isCreator: false,
-        accountType: 'user',
-        followers: updatedUser.followers || [],
-        following: updatedUser.following || [],
-      };
-
-      setUserProfile(userProfile);
-      setCurrentUser(updatedUser);
+      const userRef = doc(db, 'users', currentUser.uid);
+      
+      // Exclude properties that shouldn't be directly updated
+      const { followers, following, uid, ...updateData } = data;
+      
+      await updateDoc(userRef, {
+        ...updateData,
+        updatedAt: serverTimestamp()
+      });
+      
+      // If username is changed, update it in the usernames collection
+      if (data.username && userProfile && data.username !== userProfile.username) {
+        // Check if new username is available
+        const newUsernameRef = doc(db, 'usernames', data.username.toLowerCase());
+        const newUsernameDoc = await getDoc(newUsernameRef);
+        
+        if (newUsernameDoc.exists()) {
+          throw new Error('Username already taken');
+        }
+        
+        // Delete old username record
+        if (userProfile.username) {
+          const oldUsernameRef = doc(db, 'usernames', userProfile.username.toLowerCase());
+          await updateDoc(oldUsernameRef, {
+            uid: null,
+            available: true
+          });
+        }
+        
+        // Reserve new username
+        await updateDoc(newUsernameRef, {
+          uid: currentUser.uid,
+          username: data.username,
+          createdAt: serverTimestamp()
+        });
+      }
     } catch (err: any) {
       console.error('Profile update error:', err);
       setError(err.message || 'Failed to update profile');
@@ -220,33 +176,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Follow/unfollow functions
   const followUser = async (targetUid: string) => {
-    if (!currentUser) return;
+    if (!currentUser || !userProfile) return;
 
     try {
-      const updatedUser = await localAuthService.followUser(currentUser.uid, targetUid);
-
-      const userProfile: UserProfile = {
-        uid: updatedUser.uid,
-        username: updatedUser.username || '',
-        displayName: updatedUser.displayName || '',
-        bio: updatedUser.bio || '',
-        photoURL: updatedUser.photoURL || '',
-        coverPhotoURL: updatedUser.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
-        followerCount: updatedUser.followerCount || 0,
-        followingCount: updatedUser.followingCount || 0,
-        videoCount: updatedUser.videoCount || 0,
-        likeCount: updatedUser.likeCount || 0,
-        links: updatedUser.links || {},
-        createdAt: updatedUser.createdAt,
-        isVerified: updatedUser.isVerified || false,
-        isCreator: updatedUser.isCreator || false,
-        accountType: updatedUser.accountType || 'user',
-        followers: updatedUser.followers || [],
-        following: updatedUser.following || []
-      };
-
-      setUserProfile(userProfile);
-      setCurrentUser(updatedUser);
+      // Update current user's following list
+      const userRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userRef, {
+        following: arrayUnion(targetUid),
+        followingCount: increment(1),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Update target user's followers list
+      const targetUserRef = doc(db, 'users', targetUid);
+      await updateDoc(targetUserRef, {
+        followers: arrayUnion(currentUser.uid),
+        followerCount: increment(1),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Add a notification for the target user
+      const notificationsRef = doc(db, 'notifications', `follow_${currentUser.uid}_${targetUid}`);
+      await updateDoc(notificationsRef, {
+        type: 'follow',
+        fromUserId: currentUser.uid,
+        fromUsername: userProfile.username,
+        fromUserPhoto: userProfile.photoURL,
+        toUserId: targetUid,
+        read: false,
+        createdAt: serverTimestamp()
+      });
     } catch (err) {
       console.error('Follow user error:', err);
     }
@@ -256,30 +215,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!currentUser) return;
 
     try {
-      const updatedUser = await localAuthService.unfollowUser(currentUser.uid, targetUid);
-
-      const userProfile: UserProfile = {
-        uid: updatedUser.uid,
-        username: updatedUser.username || '',
-        displayName: updatedUser.displayName || '',
-        bio: updatedUser.bio || '',
-        photoURL: updatedUser.photoURL || '',
-        coverPhotoURL: updatedUser.coverPhotoURL || 'https://placehold.co/1200x400/gray/white?text=Cover',
-        followerCount: updatedUser.followerCount || 0,
-        followingCount: updatedUser.followingCount || 0,
-        videoCount: updatedUser.videoCount || 0,
-        likeCount: updatedUser.likeCount || 0,
-        links: updatedUser.links || {},
-        createdAt: updatedUser.createdAt,
-        isVerified: updatedUser.isVerified || false,
-        isCreator: updatedUser.isCreator || false,
-        accountType: updatedUser.accountType || 'user',
-        followers: updatedUser.followers || [],
-        following: updatedUser.following || []
-      };
-
-      setUserProfile(userProfile);
-      setCurrentUser(updatedUser);
+      // Update current user's following list
+      const userRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userRef, {
+        following: arrayRemove(targetUid),
+        followingCount: increment(-1),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Update target user's followers list
+      const targetUserRef = doc(db, 'users', targetUid);
+      await updateDoc(targetUserRef, {
+        followers: arrayRemove(currentUser.uid),
+        followerCount: increment(-1),
+        updatedAt: serverTimestamp()
+      });
     } catch (err) {
       console.error('Unfollow user error:', err);
     }
@@ -329,9 +279,4 @@ export const useAuth = () => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
-
-// Add a function to translate Firebase error codes (not needed for local auth)
-const translateFirebaseError = (errorCode: string): string => {
-  return 'An error occurred during authentication';
 };
