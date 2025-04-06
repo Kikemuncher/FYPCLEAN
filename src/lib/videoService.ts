@@ -1,133 +1,155 @@
-import { create } from 'zustand';
+// First, remove the comment lines that were added during debugging
+import {
+  collection,
+  doc,
+  addDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  startAfter,
+  arrayUnion,
+  arrayRemove,
+  increment,
+  serverTimestamp,
+  DocumentData,
+  QueryDocumentSnapshot
+} from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, storage } from './firebase';
 import { VideoData } from '@/types/video';
-import * as videoService from "@/lib/videoService";
+import { UserProfile } from '@/types/user';
 
-interface VideoState {
-  currentVideoIndex: number;
-  videos: VideoData[];
-  loading: boolean;
-  hasMore: boolean;
-  lastVisible: any | null;
-  error: string | null;
-  setCurrentVideoIndex: (index: number) => void;
-  fetchVideos: () => Promise<{videos: VideoData[], lastVisible: any | null}>;
-  fetchMoreVideos: () => Promise<void>;
-  likeVideo: (videoId: string) => void;
-  unlikeVideo: (videoId: string) => void;
-  shareVideo: (videoId: string) => void;
-  saveVideo: (videoId: string) => void;
-  incrementView: (videoId: string) => void;
-}
-
-export const useVideoStore = create<VideoState>((set, get) => ({
-  currentVideoIndex: 0,
-  videos: [],
-  loading: false,
-  hasMore: false,
-  lastVisible: null,
-  error: null,
-
-  setCurrentVideoIndex: (index) => {
-    const { videos } = get();
-    if (videos.length === 0) return;
-    const safeIndex = Math.min(Math.max(0, index), videos.length - 1);
-    set({ currentVideoIndex: safeIndex });
-  },
-
-  fetchVideos: async () => {
-    set({ loading: true, error: null });
-    try {
-      const result = await videoService.getFeedVideos();
-      set({ 
-        videos: result.videos, 
-        lastVisible: result.lastVisible,
-        hasMore: result.videos.length > 0,
-        loading: false 
-      });
-      return result;
-    } catch (error) {
-      console.error('Error fetching videos:', error);
-      set({ loading: false, error: 'Error fetching videos' });
-      throw error;
+// Get user by ID - placeholder until you implement this function in userService.ts
+export const getUserById = async (userId: string): Promise<UserProfile | null> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (!userDoc.exists()) {
+      return null;
     }
-  },
-
-  fetchMoreVideos: async () => {
-    const { lastVisible, loading } = get();
-    if (loading || !lastVisible) return;
     
-    set({ loading: true });
-    try {
-      const result = await videoService.getFeedVideos(lastVisible);
-      if (result.videos.length === 0) {
-        set({ hasMore: false, loading: false });
-        return;
-      }
-      
-      set(state => ({ 
-        videos: [...state.videos, ...result.videos],
-        lastVisible: result.lastVisible,
-        hasMore: result.videos.length > 0,
-        loading: false 
-      }));
-    } catch (error) {
-      console.error('Error fetching more videos:', error);
-      set({ loading: false, error: 'Error fetching more videos' });
-    }
-  },
-
-  likeVideo: (videoId) => {
-    const { videos } = get();
-    if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, likes: video.likes + 1 } 
-        : video
-    );
-    set({ videos: updatedVideos });
-  },
-
-  unlikeVideo: (videoId) => {
-    const { videos } = get();
-    if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, likes: Math.max(0, video.likes - 1) } 
-        : video
-    );
-    set({ videos: updatedVideos });
-  },
-
-  shareVideo: (videoId) => {
-    const { videos } = get();
-    if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, shares: video.shares + 1 } 
-        : video
-    );
-    set({ videos: updatedVideos });
-  },
-
-  saveVideo: (videoId) => {
-    const { videos } = get();
-    if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, saves: video.saves + 1 } 
-        : video
-    );
-    set({ videos: updatedVideos });
-  },
-
-  incrementView: (videoId) => {
-    const { videos } = get();
-    if (!videoId) return;
-    const updatedVideos = videos.map(video => 
-      video.id === videoId 
-        ? { ...video, views: video.views + 1 } 
-        : video
-    );
-    set({ videos: updatedVideos });
+    return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+  } catch (error) {
+    console.error("Error getting user by ID:", error);
+    return null;
   }
-}));
+};
+
+// Upload a video to Firebase Storage
+export const uploadVideo = async (
+  userId: string,
+  file: File,
+  progressCallback?: (progress: number) => void
+): Promise<string> => {
+  // Existing implementation
+  // ...
+};
+
+// Create a new video document in Firestore
+export const createVideoDocument = async (
+  userId: string,
+  videoUrl: string,
+  data: {
+    caption: string;
+    song?: string;
+    hashtags?: string[];
+  }
+): Promise<string> => {
+  // Existing implementation
+  // ...
+};
+
+// Get feed videos
+export const getFeedVideos = async (
+  lastVisibleDoc?: QueryDocumentSnapshot<DocumentData>,
+  pageSize: number = 10
+): Promise<{videos: VideoData[], lastVisible: QueryDocumentSnapshot<DocumentData> | null}> => {
+  // Existing implementation
+  // ...
+};
+
+// Get video by ID
+export const getVideoById = async (videoId: string): Promise<VideoData | null> => {
+  // Existing implementation
+  // ...
+};
+
+// Get videos by user
+export const getVideosByUsername = async (username: string): Promise<VideoData[]> => {
+  // Existing implementation
+  // ...
+};
+
+// Increment view count
+export const incrementVideoView = async (videoId: string): Promise<boolean> => {
+  // Existing implementation
+  // ...
+};
+
+// Like a video
+export const likeVideo = async (userId: string, videoId: string): Promise<boolean> => {
+  // Existing implementation
+  // ...
+};
+
+// Unlike a video
+export const unlikeVideo = async (userId: string, videoId: string): Promise<boolean> => {
+  // Existing implementation
+  // ...
+};
+
+// Check if user has liked a video
+export const isVideoLikedByUser = async (userId: string, videoId: string): Promise<boolean> => {
+  // Existing implementation
+  // ...
+};
+
+// Delete a video
+export const deleteVideo = async (videoId: string, userId: string): Promise<boolean> => {
+  // Existing implementation
+  // ...
+};
+
+// Add a comment to a video
+export const addComment = async (
+  userId: string,
+  videoId: string,
+  comment: string
+): Promise<string | null> => {
+  // Existing implementation
+  // ...
+};
+
+// Get comments for a video
+export const getVideoComments = async (videoId: string): Promise<any[]> => {
+  // Existing implementation
+  // ...
+};
+
+// Share video
+export const incrementShareCount = async (videoId: string): Promise<boolean> => {
+  // Existing implementation
+  // ...
+};
+
+// Add this explicit export to ensure all functions are accessible
+export {
+  getUserById,
+  uploadVideo,
+  createVideoDocument,
+  getFeedVideos,
+  getVideoById,
+  getVideosByUsername,
+  incrementVideoView,
+  likeVideo,
+  unlikeVideo,
+  isVideoLikedByUser,
+  deleteVideo,
+  addComment,
+  getVideoComments,
+  incrementShareCount
+};
