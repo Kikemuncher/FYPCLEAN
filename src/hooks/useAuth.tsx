@@ -279,10 +279,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
 
 // Hook for using auth context
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    console.error('AuthContext is undefined. Make sure you are using AuthProvider correctly.');
+    // Return a fallback context instead of throwing to prevent crashing
+    return {
+      currentUser: null,
+      userProfile: null,
+      loading: false,
+      error: 'Auth context not available',
+      signUp: async () => { throw new Error('Auth context not available'); },
+      signIn: async () => { throw new Error('Auth context not available'); },
+      signOut: async () => { throw new Error('Auth context not available'); },
+      updateUserProfile: async () => { throw new Error('Auth context not available'); },
+      followUser: async () => { throw new Error('Auth context not available'); },
+      unfollowUser: async () => { throw new Error('Auth context not available'); },
+      isFollowing: () => false,
+      getFollowing: () => [],
+      getFollowers: () => [],
+    };
   }
   return context;
 };

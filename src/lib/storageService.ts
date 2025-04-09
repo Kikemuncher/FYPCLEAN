@@ -208,3 +208,60 @@ export const generateThumbnailFromVideo = (
     }
   });
 };
+
+/**
+ * Fetches videos from Firebase Storage with better error handling
+ */
+export const fetchVideosFromStorage = async () => {
+  try {
+    // List all videos in the videos folder
+    console.log("Fetching videos from storage bucket:", storage.app.options.storageBucket);
+    
+    // Try a simpler reference path first
+    const videosRef = ref(storage, '/');
+    const rootContents = await listAll(videosRef);
+    console.log("Root storage contents:", rootContents.prefixes.map(p => p.name));
+    
+    // Now try the videos folder specifically
+    const specificRef = ref(storage, 'videos');
+    const videosList = await listAll(specificRef);
+    
+    if (videosList.items.length === 0) {
+      console.log("No videos found in storage");
+      return { videos: [], error: "No videos found in storage" };
+    }
+    
+    // Get download URLs for each video (max 5 at a time to avoid overwhelming)
+    const results = [];
+    for (const item of videosList.items.slice(0, 5)) {
+      try {
+        console.log("Getting URL for video:", item.name);
+        const url = await getDownloadURL(item);
+        results.push({
+          id: item.name,
+          name: item.name,
+          url: url
+        });
+      } catch (e) {
+        console.error(`Error getting URL for ${item.name}:`, e);
+      }
+    }
+    
+    if (results.length === 0) {
+      return { videos: [], error: "Could not get URLs for any videos" };
+    }
+    
+    return { videos: results, error: null };
+  } catch (err) {
+    console.error("Error fetching videos:", err);
+    
+    // Provide more helpful error messages
+    if (err.code === 'storage/unauthorized') {
+      return { videos: [], error: "Access denied - check your Firebase Storage rules" };
+    } else if (err.code === 'storage/retry-limit-exceeded') {
+      return { videos: [], error: "Connection to Firebase Storage timed out. This might be due to network issues." };
+    } else {
+      return { videos: [], error: `Failed to load videos: ${err.message}` };
+    }
+  }
+};

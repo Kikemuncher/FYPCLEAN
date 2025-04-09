@@ -2,7 +2,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   images: {
     domains: [
       "placehold.co", 
@@ -34,22 +33,7 @@ const nextConfig = {
     
     return config;
   },
-  // CORS headers for video access
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Credentials', value: 'true' },
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT' },
-          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
-        ],
-      },
-    ];
-  },
-  // Remove appDir from experimental since it's now the default
-  // Add standalone output to improve deployment
+  // Change back to 'standalone' since your app has dynamic pages
   output: 'standalone',
   // Disable static pre-rendering for pages that use authentication
   staticPageGenerationTimeout: 300,
@@ -63,3 +47,5 @@ const nextConfig = {
     NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
   }
 };
+
+module.exports = nextConfig;

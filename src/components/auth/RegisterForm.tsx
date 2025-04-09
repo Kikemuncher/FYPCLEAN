@@ -1,8 +1,9 @@
 // src/components/auth/RegisterForm.tsx
-import React, { useState } from 'react';
-import { registerUser } from '@/lib/authService';
-import { createUserProfile } from '@/lib/userService';
+"use client";
+
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function RegisterForm() {
   const [email, setEmail] = useState('');
@@ -11,6 +12,7 @@ export default function RegisterForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { signUp } = useAuth();
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,21 +20,7 @@ export default function RegisterForm() {
     setError('');
 
     try {
-      // Register with Firebase Authentication
-      const user = await registerUser(email, password, username);
-      
-      // Create user profile in Firestore
-      await createUserProfile(user.uid, {
-        username,
-        email,
-        displayName: username,
-        bio: '',
-        avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=random`,
-        followers: 0,
-        following: 0,
-        likes: 0
-      });
-      
+      await signUp(email, password, username);
       router.push('/');
     } catch (err: any) {
       setError(err.message || 'Failed to register');

@@ -6,7 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "start:standalone": "node .next/standalone/server.js",
+    "serve": "node server.js",
+    "debug": "rm -rf .next && cross-env NODE_OPTIONS='--inspect' next dev",
+    "lint": "next lint",
+    "fresh": "npm cache clean --force && (if exist node_modules rmdir /s /q node_modules) && (if exist .next rmdir /s /q .next) && npm install && npm run dev",
+    "clean": "npm cache clean --force && (if exist node_modules rmdir /s /q node_modules) && (if exist .next rmdir /s /q .next)",
+    "emulators": "firebase emulators:start",
+    "dev:emulator": "firebase emulators:start && next dev"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -16,10 +23,10 @@
     "axios": "^1.5.1",
     "clsx": "^2.0.0",
     "encoding": "^0.1.13",
-    "firebase": "9.17.2",
+    "firebase": "^11.6.0",
     "framer-motion": "^10.16.4",
     "gsap": "^3.12.2",
-    "next": "13.5.4",
+    "next": "^15.2.4",
     "react": "^18",
     "react-dom": "^18",
     "react-firebase-hooks": "^5.1.1",
@@ -36,9 +43,10 @@
     "autoprefixer": "^10.4.16",
     "eslint": "^8",
     "eslint-config-next": "13.5.4",
+    "lite-server": "^2.6.1",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.3",
-    "typescript": "^5"
+    "typescript": "^5.8.3"
   },
   "engines": {
     "node": "18.x"

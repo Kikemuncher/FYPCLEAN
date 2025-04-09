@@ -1,58 +1,59 @@
-"use client";
+'use client';
 
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 
-type AuthWrapperProps = {
+interface AuthWrapperProps {
   children: ReactNode;
   requireAuth?: boolean;
   redirectIfAuthenticated?: boolean;
   redirectPath?: string;
-  loginPath?: string;
-};
+}
 
-export function AuthWrapper({ 
-  children, 
+export default function AuthWrapper({
+  children,
   requireAuth = false,
   redirectIfAuthenticated = false,
-  redirectPath = '/',
-  loginPath = '/auth/login'
+  redirectPath = '/'
 }: AuthWrapperProps) {
-  const { currentUser, loading } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    // If still loading auth state, do nothing yet
+    if (loading) return;
 
-  useEffect(() => {
-    if (mounted && !loading) {
-      if (requireAuth && !currentUser) {
-        // Redirect to login if authentication is required but user is not logged in
-        router.push(loginPath);
-      } else if (redirectIfAuthenticated && currentUser) {
-        // Redirect away if user is authenticated but shouldn't be on this page
-        router.push(redirectPath);
-      }
+    // If requireAuth is true and user is not logged in, redirect to login
+    if (requireAuth && !user) {
+      router.push('/auth/login');
     }
-  }, [currentUser, loading, requireAuth, redirectIfAuthenticated, redirectPath, loginPath, router, mounted]);
 
-  // Don't render anything during SSR to prevent hydration mismatch
-  if (!mounted) {
-    return null;
-  }
+    // If redirectIfAuthenticated is true and user is logged in, redirect
+    if (redirectIfAuthenticated && user) {
+      router.push(redirectPath);
+    }
+  }, [user, loading, requireAuth, redirectIfAuthenticated, redirectPath, router]);
 
-  // Show loading state while checking auth
+  // Show loading state while checking authentication
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen w-full bg-black">
+      <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
       </div>
     );
   }
 
-  // If auth check passes, render the children
+  // If requireAuth is true and user is not logged in, don't render children
+  if (requireAuth && !user) {
+    return null;
+  }
+
+  // If redirectIfAuthenticated is true and user is logged in, don't render children
+  if (redirectIfAuthenticated && user) {
+    return null;
+  }
+
+  // Otherwise, render children
   return <>{children}</>;
 }

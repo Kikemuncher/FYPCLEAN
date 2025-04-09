@@ -3,10 +3,10 @@
 export const dynamic = "force-dynamic";
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
-import { AuthWrapper } from '@/components/auth/AuthWrapper';
-import AuthLayout from '@/components/layout/AuthLayout';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import AuthWrapper from '@/components/auth/AuthWrapper';
+import AuthLayout from '@/components/auth/AuthLayout';
 
 export default function SignUp() {
   const [email, setEmail] = useState('');
@@ -16,7 +16,8 @@ export default function SignUp() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { signUp, error } = useAuth();
+  const router = useRouter();
+  const { signUp } = useAuth();
   
   const validateUsername = (username: string) => {
     const pattern = /^[a-zA-Z0-9_\.]+$/;
@@ -55,8 +56,10 @@ export default function SignUp() {
     
     try {
       await signUp(email, password, username);
-    } catch (error) {
+      router.push('/');
+    } catch (error: any) {
       console.error("Sign up error:", error);
+      setFormError(getAuthErrorMessage(error.code) || error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -67,9 +70,13 @@ export default function SignUp() {
       <AuthLayout
         title="Create an Account"
         subtitle="Join the community"
-        showLogo={true}
+        footerText="Already have an account?"
+        footerLink={{
+          text: "Sign in",
+          href: "/auth/login"
+        }}
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form className="space-y-6" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="username" className="block text-sm font-medium text-gray-400">
               Username
@@ -126,9 +133,9 @@ export default function SignUp() {
             />
           </div>
           
-          {(formError || error) && (
+          {(formError) && (
             <div className="text-red-500 text-sm">
-              {formError || error}
+              {formError}
             </div>
           )}
           
@@ -140,15 +147,6 @@ export default function SignUp() {
             {isSubmitting ? 'Creating Account...' : 'Sign Up'}
           </button>
         </form>
-        
-        <div className="mt-6 text-center">
-          <p className="text-gray-400">
-            Already have an account?{' '}
-            <Link href="/auth/login" className="text-tiktok-blue hover:text-blue-400">
-              Log in
-            </Link>
-          </p>
-        </div>
       </AuthLayout>
     </AuthWrapper>
   );

@@ -1,17 +1,14 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
+import { Inter } from 'next/font/google';
 import Providers from './providers';
+import NetworkStatusChecker from './network-status';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata: Metadata = {
-  title: 'Social Platform',
-  description: 'A social media platform',
+export const metadata = {
+  title: 'Sample Text',
+  description: 'A Sample Text built with Next.js',
 };
-
-// Add dynamic export to prevent static pre-rendering
-export const dynamic = "force-dynamic";
 
 export default function RootLayout({
   children,
@@ -20,8 +17,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body suppressHydrationWarning={true}>
         <Providers>{children}</Providers>
+        <NetworkStatusChecker />
       </body>
     </html>
   );
