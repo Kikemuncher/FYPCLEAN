@@ -1,33 +1,45 @@
-"use client";
+'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
-import SideNav from '@/components/layout/SideNav';
+import { useAuth } from '@/contexts/AuthContext';
+import PageLayout from '@/components/layout/PageLayout';
 
-export const dynamic = "force-dynamic";
 export default function ProfileRedirect() {
-  const { currentUser, userProfile, loading } = useAuth();
   const router = useRouter();
+  const { currentUser, userProfile, loading } = useAuth();
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
-    if (!loading) {
-      if (currentUser && userProfile) {
-        // Redirect to the user's profile page
-        router.push(`/profile/${userProfile.username || ''}`);
+    // Wait until auth state is determined
+    if (!loading && !isRedirecting) {
+      setIsRedirecting(true);
+      
+      // If user is logged in and has a profile, redirect to their username profile
+      if (currentUser && userProfile?.username) {
+        console.log(`Redirecting to profile: ${userProfile.username}`);
+        router.push(`/profile/${userProfile.username}`);
       } else if (!currentUser) {
-        // Not logged in, redirect to login
+        // If user is not logged in, redirect to login page
+        console.log('No user found, redirecting to login');
+        router.push('/auth/login');
+      } else {
+        console.log('User found but missing profile data', { currentUser });
+        // If we have a user but no profile, wait for profile to load or go to login
         router.push('/auth/login');
       }
     }
-  }, [currentUser, userProfile, loading, router]);
+  }, [currentUser, userProfile, loading, router, isRedirecting]);
 
+  // Show loading state while determining redirect
   return (
-    <div className="min-h-screen bg-black">
-      <SideNav />
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+    <PageLayout>
+      <div className="flex items-center justify-center h-[calc(100vh-theme(spacing.12))]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pink-600 mx-auto mb-4"></div>
+          <p className="text-white">{loading ? 'Checking authentication...' : 'Redirecting...'}</p>
+        </div>
       </div>
-    </div>
+    </PageLayout>
   );
 }

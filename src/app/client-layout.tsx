@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { ReactNode, Suspense, useEffect, useState } from 'react';
-import { AuthProvider } from '@/hooks/useAuth';
+import { ReactNode, Suspense } from 'react';
+import { AuthProvider } from '@/contexts/AuthContext';
 
 // Define proper types for the ErrorBoundary
 interface ErrorBoundaryProps {
@@ -38,7 +38,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
             <p className="mb-4">{this.state.error?.message || "Unknown error"}</p>
             <button 
               onClick={() => window.location.reload()} 
-              className="px-4 py-2 bg-tiktok-pink rounded-md"
+              className="px-4 py-2 bg-pink-600 rounded-md"
             >
               Reload page
             </button>
@@ -52,22 +52,18 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 export default function ClientLayout({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  
-  // Handle client-side only rendering
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
-  // Return loading indicator during SSR
-  if (!mounted) {
-    return <div>Loading application...</div>;
-  }
-  
-  // Wrap with error boundary
+  // Use AuthProvider here, wrapping everything
   return (
     <ErrorBoundary>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <Suspense fallback={
+          <div className="flex items-center justify-center min-h-screen bg-black">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pink-600"></div>
+          </div>
+        }>
+          {children}
+        </Suspense>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

@@ -1,101 +1,126 @@
 'use client';
 
-import { useState } from 'react';
-import { ref, listAll, getDownloadURL, getMetadata } from 'firebase/storage';
+import { useState, useEffect } from 'react';
 import { storage } from '@/lib/firebase';
+import { ref, listAll, getDownloadURL } from 'firebase/storage';
 import Link from 'next/link';
 
 export default function StorageTestPage() {
-  const [results, setResults] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string>('Testing Storage connection...');
   const [error, setError] = useState<string | null>(null);
-  
-  const testStorage = async () => {
-    setLoading(true);
-    setError(null);
-    setResults(null);
-    
-    try {
-      setResults("Testing Firebase Storage connection...\n");
-      
-      // Try to list the root directory
-      const rootRef = ref(storage, '');
-      const rootList = await listAll(rootRef);
-      
-      setResults(prev => prev + `✅ Root directory accessible. Found ${rootList.prefixes.length} folders and ${rootList.items.length} files.\n\n`);
-      
-      // Check if videos folder exists
-      const videosRef = ref(storage, 'videos');
+  const [folderContents, setFolderContents] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function testStorage() {
       try {
-        const videosList = await listAll(videosRef);
-        setResults(prev => prev + `✅ Videos folder found. Contains ${videosList.items.length} videos.\n\n`);
-        
-        // Try to get URLs for a couple videos
-        if (videosList.items.length > 0) {
-          const firstVideo = videosList.items[0];
-          const url = await getDownloadURL(firstVideo);
-          const metadata = await getMetadata(firstVideo);
-          
-          setResults(prev => prev + `✅ Successfully got URL for video: ${firstVideo.name}\n` +
-            `Size: ${Math.round(metadata.size / 1024)} KB\n` +
-            `Type: ${metadata.contentType}\n` +
-            `Full path: ${metadata.fullPath}\n\n`
-          );
+        // First check if storage is initialized
+        if (!storage) {
+          setStatus('Firebase Storage is not initialized');
+          setError('Storage object is undefined');
+          return;
         }
-      } catch (err) {
-        setResults(prev => prev + `❌ Error accessing videos folder: ${err.message}\n\n`);
+
+        // Try to list root items
+        setStatus('Listing root folders...');
+        const rootRef = ref(storage, '/');
+        
+        try {
+          const rootResult = await listAll(rootRef);
+          
+          setFolderContents([
+            ...rootResult.prefixes.map(folder => ({ 
+              name: folder.name,
+              type: 'folder'
+            })),
+            ...rootResult.items.map(item => ({ 
+              name: item.name, 
+              type: 'file'
+            }))
+          ]);
+          
+          setStatus(`Storage connection successful! Found ${rootResult.prefixes.length} folders and ${rootResult.items.length} files`);
+          
+          // Try to check if videos folder exists
+          const videosRef = ref(storage, 'videos');
+          try {
+            const videosResult = await listAll(videosRef);
+            setStatus(prev => `${prev}\nFound 'videos' folder with ${videosResult.items.length} items.`);
+          } catch (videosError) {
+            setError(`Error accessing 'videos' folder: ${videosError.code}. You may need to create this folder in Firebase console.`);
+          }
+        } catch (listError) {
+          console.error('Error listing storage contents:', listError);
+          setStatus('Error accessing Firebase Storage');
+          setError(`${listError.code}: ${listError.message}`);
+        }
+      } catch (error) {
+        console.error('Storage test error:', error);
+        setStatus('Error testing Storage connection');
+        setError(error.message);
       }
-      
-      setResults(prev => prev + "Test completed.");
-    } catch (err) {
-      console.error("Storage test error:", err);
-      setError(`Error: ${err.message}`);
-    } finally {
-      setLoading(false);
     }
-  };
-  
+
+    testStorage();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-black text-white p-8">
-      <h1 className="text-3xl font-bold mb-6">Firebase Storage Test</h1>
+    <div className="min-h-screen bg-black text-white p-6">
+      <h1 className="text-2xl font-bold mb-6">Firebase Storage Test</h1>
       
-      <div className="mb-6">
-        <button 
-          onClick={testStorage} 
-          disabled={loading}
-          className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded disabled:opacity-50"
-        >
-          {loading ? 'Testing...' : 'Test Storage Connection'}
-        </button>
+      <div className="bg-zinc-900 p-4 rounded-lg mb-6">
+        <h2 className="font-bold mb-2">Status</h2>
+        <p className={status.includes('successful') ? 'text-green-400' : 'text-yellow-400'}>
+          {status}
+        </p>
+        
+        {error && (
+          <div className="mt-4 p-3 bg-red-900/30 border border-red-500 rounded">
+            <p className="text-red-400">{error}</p>
+          </div>
+        )}
       </div>
       
-      {error && (
-        <div className="bg-red-900/30 border border-red-500 p-4 rounded-lg mb-6">
-          <p className="text-red-400">{error}</p>
-        </div>
-      )}
-      
-      {results && (
+      {folderContents.length > 0 && (
         <div className="bg-zinc-900 p-4 rounded-lg mb-6">
-          <pre className="whitespace-pre-wrap">{results}</pre>
+          <h2 className="font-bold mb-2">Storage Contents</h2>
+          <ul className="space-y-1">
+            {folderContents.map((item, index) => (
+              <li key={index} className="flex items-center">
+                <span className="mr-2">
+                  {item.type === 'folder' ? '📁' : '📄'}
+                </span>
+                <span>{item.name}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       
-      <div className="mt-8">
-        <h2 className="text-xl font-bold mb-4">Troubleshooting</h2>
-        <ul className="list-disc list-inside space-y-2">
-          <li>Check your Firebase Storage rules in the Firebase Console</li>
-          <li>Verify that your storage bucket name is correct in .env.local</li>
-          <li>Make sure you have uploaded videos to the 'videos' folder</li>
-          <li>Check your network connectivity</li>
-        </ul>
+      <div className="bg-zinc-900 p-4 rounded-lg mb-6">
+        <h2 className="font-bold mb-2">Troubleshooting Steps</h2>
+        <ol className="list-decimal list-inside space-y-2">
+          <li>Check Firebase console to ensure Storage is enabled for your project</li>
+          <li>Create a 'videos' folder in Firebase Storage if it doesn't exist</li>
+          <li>Verify Storage Rules allow read access:
+            <pre className="bg-black p-2 mt-1 rounded text-xs overflow-x-auto">
+              {`rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /videos/{videoId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}`}
+            </pre>
+          </li>
+          <li>Try uploading a test video through Firebase console</li>
+        </ol>
       </div>
       
-      <div className="mt-8">
-        <Link href="/" className="text-pink-500 hover:text-pink-400">
-          Return to Home
-        </Link>
-      </div>
+      <Link href="/" className="bg-pink-500 hover:bg-pink-600 text-white py-2 px-4 rounded">
+        Back Home
+      </Link>
     </div>
   );
 }

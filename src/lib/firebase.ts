@@ -1,107 +1,82 @@
-import { initializeApp, getApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+// src/lib/firebase.ts
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 
-// Firebase configuration using environment variables
+// MANUALLY set Firebase config to ensure no environment variable issues
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyC4SfB5JU5HyMA0KTZ1s1X6BukAaLluR1I",
+  authDomain: "tiktok-a7af5.firebaseapp.com",
+  projectId: "tiktok-a7af5",
+  storageBucket: "tiktok-a7af5.firebasestorage.app",
+  messagingSenderId: "609721475346",
+  appId: "1:609721475346:web:c80084600ed104b6b153cb",
+  measurementId: "G-3Z96CKXW1W"
 };
 
-// Initialize Firebase using Next.js best practices
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// Note: This project is using Node.js v22.14.0, which is a very recent version.
+// Firebase SDK is compatible with this version, but keep in mind that you may 
+// want to check for Node.js updates periodically using: npm view node version
 
-// Check connection to firebase infrastructure
-const checkFirebaseConnection = async () => {
+// Validate the Firebase configuration
+const validateFirebaseConfig = (config: Record<string, string>) => {
+  const requiredFields = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
+  const missingFields = requiredFields.filter(field => !config[field]);
+  
+  if (missingFields.length > 0) {
+    throw new Error(`Firebase config is missing required fields: ${missingFields.join(', ')}`);
+  }
+};
+
+// Initialize Firebase with safeguards
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
+let firebaseInitialized = false;
+
+try {
+  // Validate config before initialization
+  validateFirebaseConfig(firebaseConfig);
+  
+  // Check if Firebase is already initialized to prevent duplicate apps
+  if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApps()[0];
+  }
+  
+  auth = getAuth(app);
+  db = getFirestore(app);
+  storage = getStorage(app);
+  
+  firebaseInitialized = true;
+  console.log('Firebase initialized successfully');
+} catch (error) {
+  console.error('Firebase initialization error:', error);
+  // Create safe fallbacks so the app doesn't crash entirely
+  // The services will be non-functional but at least won't throw errors when imported
+  app = {} as FirebaseApp;
+  auth = {} as Auth;
+  db = {} as Firestore;
+  storage = {} as FirebaseStorage;
+}
+
+// Export both the services and initialization status
+export { app, auth, db, storage, firebaseInitialized };
+
+// Utility function to check Firebase connection status
+export const checkFirebaseConnection = async (): Promise<boolean> => {
+  if (!firebaseInitialized) return false;
+  
   try {
-    // Try to connect directly to Firebase endpoints with fetch
-    const response = await fetch("https://firestore.googleapis.com/", { 
-      method: 'OPTIONS',
-      mode: 'no-cors',
-      cache: 'no-store'
-    });
+    // Simple test to check Firestore connection
+    await db.terminate();
+    await db.enableNetwork();
     return true;
-  } catch (e) {
-    console.error("Firebase connection check failed:", e);
+  } catch (error) {
+    console.error('Firebase connection check failed:', error);
     return false;
   }
 };
-
-// Direct file upload/download without Firebase SDK
-const directUpload = async (file, path) => {
-  // Create a FormData object
-  const formData = new FormData();
-  formData.append('file', file);
-  
-  // Use direct fetch to upload
-  try {
-    const response = await fetch(`https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o/${encodeURIComponent(path)}`, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Authorization': `Bearer ${await auth.currentUser?.getIdToken()}`
-      }
-    });
-    
-    return await response.json();
-  } catch (e) {
-    console.error("Direct upload failed:", e);
-    throw e;
-  }
-};
-
-// Direct access functions to bypass Firebase SDK restrictions
-export async function fetchVideoDirectly(videoPath) {
-  // Use CORS proxy if needed
-  const useProxy = process.env.NEXT_PUBLIC_USE_CORS_PROXY === 'true';
-  const proxyUrl = process.env.NEXT_PUBLIC_CORS_PROXY_URL || 'https://corsproxy.io/?';
-  
-  try {
-    // Create a direct URL to the video
-    const videoUrl = `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o/${encodeURIComponent(videoPath)}?alt=media`;
-    
-    // Use proxy if enabled
-    const fetchUrl = useProxy ? `${proxyUrl}${encodeURIComponent(videoUrl)}` : videoUrl;
-    
-    const response = await fetch(fetchUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
-    }
-    
-    // Return the direct URL to the video
-    return useProxy ? fetchUrl : videoUrl;
-  } catch (error) {
-    console.error("Error fetching video directly:", error);
-    throw error;
-  }
-}
-
-// Sample videos to use when Firebase is inaccessible
-export const SAMPLE_VIDEOS = [
-  {
-    id: 'sample1',
-    name: 'Sample Video 1',
-    url: 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
-  },
-  {
-    id: 'sample2',
-    name: 'Sample Video 2',
-    url: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
-  },
-  {
-    id: 'sample3',
-    name: 'Sample Video 3',
-    url: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
-  }
-];
-
-export { app, auth, db, storage, checkFirebaseConnection, directUpload };

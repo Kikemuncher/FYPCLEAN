@@ -1,9 +1,9 @@
 'use client';
 
-// src/components/profile/ProfileHeader.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
+import Image from 'next/image';
+import { useAuth } from '@/contexts/AuthContext';
 import { UserProfile } from '@/types/user';
 
 type ProfileHeaderProps = {
@@ -12,11 +12,13 @@ type ProfileHeaderProps = {
 };
 
 export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps) {
-  const { currentUser, isFollowing, followUser, unfollowUser } = useAuth();
-
+  const { isFollowing, followUser, unfollowUser } = useAuth();
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
+  
   const handleFollow = async () => {
     if (!user?.uid) return;
-
+    
+    setIsFollowLoading(true);
     try {
       if (isFollowing(user.uid)) {
         await unfollowUser(user.uid);
@@ -25,6 +27,8 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
       }
     } catch (error) {
       console.error('Error following/unfollowing user:', error);
+    } finally {
+      setIsFollowLoading(false);
     }
   };
 
@@ -50,21 +54,22 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
   return (
     <div className="p-6 bg-zinc-900 rounded-lg">
       <div className="flex flex-col items-center md:flex-row md:items-start gap-6">
-        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden">
+        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-2 border-white/10">
           <img
             src={user.photoURL || `https://ui-avatars.com/api/?name=${user.username}&size=128&background=random`}
             alt={user.username}
             className="w-full h-full object-cover"
           />
         </div>
-
+        
         <div className="flex-1 text-center md:text-left">
           <h1 className="text-2xl font-bold text-white">@{user.username}</h1>
-
+          
           {user.displayName && (
             <p className="text-gray-400 text-lg">{user.displayName}</p>
           )}
-
+          
+          {/* Stats Row */}
           <div className="flex flex-wrap justify-center md:justify-start gap-6 mt-4">
             <div className="text-center">
               <p className="text-white font-bold">{user.videoCount || 0}</p>
@@ -84,11 +89,12 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
             </div>
           </div>
 
+          {/* Bio */}
           {user.bio && (
             <p className="mt-4 text-white">{user.bio}</p>
           )}
 
-          {/* Social links */}
+          {/* Social Links */}
           {user.links && Object.keys(user.links).length > 0 && (
             <div className="mt-4 flex flex-wrap gap-3">
               {user.links.instagram && (
@@ -149,6 +155,7 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
             </div>
           )}
 
+          {/* Follow/Edit Button */}
           <div className="mt-6">
             {isOwnProfile ? (
               <Link
@@ -163,9 +170,12 @@ export default function ProfileHeader({ user, isOwnProfile }: ProfileHeaderProps
             ) : (
               <button
                 onClick={handleFollow}
-                className={`inline-flex items-center px-6 py-2 border border-transparent rounded-full shadow-sm text-sm font-medium text-white ${isFollowing(user.uid) ? "bg-gray-600 hover:bg-gray-700" : "bg-tiktok-pink hover:bg-pink-700"} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tiktok-pink`}
+                disabled={isFollowLoading}
+                className={`inline-flex items-center px-6 py-2 border border-transparent rounded-full shadow-sm text-sm font-medium text-white ${
+                  isFollowing(user.uid) ? "bg-gray-600 hover:bg-gray-700" : "bg-tiktok-pink hover:bg-pink-700"
+                } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tiktok-pink disabled:opacity-50`}
               >
-                {isFollowing(user.uid) ? "Following" : "Follow"}
+                {isFollowLoading ? 'Processing...' : isFollowing(user.uid) ? "Following" : "Follow"}
               </button>
             )}
           </div>

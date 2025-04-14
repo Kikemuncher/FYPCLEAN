@@ -1,0 +1,47 @@
+/* Custom CSS for video controls */
+.video-player-progress {
+  @apply w-full h-1 bg-gray-700 rounded-full cursor-pointer;
+}
+
+.video-player-progress::-webkit-slider-thumb {
+  @apply appearance-none w-3 h-3 rounded-full bg-white;
+}
+
+.video-player-volume {
+  @apply w-16 h-1 bg-gray-700 rounded-full cursor-pointer;
+}
+
+.video-player-volume::-webkit-slider-thumb {
+  @apply appearance-none w-2 h-2 rounded-full bg-white;
+}
+
+/* Video Container Animations */
+@keyframes fadeInControls {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.controls-fade-in {
+  animation: fadeInControls 0.2s ease-in forwards;
+}
+
+.controls-fade-out {
+  animation: fadeInControls 0.2s ease-out reverse forwards;
+}
+
+/* Customize aspect ratios */
+.aspect-1-1 {
+  aspect-ratio: 1 / 1;
+}
+
+.aspect-4-3 {
+  aspect-ratio: 4 / 3;
+}
+
+.aspect-16-9 {
+  aspect-ratio: 16 / 9;
+}
+
+.aspect-9-16 {
+  aspect-ratio: 9 / 16;
+}

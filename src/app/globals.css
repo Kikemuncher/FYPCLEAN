@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import video player styles */
+@import '../styles/video-player.css';
+
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-rgb: 0, 0, 0;
@@ -11,6 +14,13 @@ body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-rgb));
   overscroll-behavior: none;
+  overflow-x: hidden;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+body::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */
@@ -36,4 +46,52 @@ video {
 .scrollbar-hide {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+}
+
+/* Add these styles to hide scrollbars but maintain scroll functionality */
+
+/* Hide scrollbars for feed container */
+.feed-container {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  overflow-y: scroll;
+  overflow-x: hidden;
+}
+
+.feed-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Fix video feed container */
+.video-feed-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.video-container {
+  height: 100vh;
+  width: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Add to your existing CSS file */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
 }

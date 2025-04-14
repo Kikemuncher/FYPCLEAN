@@ -1,153 +1,125 @@
-"use client";
+'use client';
 
-export const dynamic = "force-dynamic";
-
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import AuthWrapper from '@/components/auth/AuthWrapper';
-import AuthLayout from '@/components/auth/AuthLayout';
 
 export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [formError, setFormError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
+  const [username, setUsername] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { signUp } = useAuth();
-  
-  const validateUsername = (username: string) => {
-    const pattern = /^[a-zA-Z0-9_\.]+$/;
-    return pattern.test(username);
-  };
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFormError(null);
-    setIsSubmitting(true);
-    
-    // Validate inputs
-    if (!email || !password || !username) {
-      setFormError("All fields are required");
-      setIsSubmitting(false);
-      return;
-    }
     
     if (password !== confirmPassword) {
-      setFormError("Passwords don't match");
-      setIsSubmitting(false);
-      return;
-    }
-    
-    if (password.length < 6) {
-      setFormError("Password must be at least 6 characters");
-      setIsSubmitting(false);
-      return;
-    }
-    
-    if (!validateUsername(username)) {
-      setFormError("Username can only contain letters, numbers, underscores, and periods");
-      setIsSubmitting(false);
-      return;
+      return setError('Passwords do not match');
     }
     
     try {
+      setError('');
+      setLoading(true);
+      
       await signUp(email, password, username);
-      router.push('/');
-    } catch (error: any) {
-      console.error("Sign up error:", error);
-      setFormError(getAuthErrorMessage(error.code) || error.message);
+      router.push('/profile/edit?newUser=true');
+    } catch (err: any) {
+      setError(err.message || 'Failed to create an account');
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
-  
+
   return (
-    <AuthWrapper redirectIfAuthenticated={true} redirectPath="/">
-      <AuthLayout
-        title="Create an Account"
-        subtitle="Join the community"
-        footerText="Already have an account?"
-        footerLink={{
-          text: "Sign in",
-          href: "/auth/login"
-        }}
-      >
-        <form className="space-y-6" onSubmit={handleSubmit}>
+    <div className="max-w-md mx-auto my-8 px-4">
+      <div className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-100">
+        <div className="p-5 border-b border-gray-100">
+          <h2 className="text-xl font-semibold text-gray-900">Create Account</h2>
+          <p className="text-sm text-gray-500 mt-1">Join our community and start sharing videos</p>
+        </div>
+        
+        {error && (
+          <div className="mx-5 mt-5 bg-red-50 p-3 rounded-md">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+        
+        <form className="p-5 space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-400">
-              Username
-            </label>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">Username</label>
             <input
               id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-tiktok-pink"
-              placeholder="username"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+              placeholder="Choose a username"
             />
           </div>
           
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-400">
-              Email
-            </label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-tiktok-pink"
-              placeholder="name@example.com"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+              placeholder="Your email address"
             />
           </div>
           
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-400">
-              Password
-            </label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-tiktok-pink"
-              placeholder="••••••••"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+              placeholder="Create a password"
             />
           </div>
           
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-400">
+            <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
               Confirm Password
             </label>
             <input
-              id="confirmPassword"
+              id="confirm-password"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-tiktok-pink"
-              placeholder="••••••••"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+              placeholder="Confirm your password"
             />
           </div>
           
-          {(formError) && (
-            <div className="text-red-500 text-sm">
-              {formError}
-            </div>
-          )}
-          
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-white bg-tiktok-pink hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tiktok-pink disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={loading}
+            className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 focus:outline-none transition-colors"
           >
-            {isSubmitting ? 'Creating Account...' : 'Sign Up'}
+            {loading ? 'Creating account...' : 'Sign Up'}
           </button>
+          
+          <div className="text-center pt-4 text-sm text-gray-600">
+            Already have an account?{' '}
+            <Link href="/auth/signin" className="text-gray-900 font-medium hover:underline">
+              Sign In
+            </Link>
+          </div>
         </form>
-      </AuthLayout>
-    </AuthWrapper>
+      </div>
+    </div>
   );
 }

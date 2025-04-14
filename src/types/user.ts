@@ -33,7 +33,7 @@ export interface UserProfile {
   updatedAt?: number;
   isVerified: boolean;
   isCreator: boolean;
-  accountType: 'user' | 'creator';
+  accountType: 'user' | 'creator' | 'admin';
   creatorBio?: string;
   creatorCategory?: string;
   portfolioLinks?: string[];

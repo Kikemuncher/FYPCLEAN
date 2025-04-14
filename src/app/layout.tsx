@@ -1,13 +1,14 @@
-import './globals.css';
+import React from 'react';
 import { Inter } from 'next/font/google';
-import Providers from './providers';
-import NetworkStatusChecker from './network-status';
+import { Metadata } from 'next';
+import './globals.css';
+import ClientLayout from '@/components/ClientLayout';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata = {
-  title: 'Sample Text',
-  description: 'A Sample Text built with Next.js',
+export const metadata: Metadata = {
+  title: 'Goysly',
+  description: 'A video sharing platform',
 };
 
 export default function RootLayout({
@@ -17,9 +18,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body suppressHydrationWarning={true}>
-        <Providers>{children}</Providers>
-        <NetworkStatusChecker />
+      <body className={inter.className} suppressHydrationWarning={true}>
+        <ClientLayout>
+          {children}
+        </ClientLayout>
       </body>
     </html>
   );
